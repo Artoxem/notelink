@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Основные цвета приложения
-  static const primary =
-      Color.fromARGB(255, 26, 54, 49); // Teal Midnight - темный фон
+  static const primary = Color.fromARGB(255, 190, 196, 195); // ФОН
   static const cardBackground =
       Color.fromARGB(255, 198, 197, 179); // White Asparagus
   static const secondary = Color.fromARGB(255, 59, 92, 23); // Evergreen
