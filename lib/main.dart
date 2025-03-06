@@ -20,19 +20,123 @@ void main() async {
   // Проверяем, был ли уже первый запуск
   final prefs = await SharedPreferences.getInstance();
 
-  // Для тестирования всегда устанавливаем флаг в true
-  // Это гарантирует создание тестовых данных при каждом запуске
-  await prefs.setBool('isFirstRun', true);
+  // Получаем текущее значение флага
+  bool isFirstRun = prefs.getBool('isFirstRun') ?? true;
 
-  final bool isFirstRun = prefs.getBool('isFirstRun') ?? true;
+  // Если нужно принудительно сбросить данные и создать новые тестовые данные,
+  // раскомментируйте следующую строку и запустите приложение один раз, затем снова закомментируйте
+  // isFirstRun = true;
 
+  // Запускаем приложение
   runApp(MyApp(isFirstRun: isFirstRun));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final bool isFirstRun;
 
   const MyApp({super.key, required this.isFirstRun});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  // Храним Future для инициализации как состояние
+  late Future<void> _initializationFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Создаем Future только один раз при инициализации состояния
+    _initializationFuture = _initializeApp();
+  }
+
+  // Метод инициализации приложения теперь не принимает контекст
+  Future<void> _initializeApp() async {
+    if (widget.isFirstRun) {
+      // Создаем примеры данных при первом запуске
+      print('Первый запуск: создаем примеры данных...');
+      await _createSampleData();
+
+      // Отмечаем, что первый запуск уже был
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isFirstRun', false);
+    } else {
+      // Загружаем данные из базы данных
+      print('Не первый запуск: загружаем существующие данные...');
+      await _loadData();
+    }
+  }
+
+  // Изменяем _createSampleData чтобы он не требовал контекст
+  Future<void> _createSampleData() async {
+    print('Создание примеров данных при первом запуске...');
+
+    // Использование BuildContext через глобальный ключ или другой механизм
+    // Лучше инициализировать провайдеры напрямую
+    try {
+      // Создаем экземпляры провайдеров напрямую
+      final themesProvider = ThemesProvider();
+      final notesProvider = NotesProvider();
+      final linksProvider = NoteLinksProvider();
+
+      // Генерируем примеры тем
+      final themes = SampleData.generateThemes();
+      for (var theme in themes) {
+        await themesProvider.createTheme(
+          theme.name,
+          theme.description,
+          theme.color,
+          theme.noteIds,
+        );
+      }
+
+      // Загружаем только что созданные темы, чтобы получить их реальные ID
+      await themesProvider.loadThemes();
+      final createdThemes = themesProvider.themes;
+
+      // Генерируем примеры заметок
+      final notes = SampleData.generateNotes(createdThemes);
+      for (var note in notes) {
+        await notesProvider.createNote(
+          content: note.content,
+          themeIds: note.themeIds,
+          hasDeadline: note.hasDeadline,
+          deadlineDate: note.deadlineDate,
+          hasDateLink: note.hasDateLink,
+          linkedDate: note.linkedDate,
+          emoji: note.emoji,
+        );
+      }
+
+      // Загружаем заметки
+      await notesProvider.loadNotes();
+      final createdNotes = notesProvider.notes;
+
+      // Генерируем связи между заметками
+      final links = SampleData.generateLinks(createdNotes);
+      for (var link in links) {
+        await linksProvider.createLink(
+          sourceNoteId: link.sourceNoteId,
+          targetNoteId: link.targetNoteId,
+          themeId: link.themeId,
+          linkType: link.linkType,
+          description: link.description,
+        );
+      }
+
+      print('Примеры данных успешно созданы');
+    } catch (e) {
+      print('Ошибка при создании примеров данных: $e');
+    }
+  }
+
+  // Изменяем _loadData чтобы он не требовал контекст
+  Future<void> _loadData() async {
+    print('Загрузка данных из базы...');
+    // Данная функция не нуждается в контексте, она нужна для логики инициализации
+    // Реальная загрузка данных будет происходить через провайдеры после построения UI
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -282,7 +386,8 @@ class MyApp extends StatelessWidget {
                     ? ThemeMode.dark
                     : ThemeMode.system,
             home: FutureBuilder(
-              future: _initializeApp(context),
+              // Используем сохраненный Future, который не пересоздается при перестроении
+              future: _initializationFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Scaffold(
@@ -291,108 +396,14 @@ class MyApp extends StatelessWidget {
                     ),
                   );
                 }
-                return const MainScreen();
+
+                // Используем GlobalKey для сохранения состояния MainScreen
+                return const MainScreen(key: PageStorageKey('main_screen'));
               },
             ),
           );
         },
       ),
     );
-  }
-
-  Future<void> _initializeApp(BuildContext context) async {
-    if (isFirstRun) {
-      // Создаем примеры данных при первом запуске
-      await _createSampleData(context);
-
-      // Отмечаем, что первый запуск уже был
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isFirstRun', false);
-    } else {
-      // Загружаем данные из базы данных
-      await _loadData(context);
-    }
-  }
-
-  Future<void> _createSampleData(BuildContext context) async {
-    print('Создание примеров данных при первом запуске...');
-
-    // Получаем провайдеры
-    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
-    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-    final linksProvider =
-        Provider.of<NoteLinksProvider>(context, listen: false);
-
-    try {
-      // Генерируем примеры тем
-      final themes = SampleData.generateThemes();
-      for (var theme in themes) {
-        await themesProvider.createTheme(
-          theme.name,
-          theme.description,
-          theme.color,
-          theme.noteIds,
-        );
-      }
-
-      // Загружаем только что созданные темы, чтобы получить их реальные ID
-      await themesProvider.loadThemes();
-      final createdThemes = themesProvider.themes;
-
-      // Генерируем примеры заметок
-      final notes = SampleData.generateNotes(createdThemes);
-      for (var note in notes) {
-        await notesProvider.createNote(
-          content: note.content,
-          themeIds: note.themeIds,
-          hasDeadline: note.hasDeadline,
-          deadlineDate: note.deadlineDate,
-          hasDateLink: note.hasDateLink,
-          linkedDate: note.linkedDate,
-          emoji: note.emoji,
-        );
-      }
-
-      // Загружаем заметки
-      await notesProvider.loadNotes();
-      final createdNotes = notesProvider.notes;
-
-      // Генерируем связи между заметками
-      final links = SampleData.generateLinks(createdNotes);
-      for (var link in links) {
-        await linksProvider.createLink(
-          sourceNoteId: link.sourceNoteId,
-          targetNoteId: link.targetNoteId,
-          themeId: link.themeId,
-          linkType: link.linkType,
-          description: link.description,
-        );
-      }
-
-      print('Примеры данных успешно созданы');
-    } catch (e) {
-      print('Ошибка при создании примеров данных: $e');
-    }
-  }
-
-  Future<void> _loadData(BuildContext context) async {
-    print('Загрузка данных из базы...');
-
-    // Получаем провайдеры
-    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
-    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-    final linksProvider =
-        Provider.of<NoteLinksProvider>(context, listen: false);
-
-    try {
-      // Загружаем данные
-      await themesProvider.loadThemes();
-      await notesProvider.loadNotes();
-      await linksProvider.loadLinks();
-
-      print('Данные успешно загружены');
-    } catch (e) {
-      print('Ошибка при загрузке данных: $e');
-    }
   }
 }

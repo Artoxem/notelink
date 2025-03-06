@@ -295,14 +295,16 @@ class _NotesScreenState extends State<NotesScreen>
             return await _showDeleteConfirmation(note);
           } else if (direction == DismissDirection.startToEnd) {
             // Свайп вправо - добавление в избранное
+            print('📌 Свайп вправо для добавления в избранное: ${note.id}');
+            final currentIsFavorite = note.isFavorite;
             await notesProvider.toggleFavorite(note.id);
 
             // Показываем уведомление
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(note.isFavorite
-                    ? 'Заметка добавлена в избранное'
-                    : 'Заметка удалена из избранного'),
+                content: Text(currentIsFavorite
+                    ? 'Заметка удалена из избранного'
+                    : 'Заметка добавлена в избранное'),
                 duration: const Duration(seconds: 2),
                 backgroundColor: AppColors.accentSecondary,
               ),
@@ -312,6 +314,7 @@ class _NotesScreenState extends State<NotesScreen>
           }
           return false;
         },
+
         // Действие после успешного свайпа
         onDismissed: (direction) async {
           if (direction == DismissDirection.endToStart) {
@@ -515,8 +518,33 @@ class _NotesScreenState extends State<NotesScreen>
   }
 
   Widget _buildNoteListItem(Note note, NotesProvider notesProvider) {
-    // Определяем цвет бордюра в зависимости от статуса
+    // Определяем цвет бордюра в зависимости от статуса заметки
     final borderColor = _getNoteStatusColor(note);
+
+    // Определяем цвет индикатора темы
+    Color themeColor = borderColor;
+    if (note.themeIds.isNotEmpty) {
+      // Используем цвет первой темы заметки
+      final themesProvider =
+          Provider.of<ThemesProvider>(context, listen: false);
+      final themeId = note.themeIds.first;
+      final theme = themesProvider.themes.firstWhere(
+        (t) => t.id == themeId,
+        orElse: () => NoteTheme(
+          id: '',
+          name: 'Без темы',
+          color: AppColors.themeColors[0].value.toString(),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          noteIds: [],
+        ),
+      );
+      try {
+        themeColor = Color(int.parse(theme.color));
+      } catch (e) {
+        themeColor = AppColors.themeColors[0];
+      }
+    }
 
     // Создаем анимацию для заметки
     final Animation<double> animation =
@@ -564,12 +592,25 @@ class _NotesScreenState extends State<NotesScreen>
             return await _showDeleteConfirmation(note);
           } else if (direction == DismissDirection.startToEnd) {
             // Свайп вправо - добавление в избранное
+            print(
+                '📌 Свайп вправо для добавления в избранное: ${note.id}, текущий isFavorite=${note.isFavorite}');
+
+            // Выполняем действие
             await notesProvider.toggleFavorite(note.id);
+
+            // Находим заметку снова, чтобы увидеть обновленное состояние
+            final updatedNote = notesProvider.notes.firstWhere(
+              (n) => n.id == note.id,
+              orElse: () => note,
+            );
+
+            print(
+                '📌 После toggleFavorite: isFavorite=${updatedNote.isFavorite}');
 
             // Показываем уведомление
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(note.isFavorite
+                content: Text(updatedNote.isFavorite
                     ? 'Заметка добавлена в избранное'
                     : 'Заметка удалена из избранного'),
                 duration: const Duration(seconds: 2),
@@ -581,6 +622,7 @@ class _NotesScreenState extends State<NotesScreen>
           }
           return false;
         },
+
         // Действие после успешного свайпа
         onDismissed: (direction) async {
           if (direction == DismissDirection.endToStart) {
@@ -608,7 +650,7 @@ class _NotesScreenState extends State<NotesScreen>
               ],
               border: Border(
                 left: BorderSide(
-                  color: borderColor,
+                  color: themeColor,
                   width: 4,
                 ),
               ),
@@ -624,23 +666,30 @@ class _NotesScreenState extends State<NotesScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Иконка в зависимости от типа
+                      // Иконка в зависимости от типа заметки
                       CircleAvatar(
-                        backgroundColor: borderColor.withOpacity(0.8),
+                        backgroundColor: themeColor.withOpacity(0.8),
                         radius: 16,
-                        child: Icon(
-                          note.hasDeadline
-                              ? (note.isCompleted
-                                  ? Icons.check_circle
-                                  : Icons.timer)
-                              : Icons.note,
-                          color: Colors.white,
-                          size: 16,
-                        ),
+                        child: note.emoji != null && note.emoji!.isNotEmpty
+                            // Если есть эмодзи, показываем его
+                            ? Text(
+                                note.emoji!,
+                                style: const TextStyle(fontSize: 14),
+                              )
+                            // Иначе показываем иконку в зависимости от типа заметки
+                            : Icon(
+                                note.hasDeadline
+                                    ? (note.isCompleted
+                                        ? Icons.check_circle
+                                        : Icons.timer)
+                                    : Icons.note,
+                                color: Colors.white,
+                                size: 16,
+                              ),
                       ),
                       const SizedBox(width: 12),
 
-                      // Информация о дате и времени
+                      // Информация о заметке
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -652,7 +701,8 @@ class _NotesScreenState extends State<NotesScreen>
                                       .format(note.createdAt),
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey[400],
+                                    color:
+                                        AppColors.textOnLight.withOpacity(0.8),
                                   ),
                                 ),
                                 if (note.isFavorite)
@@ -680,8 +730,15 @@ class _NotesScreenState extends State<NotesScreen>
                               note.content,
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.bodyMedium,
+                              style: AppTextStyles.bodyMediumLight,
                             ),
+
+                            // Темы заметки (в виде маленьких тегов)
+                            if (note.themeIds.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: _buildThemeTags(note.themeIds),
+                              ),
                           ],
                         ),
                       ),
@@ -691,6 +748,7 @@ class _NotesScreenState extends State<NotesScreen>
                         icon: const Icon(
                           AppIcons.more,
                           size: 18,
+                          color: AppColors.textOnLight,
                         ),
                         onPressed: () => _showNoteOptions(note),
                       ),
@@ -702,6 +760,78 @@ class _NotesScreenState extends State<NotesScreen>
           ),
         ),
       ),
+    );
+  }
+
+// Добавьте новый метод для отображения тегов тем в режиме списка
+  Widget _buildThemeTags(List<String> themeIds) {
+    return Consumer<ThemesProvider>(
+      builder: (context, themesProvider, _) {
+        // Ограничимся отображением максимум 2 тем для компактности
+        final displayIds = themeIds.take(2).toList();
+        final themes = displayIds
+            .map((id) => themesProvider.themes.firstWhere(
+                  (t) => t.id == id,
+                  orElse: () => NoteTheme(
+                    id: '',
+                    name: 'Неизвестная',
+                    color: AppColors.themeColors[0].value.toString(),
+                    createdAt: DateTime.now(),
+                    updatedAt: DateTime.now(),
+                    noteIds: [],
+                  ),
+                ))
+            .where((t) => t.id.isNotEmpty)
+            .toList();
+
+        return Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            ...themes.map((theme) {
+              Color themeColor;
+              try {
+                themeColor = Color(int.parse(theme.color));
+              } catch (e) {
+                themeColor = AppColors.themeColors[0];
+              }
+
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: themeColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: themeColor.withOpacity(0.5),
+                    width: 0.5,
+                  ),
+                ),
+                child: Text(
+                  theme.name,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: themeColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              );
+            }).toList(),
+
+            // Показываем "+X" если есть дополнительные темы
+            if (themeIds.length > 2)
+              Text(
+                '+${themeIds.length - 2}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: AppColors.textOnLight.withOpacity(0.6),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 

@@ -13,7 +13,17 @@ class NotesProvider with ChangeNotifier {
 
   // Получение избранных заметок
   List<Note> getFavoriteNotes() {
-    return _notes.where((note) => note.isFavorite).toList();
+    print('📌 getFavoriteNotes: всего заметок ${_notes.length}');
+    final favorites = _notes.where((note) => note.isFavorite == true).toList();
+    print(
+        '📌 getFavoriteNotes: найдено ${favorites.length} избранных заметок:');
+
+    // Печатаем отладочную информацию по избранным заметкам
+    for (var note in favorites) {
+      print('📌 Избранная заметка: ${note.id}');
+    }
+
+    return favorites;
   }
 
   // Добавление/удаление заметки из избранного
@@ -24,37 +34,33 @@ class NotesProvider with ChangeNotifier {
     if (index != -1) {
       final note = _notes[index];
       final currentIsFavorite = note.isFavorite;
-      print('📌 Найдена заметка: ${note.id}, isFavorite=$currentIsFavorite');
+      print(
+          '📌 Найдена заметка: ${note.id}, текущий isFavorite=$currentIsFavorite');
 
+      // Создаем копию заметки с противоположным значением isFavorite
       final updatedNote = note.copyWith(
         isFavorite: !currentIsFavorite,
         updatedAt: DateTime.now(),
       );
 
-      print('📌 Обновленная заметка: isFavorite=${updatedNote.isFavorite}');
+      print(
+          '📌 Обновленная заметка: новый isFavorite=${updatedNote.isFavorite}');
 
       try {
-        await _databaseService.updateNote(updatedNote);
-        print('📌 Заметка успешно обновлена в БД');
-
-        // Обновляем локальный кэш
+        // 1. Сначала обновляем локальный кэш для немедленной обратной связи
         _notes[index] = updatedNote;
 
-        // Принудительно перезагружаем заметку, чтобы убедиться в корректности данных
-        await loadNotes();
-
-        // Снова проверяем состояние заметки
-        final refreshedIndex = _notes.indexWhere((n) => n.id == id);
-        if (refreshedIndex != -1) {
-          print(
-              '📌 Состояние заметки после перезагрузки: isFavorite=${_notes[refreshedIndex].isFavorite}');
-        } else {
-          print('📌 Заметка не найдена после перезагрузки');
-        }
-
+        // 2. Сразу уведомляем слушателей об изменениях
         notifyListeners();
+
+        // 3. Затем сохраняем изменения в базу данных
+        await _databaseService.updateNote(updatedNote);
+        print('📌 Заметка успешно обновлена в БД');
       } catch (e) {
+        // В случае ошибки восстанавливаем предыдущее состояние
         print('📌 Ошибка при обновлении заметки: $e');
+        _notes[index] = note; // Восстановление исходного состояния
+        notifyListeners(); // Уведомление слушателей о восстановлении
         print(StackTrace.current);
       }
     } else {

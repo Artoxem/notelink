@@ -26,9 +26,9 @@ class DatabaseService {
     print('Путь к базе данных: $path');
 
     // ⚠️Принудительно удаляем БД при каждом запуске для отладки⚠️
-    print('⚠️ Удаление существующей базы данных для отладки');
-    await deleteDatabase(path);
-    print('✅ База данных очищена');
+    //print('⚠️ Удаление существующей базы данных для отладки');
+    // await deleteDatabase(path);
+    //print('✅ База данных очищена');
 
     return await openDatabase(
       path,
@@ -302,9 +302,8 @@ class DatabaseService {
       'hasDateLink': note.hasDateLink ? 1 : 0,
       'linkedDate': note.linkedDate?.millisecondsSinceEpoch,
       'isCompleted': note.isCompleted ? 1 : 0,
-      'isFavorite': note.isFavorite
-          ? 1
-          : 0, // Проверяем, что это поле правильно устанавливается
+      'isFavorite':
+          note.isFavorite ? 1 : 0, // Убедимся что это поле точно передается
       'mediaUrls': json.encode(note.mediaUrls),
       'emoji': note.emoji,
       'reminderDates': note.reminderDates != null
@@ -339,21 +338,6 @@ class DatabaseService {
     if (check.isNotEmpty) {
       print(
           '📊 Проверка после обновления: isFavorite = ${check.first['isFavorite']}');
-    }
-
-    // Удаляем старые связи с темами
-    await db.delete(
-      'note_theme',
-      where: 'noteId = ?',
-      whereArgs: [note.id],
-    );
-
-    // Вставляем новые связи с темами
-    for (final themeId in note.themeIds) {
-      await db.insert('note_theme', {
-        'noteId': note.id,
-        'themeId': themeId,
-      });
     }
 
     return result;

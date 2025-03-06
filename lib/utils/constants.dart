@@ -2,27 +2,32 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Основные цвета приложения
-  static const primary = Color(0xFF051914); // Teal Midnight - темный фон
-  static const cardBackground = Color(0xFFECEABE); // White Asparagus
-  static const secondary = Color(0xFF125B49); // Evergreen
+  static const primary =
+      Color.fromARGB(255, 26, 54, 49); // Teal Midnight - темный фон
+  static const cardBackground =
+      Color.fromARGB(255, 198, 197, 179); // White Asparagus
+  static const secondary = Color.fromARGB(255, 59, 92, 23); // Evergreen
 
   // Акцентные цвета
   static const accentPrimary =
-      Color(0xFFAADD66); // Last of Lettuce - кнопка плюс
+      Color.fromARGB(255, 196, 68, 22); // Last of Lettuce - кнопка плюс
   static const accentSecondary = Color(0xFF125B49); // Evergreen
 
   // Фон для текстовых полей (светлый)
-  static const textBackground = Color(0xFFFCF6EB); // Dipped in Cream
+  static const textBackground =
+      Color.fromARGB(255, 224, 216, 202); // Dipped in Cream
 
   // Цвета текста
   static const textOnLight =
-      Color(0xFF125B49); // Зеленый текст для светлого фона
+      Color.fromARGB(255, 10, 21, 19); // Зеленый текст для светлого фона
   static const textOnDark =
-      Color(0xFFF5F5F5); // Почти белый для текста на темном фоне
+      Color.fromARGB(255, 10, 21, 19); // Почти белый для текста на темном фоне
 
   // Цвет для нижней навигации
-  static const navSelectedItem = Color(0xFFAADD66); // Last of Lettuce
-  static const navUnselectedItem = Color(0xFFECEABE); // White Asparagus
+  static const navSelectedItem =
+      Color.fromARGB(255, 215, 255, 162); // Last of Lettuce
+  static const navUnselectedItem =
+      Color.fromARGB(255, 251, 249, 221); // White Asparagus
 
   // Цвета для статусов заметок (дедлайны и выполнение)
   static const completed = Color(0xFF125B49); // Evergreen
@@ -56,7 +61,8 @@ class AppColors {
   static const info = Color(0xFF125B49); // Evergreen
 
   // Цвета для FAB
-  static const fabBackground = Color(0xFFAADD66); // Last of Lettuce
+  static const fabBackground =
+      Color.fromARGB(255, 107, 170, 24); // Last of Lettuce
   static const fabIcon = Color(0xFFFFFFFF); // White
 
   // Специальные цвета для плашек дедлайнов
@@ -71,21 +77,21 @@ class AppTextStyles {
   static const heading1 = TextStyle(
     fontSize: 24,
     fontWeight: FontWeight.bold,
-    color: AppColors.textOnDark,
+    color: Color.fromARGB(255, 179, 221, 213),
     letterSpacing: 0.5,
   );
 
   static const heading2 = TextStyle(
     fontSize: 20,
     fontWeight: FontWeight.bold,
-    color: AppColors.textOnDark,
+    color: Color.fromARGB(255, 179, 221, 213),
     letterSpacing: 0.5,
   );
 
   static const heading3 = TextStyle(
     fontSize: 18,
     fontWeight: FontWeight.w500,
-    color: AppColors.textOnDark,
+    color: Color.fromARGB(255, 179, 221, 213),
     letterSpacing: 0.5,
   );
 
