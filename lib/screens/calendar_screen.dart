@@ -176,6 +176,13 @@ class _CalendarScreenState extends State<CalendarScreen>
       curve: Curves.easeInOut,
     );
 
+    _pageChangeController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        // Когда анимация завершена, сбрасываем контроллер
+        _pageChangeController.reset();
+      }
+    });
+
     // Загружаем данные при инициализации
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
@@ -572,14 +579,19 @@ class _CalendarScreenState extends State<CalendarScreen>
             },
           ),
 
-          // Название месяца и год (только на русском)
+          // Название месяца и год - улучшенная версия с анимацией
           AnimatedBuilder(
             animation: _pageChangeAnimation,
             builder: (context, child) {
+              // Используем Transform.scale вместо Opacity
               return Transform.scale(
                 scale: 1.0 - (_pageChangeAnimation.value * 0.1),
-                child: Opacity(
-                  opacity: 1.0 - _pageChangeAnimation.value,
+                child: AnimatedOpacity(
+                  // Используем AnimatedOpacity вместо Opacity
+                  opacity: 1.0 -
+                      (_pageChangeAnimation.value *
+                          0.5), // Ограничиваем минимальную прозрачность до 0.5
+                  duration: const Duration(milliseconds: 100),
                   child: Text(
                     DateFormat('MMMM yyyy').format(_focusedDay),
                     style: AppTextStyles.heading2,

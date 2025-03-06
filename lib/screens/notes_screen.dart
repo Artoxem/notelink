@@ -837,24 +837,63 @@ class _NotesScreenState extends State<NotesScreen>
 
   // Метод для отображения индикаторов тем
   Widget _buildThemeIndicators(List<String> themeIds) {
-    // Ограничиваем количество отображаемых индикаторов
-    final displayCount = math.min(themeIds.length, 3);
-
     return Consumer<ThemesProvider>(
       builder: (context, themesProvider, _) {
+        // Проверка на пустой список тем
+        if (themesProvider.themes.isEmpty) {
+          return const SizedBox(); // Возвращаем пустой виджет если тем нет
+        }
+
         final indicators = <Widget>[];
 
-        for (var i = 0; i < displayCount; i++) {
-          final theme = themesProvider.themes.firstWhere(
-            (t) => t.id == themeIds[i],
-            orElse: () => themesProvider.themes.first, // Запасной вариант
-          );
+        // Ограничиваем количество отображаемых индикаторов
+        final displayCount = math.min(themeIds.length, 3);
 
-          Color themeColor;
+        // Обработка каждой темы
+        for (var i = 0; i < displayCount; i++) {
+          if (i >= themeIds.length)
+            break; // Защита от выхода за границы массива
+
+          final themeId = themeIds[i];
+
+          // Находим тему по ID с безопасной проверкой
+          NoteTheme? theme;
           try {
-            themeColor = Color(int.parse(theme.color));
+            theme = themesProvider.themes.firstWhere(
+              (t) => t.id == themeId,
+              // Вместо null создаем фиктивный объект NoteTheme
+              orElse: () => NoteTheme(
+                id: '',
+                name: 'Без темы',
+                color: AppColors.themeColors.first.value.toString(),
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                noteIds: [],
+              ),
+            );
           } catch (e) {
-            themeColor = AppColors.themeColors.first;
+            print('Ошибка при поиске темы: $e');
+            // Создаем пустую тему как fallback
+            theme = NoteTheme(
+              id: '',
+              name: 'Без темы',
+              color: AppColors.themeColors.first.value.toString(),
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+              noteIds: [],
+            );
+          }
+
+          // Затем идем по оригинальной логике определения цвета
+          Color themeColor = AppColors.themeColors.first;
+          if (theme.id.isNotEmpty) {
+            // Проверяем, что тема не пустая
+            try {
+              themeColor = Color(int.parse(theme.color));
+            } catch (e) {
+              // Используем дефолтный цвет при ошибке парсинга
+              print('Ошибка при парсинге цвета темы: $e');
+            }
           }
 
           indicators.add(
@@ -885,7 +924,10 @@ class _NotesScreenState extends State<NotesScreen>
           );
         }
 
-        return Row(children: indicators);
+        return Row(
+          mainAxisSize: MainAxisSize.min, // Ограничиваем размер Row
+          children: indicators,
+        );
       },
     );
   }
