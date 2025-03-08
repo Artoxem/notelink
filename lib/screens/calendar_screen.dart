@@ -466,8 +466,6 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   @override
   Widget build(BuildContext context) {
-    final notesProvider = Provider.of<NotesProvider>(context);
-
     return Scaffold(
       body: Stack(
         children: [
@@ -480,7 +478,11 @@ class _CalendarScreenState extends State<CalendarScreen>
 
               // Календарь в виде сетки
               SliverToBoxAdapter(
-                child: _buildGridCalendar(notesProvider),
+                child: Consumer<NotesProvider>(
+                  builder: (context, notesProvider, _) {
+                    return _buildGridCalendar(notesProvider);
+                  },
+                ),
               ),
 
               // Информационный блок
@@ -489,63 +491,68 @@ class _CalendarScreenState extends State<CalendarScreen>
               ),
 
               // Список заметок для выбранной даты
-              notesProvider.isLoading
-                  ? const SliverFillRemaining(
+              Consumer<NotesProvider>(
+                builder: (context, notesProvider, _) {
+                  if (notesProvider.isLoading) {
+                    return const SliverFillRemaining(
                       child: Center(child: CircularProgressIndicator()),
-                    )
-                  : _selectedEvents.isEmpty
-                      ? SliverFillRemaining(
-                          child: _buildEmptyDateView(),
-                        )
-                      : SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              if (index == 0) {
-                                // Заголовок "Заметки на выбранный день"
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 12),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.accentSecondary
-                                              .withOpacity(0.2),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          '${_selectedEvents.length}',
-                                          style: const TextStyle(
-                                            color: AppColors.accentSecondary,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                    );
+                  } else if (_selectedEvents.isEmpty) {
+                    return SliverFillRemaining(
+                      child: _buildEmptyDateView(),
+                    );
+                  } else {
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (index == 0) {
+                            // Заголовок "Заметки на выбранный день"
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500),
                                   ),
-                                );
-                              }
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentSecondary
+                                          .withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '${_selectedEvents.length}',
+                                      style: const TextStyle(
+                                        color: AppColors.accentSecondary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
 
-                              // Карточки заметок
-                              final note = _selectedEvents[index - 1];
-                              return _buildNoteCard(note);
-                            },
-                            childCount: _selectedEvents.isEmpty
-                                ? 0
-                                : _selectedEvents.length + 1,
-                          ),
-                        ),
+                          // Карточки заметок
+                          final note = _selectedEvents[index - 1];
+                          return _buildNoteCard(note);
+                        },
+                        childCount: _selectedEvents.isEmpty
+                            ? 0
+                            : _selectedEvents.length + 1,
+                      ),
+                    );
+                  }
+                },
+              ),
             ],
           ),
 
@@ -594,7 +601,11 @@ class _CalendarScreenState extends State<CalendarScreen>
                   duration: const Duration(milliseconds: 100),
                   child: Text(
                     DateFormat('MMMM yyyy').format(_focusedDay),
-                    style: AppTextStyles.heading2,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF213E60),
+                    ),
                   ),
                 ),
               );
@@ -924,7 +935,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.deadlineNear,
+                          color: Color(0xFFAADD66),
                         ),
                       ),
                       const Text(
@@ -970,18 +981,11 @@ class _CalendarScreenState extends State<CalendarScreen>
             'Создайте заметку, чтобы она появилась здесь',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey,
+              color: Color(0xFF213E60),
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              CalendarScreen.showAddNoteWithDate(context, _selectedDay);
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Создать заметку'),
-          ),
+          // Кнопка "Создать заметку" удалена, т.к. дублирует функционал кнопки "+"
         ],
       ),
     );

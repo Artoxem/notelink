@@ -73,24 +73,28 @@ class AppColors {
 
 class AppTextStyles {
   // Заголовки
+  // Существующие стили текста (заголовки)
   static const heading1 = TextStyle(
     fontSize: 24,
     fontWeight: FontWeight.bold,
-    color: Color.fromARGB(255, 179, 221, 213),
+    color: AppColors
+        .textOnDark, // Изменено с Color.fromARGB(255, 179, 221, 213) на AppColors.textOnDark
     letterSpacing: 0.5,
   );
 
   static const heading2 = TextStyle(
     fontSize: 20,
     fontWeight: FontWeight.bold,
-    color: Color.fromARGB(255, 179, 221, 213),
+    color: AppColors
+        .textOnDark, // Изменено с Color.fromARGB(255, 179, 221, 213) на AppColors.textOnDark
     letterSpacing: 0.5,
   );
 
   static const heading3 = TextStyle(
     fontSize: 18,
     fontWeight: FontWeight.w500,
-    color: Color.fromARGB(255, 179, 221, 213),
+    color: AppColors
+        .textOnDark, // Изменено с Color.fromARGB(255, 179, 221, 213) на AppColors.textOnDark
     letterSpacing: 0.5,
   );
 
