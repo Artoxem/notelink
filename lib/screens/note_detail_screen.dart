@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/note.dart';
-import '../models/theme.dart'; // Добавлен импорт для модели NoteTheme
+import '../models/theme.dart';
 import '../providers/notes_provider.dart';
 import '../providers/app_provider.dart';
 import '../utils/constants.dart';
 import 'package:intl/intl.dart';
 import '../providers/themes_provider.dart';
 import '../widgets/markdown_editor.dart';
+import 'package:flutter_markdown/flutter_markdown.dart'; // Добавлен импорт для поддержки Markdown
 
 class NoteDetailScreen extends StatefulWidget {
   final Note? note; // Null если создаем новую заметку
@@ -330,6 +331,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
   // Построение режима просмотра
   Widget _buildViewMode() {
+    final bool enableMarkdown =
+        Provider.of<AppProvider>(context).enableMarkdownFormatting;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppDimens.mediumPadding),
       child: Column(
@@ -402,11 +406,91 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           ),
 
           // Содержимое заметки с поддержкой Markdown
-          MarkdownEditor(
-            controller: _contentController,
-            readOnly: true,
-            height: MediaQuery.of(context).size.height * 0.6,
-          ),
+          // Здесь изменим на MarkdownBody для режима просмотра
+          if (enableMarkdown)
+            // Используем MarkdownBody для отображения с форматированием
+            Container(
+              padding: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: AppColors.textBackground,
+                borderRadius:
+                    BorderRadius.circular(AppDimens.buttonBorderRadius),
+              ),
+              child: MarkdownBody(
+                data: _contentController.text,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  h1: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textOnLight,
+                  ),
+                  h2: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textOnLight,
+                  ),
+                  h3: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textOnLight,
+                  ),
+                  p: TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textOnLight,
+                  ),
+                  listBullet: TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textOnLight,
+                  ),
+                  listIndent: 20.0,
+                  a: TextStyle(
+                    color: AppColors.accentPrimary,
+                    decoration: TextDecoration.underline,
+                  ),
+                  em: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: AppColors.textOnLight,
+                  ),
+                  strong: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textOnLight,
+                  ),
+                  blockquoteDecoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: AppColors.accentPrimary,
+                        width: 4,
+                      ),
+                    ),
+                    color: AppColors.accentPrimary.withOpacity(0.1),
+                  ),
+                  blockquote: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: AppColors.textOnLight.withOpacity(0.8),
+                  ),
+                  code: TextStyle(
+                    fontFamily: 'monospace',
+                    backgroundColor: AppColors.secondary.withOpacity(0.2),
+                    color: AppColors.textOnLight,
+                  ),
+                  codeblockDecoration: BoxDecoration(
+                    color: AppColors.secondary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: AppColors.secondary.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            // Используем обычный текстовый виджет, если Markdown отключен
+            Text(
+              _contentController.text,
+              style: AppTextStyles.bodyMediumLight,
+            ),
         ],
       ),
     );

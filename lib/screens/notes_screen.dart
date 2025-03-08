@@ -10,6 +10,7 @@ import 'note_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
 import '../models/theme.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -62,6 +63,26 @@ class _NotesScreenState extends State<NotesScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+  }
+
+  // Создает чистое превью из markdown-текста
+  String _createPreviewFromMarkdown(String markdown, int maxLength) {
+    // Удаляем базовую markdown-разметку для получения более чистого текста
+    String text = markdown;
+
+    // Удаляем заголовки
+    text = text.replaceAll(RegExp(r'#{1,6}\s+'), '');
+
+    // Удаляем разметку жирного и курсивного текста
+    text = text.replaceAll(RegExp(r'\*\*'), '');
+    text = text.replaceAll(RegExp(r'\*'), '');
+
+    // Обрезаем по максимальной длине
+    if (text.length > maxLength) {
+      text = '${text.substring(0, maxLength)}...';
+    }
+
+    return text;
   }
 
   void _loadData() async {
@@ -241,7 +262,8 @@ class _NotesScreenState extends State<NotesScreen>
         itemCount: notes.length,
         cacheExtent: 1000,
         // Используем специальный тип для определения размеров элементов для еще лучшей производительности
-        itemExtent: 120, // Фиксированная высота элементов
+        // Убираем itemExtent для динамической высоты
+        // itemExtent: 120, // Фиксированная высота элементов
         itemBuilder: (context, index) {
           final note = notes[index];
           return KeyedSubtree(
@@ -353,16 +375,24 @@ class _NotesScreenState extends State<NotesScreen>
             return await _showDeleteConfirmation(note);
           } else if (direction == DismissDirection.startToEnd) {
             // Свайп вправо - добавление в избранное
-            print('📌 Свайп вправо для добавления в избранное: ${note.id}');
-            final currentIsFavorite = note.isFavorite;
             await notesProvider.toggleFavorite(note.id);
 
+            // Принудительно обновляем UI
+            setState(() {
+              // Это заставит Widget перерисоваться
+            });
+
             // Показываем уведомление
+            final updatedNote = notesProvider.notes.firstWhere(
+              (n) => n.id == note.id,
+              orElse: () => note,
+            );
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(currentIsFavorite
-                    ? 'Заметка удалена из избранного'
-                    : 'Заметка добавлена в избранное'),
+                content: Text(updatedNote.isFavorite
+                    ? 'Заметка добавлена в избранное'
+                    : 'Заметка удалена из избранного'),
                 duration: const Duration(seconds: 2),
                 backgroundColor: AppColors.accentSecondary,
               ),
@@ -456,10 +486,10 @@ class _NotesScreenState extends State<NotesScreen>
                               // Содержимое заметки
                               Expanded(
                                 child: Text(
-                                  note.content,
-                                  maxLines: 8,
+                                  _createPreviewFromMarkdown(note.content, 80),
+                                  maxLines: 5,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.bodyMediumLight,
+                                  style: AppTextStyles.bodySmallLight,
                                 ),
                               ),
 
@@ -661,7 +691,12 @@ class _NotesScreenState extends State<NotesScreen>
             print(
                 '📌 После toggleFavorite: isFavorite=${updatedNote.isFavorite}');
 
-            // Показываем уведомление
+            // Принудительно обновляем UI
+            setState(() {
+              // Это заставит Widget перерисоваться с обновленными данными
+            });
+
+            // Показываем уведомление с состоянием из ОБНОВЛЕННОЙ заметки
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(updatedNote.isFavorite
@@ -680,7 +715,7 @@ class _NotesScreenState extends State<NotesScreen>
         // Действие после успешного свайпа
         onDismissed: (direction) async {
           if (direction == DismissDirection.endToStart) {
-            // Удаляем связи и саму заметку
+            // Удаляем заметку
             await notesProvider.deleteNote(note.id);
           }
         },
@@ -777,12 +812,57 @@ class _NotesScreenState extends State<NotesScreen>
                                 ),
                               ),
                             const SizedBox(height: 8),
-                            Text(
-                              note.content,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.bodyMediumLight,
-                            ),
+                            Provider.of<AppProvider>(context)
+                                    .enableMarkdownFormatting
+                                ? Container(
+                                    constraints: BoxConstraints(
+                                        maxHeight:
+                                            50), // Жесткое ограничение высоты
+                                    child: ClipRect(
+                                      child: MarkdownBody(
+                                        data: note.content.length > 100
+                                            ? note.content.substring(0, 100) +
+                                                "..."
+                                            : note.content,
+                                        softLineBreak: true,
+                                        selectable: false,
+                                        shrinkWrap: true,
+                                        styleSheet: MarkdownStyleSheet(
+                                          p: AppTextStyles.bodySmallLight
+                                              .copyWith(
+                                                  fontSize:
+                                                      12), // Ещё меньший шрифт
+                                          h1: AppTextStyles.bodySmallLight
+                                              .copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                          h2: AppTextStyles.bodySmallLight
+                                              .copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                          strong: AppTextStyles.bodySmallLight
+                                              .copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          em: AppTextStyles.bodySmallLight
+                                              .copyWith(
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                          listBullet:
+                                              AppTextStyles.bodySmallLight,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    note.content,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles
+                                        .bodySmallLight, // Меньший шрифт
+                                  ),
 
                             // Темы заметки (в виде маленьких тегов)
                             if (note.themeIds.isNotEmpty)
