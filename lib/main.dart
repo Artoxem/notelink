@@ -6,6 +6,7 @@ import 'providers/notes_provider.dart';
 import 'providers/themes_provider.dart';
 import 'providers/note_links_provider.dart';
 import 'screens/main_screen.dart';
+import 'services/database_service.dart';
 import 'utils/constants.dart';
 import 'utils/sample_data.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -53,18 +54,34 @@ class _MyAppState extends State<MyApp> {
 
   // Метод инициализации приложения теперь не принимает контекст
   Future<void> _initializeApp() async {
-    if (widget.isFirstRun) {
-      // Создаем примеры данных при первом запуске
-      print('Первый запуск: создаем примеры данных...');
-      await _createSampleData();
+    try {
+      if (widget.isFirstRun) {
+        // Создаем примеры данных при первом запуске
+        print('Первый запуск: создаем примеры данных...');
+        await _createSampleData();
 
-      // Отмечаем, что первый запуск уже был
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isFirstRun', false);
-    } else {
-      // Загружаем данные из базы данных
-      print('Не первый запуск: загружаем существующие данные...');
-      await _loadData();
+        // Отмечаем, что первый запуск уже был
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isFirstRun', false);
+      } else {
+        // При не-первом запуске НЕ загружаем данные здесь,
+        // это будет сделано в провайдерах после построения UI
+        print('Не первый запуск: подготовка к загрузке данных...');
+
+        // Предварительная инициализация базы данных может быть сделана здесь
+        // чтобы ускорить последующую загрузку данных
+        final databaseService = DatabaseService();
+        // Просто получаем доступ к базе данных, что инициализирует её
+        await databaseService.database;
+        print('База данных инициализирована и готова к использованию');
+      }
+    } catch (e) {
+      // Не позволяем ошибкам при инициализации "убить" приложение
+      print('Ошибка при инициализации приложения: $e');
+      print(StackTrace.current);
+
+      // Можно добавить телеметрию ошибок в будущем
+      // или механизм восстановления
     }
   }
 

@@ -430,6 +430,8 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
     if (currentNoteId == null) {
       // Если ID текущей заметки не удалось определить, показываем сообщение
+      if (!mounted) return; // Проверка mounted перед доступом к context
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text(
@@ -439,15 +441,17 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     }
 
     // Показываем диалог выбора заметки
+    if (!mounted) return; // Проверка mounted перед доступом к context
     final selectedNote = await NoteLinkDialog.show(context, currentNoteId);
 
     // Если заметка не выбрана, прерываем выполнение
-    if (selectedNote == null) return;
+    if (selectedNote == null || !mounted) return;
 
     // Вставляем ссылку на заметку в текст
     _insertNoteLinkInText(selectedNote);
 
     // Создаем прямую связь между заметками
+    if (!mounted) return; // Проверка mounted перед доступом к context
     final linksProvider =
         Provider.of<NoteLinksProvider>(context, listen: false);
     await linksProvider.createLink(
@@ -574,32 +578,62 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                               Tab(text: 'Предпросмотр'),
                             ],
                           ),
-                          // Панель инструментов форматирования
-                          // Панель инструментов для работы с медиа (бывшая красная область)
+                          // Панель инструментов для работы с медиа
                           if (!_isPreviewMode)
                             Padding(
                               padding: const EdgeInsets.all(8.0),
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: [
-                                    // Кнопки для работы с медиа
-                                    IconButton(
-                                      icon: const Icon(Icons.image),
-                                      tooltip: 'Добавить изображение',
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Добавление изображений будет доступно в следующей версии'),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    IconButton(
+                              child: Row(
+                                children: [
+                                  // Кнопки с привязкой к левому краю
+                                  IconButton(
+                                    icon: const Icon(Icons.image),
+                                    tooltip: 'Прикрепить изображение',
+                                    onPressed: () {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                              'Добавление изображений будет доступно в следующей версии'),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.attach_file),
+                                    tooltip: 'Прикрепить файл',
+                                    onPressed: () {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                              'Прикрепление файлов будет доступно в следующей версии'),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.menu),
+                                    tooltip: 'Меню редактирования текста',
+                                    onPressed: () {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                              'Меню редактирования будет доступно в следующей версии'),
+                                        ),
+                                      );
+                                    },
+                                  ),
+
+                                  // Расширитель для создания пространства между группами кнопок
+                                  Expanded(child: Container()),
+
+                                  // Кнопка голосового сообщения (увеличенная, с привязкой к правому краю)
+                                  Transform.scale(
+                                    scale: 1.2,
+                                    child: IconButton(
                                       icon: const Icon(Icons.mic),
-                                      tooltip: 'Записать голосовое сообщение',
+                                      tooltip: 'Быстрое голосовое',
                                       onPressed: () {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
@@ -610,47 +644,8 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                                         );
                                       },
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.attach_file),
-                                      tooltip: 'Прикрепить файл',
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Прикрепление файлов будет доступно в следующей версии'),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.camera_alt),
-                                      tooltip: 'Сделать фото',
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Съемка фото будет доступна в следующей версии'),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.videocam),
-                                      tooltip: 'Записать видео',
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Запись видео будет доступна в следующей версии'),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                         ],

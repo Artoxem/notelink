@@ -111,39 +111,60 @@ class _NotesScreenState extends State<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<NotesProvider, AppProvider>(
-      builder: (context, notesProvider, appProvider, _) {
-        if (notesProvider.isLoading) {
+    // Получаем AppProvider только для настроек отображения
+    // без перестройки всего экрана при изменении других провайдеров
+    final appProvider = Provider.of<AppProvider>(context);
+    final noteViewMode = appProvider.noteViewMode;
+    final noteSortMode = appProvider.noteSortMode;
+
+    return Selector<NotesProvider, bool>(
+      // Селектор будет следить только за флагом загрузки
+      selector: (_, notesProvider) => notesProvider.isLoading,
+      builder: (context, isLoading, _) {
+        if (isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // Получаем все заметки
-        final notes = notesProvider.notes;
-        print('Количество заметок для отображения: ${notes.length}');
+        // Получаем заметки без вызова перестройки при каждом изменении других свойств
+        return Selector<NotesProvider, List<Note>>(
+          selector: (_, notesProvider) => notesProvider.notes,
+          builder: (context, notes, _) {
+            // Копируем список чтобы не модифицировать оригинал
+            final displayNotes = List<Note>.from(notes);
 
-        // Сортируем заметки в зависимости от настроек
-        switch (appProvider.noteSortMode) {
-          case NoteSortMode.dateDesc:
-            notes.sort((a, b) =>
-                b.createdAt.compareTo(a.createdAt)); // От новых к старым
-            break;
-          case NoteSortMode.dateAsc:
-            notes.sort((a, b) =>
-                a.createdAt.compareTo(b.createdAt)); // От старых к новым
-            break;
-          case NoteSortMode.alphabetical:
-            notes.sort((a, b) => a.content.compareTo(b.content)); // По алфавиту
-            break;
-        }
+            // Сортируем заметки в зависимости от настроек
+            _sortNotes(displayNotes, noteSortMode);
 
-        if (notes.isEmpty) {
-          return _buildEmptyState();
-        }
+            print('Количество заметок для отображения: ${displayNotes.length}');
 
-        // Отображаем список заметок в выбранном режиме
-        return _buildNotesList(notes, appProvider.noteViewMode, notesProvider);
+            if (displayNotes.isEmpty) {
+              return _buildEmptyState();
+            }
+
+            // Отображаем список заметок в выбранном режиме
+            return _buildNotesList(displayNotes, noteViewMode,
+                Provider.of<NotesProvider>(context, listen: false));
+          },
+        );
       },
     );
+  }
+
+// Вспомогательный метод для сортировки заметок
+  void _sortNotes(List<Note> notes, NoteSortMode sortMode) {
+    switch (sortMode) {
+      case NoteSortMode.dateDesc:
+        notes.sort(
+            (a, b) => b.createdAt.compareTo(a.createdAt)); // От новых к старым
+        break;
+      case NoteSortMode.dateAsc:
+        notes.sort(
+            (a, b) => a.createdAt.compareTo(b.createdAt)); // От старых к новым
+        break;
+      case NoteSortMode.alphabetical:
+        notes.sort((a, b) => a.content.compareTo(b.content)); // По алфавиту
+        break;
+    }
   }
 
   Widget _buildEmptyState() {
@@ -208,6 +229,9 @@ class _NotesScreenState extends State<NotesScreen>
   }
 
   Widget _buildNoteCard(Note note, NotesProvider notesProvider) {
+    // Кэшируем провайдер тем для последующего использования
+    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
+
     // Определяем цвет индикатора в зависимости от статуса и темы
     Color indicatorColor;
     if (note.isCompleted) {
@@ -226,34 +250,41 @@ class _NotesScreenState extends State<NotesScreen>
         indicatorColor = AppColors.deadlineFar; // Не срочно
       }
     } else if (note.themeIds.isNotEmpty) {
-      // Используем цвет первой темы заметки
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      // Используем цвет первой темы заметки, но получаем его только один раз
       final themeId = note.themeIds.first;
-      final theme = themesProvider.themes.firstWhere(
-        (t) => t.id == themeId,
-        orElse: () => NoteTheme(
-          id: '',
-          name: 'Без темы',
-          color: AppColors.themeColors[0].value.toString(),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          noteIds: [],
-        ),
-      );
       try {
-        indicatorColor = Color(int.parse(theme.color));
+        final theme = themesProvider.themes.firstWhere(
+          (t) => t.id == themeId,
+          orElse: () => NoteTheme(
+            id: '',
+            name: 'Без темы',
+            color: AppColors.themeColors[0].value.toString(),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            noteIds: [],
+          ),
+        );
+        if (theme.id.isNotEmpty) {
+          try {
+            indicatorColor = Color(int.parse(theme.color));
+          } catch (e) {
+            indicatorColor = AppColors.themeColors[0];
+          }
+        } else {
+          indicatorColor = AppColors.themeColors[0];
+        }
       } catch (e) {
-        indicatorColor = AppColors.themeColors[0];
+        indicatorColor = AppColors.secondary;
       }
     } else {
       indicatorColor = AppColors.secondary; // Обычный цвет
     }
 
-    // Создаем анимацию для заметки
+    // Получаем или создаем анимацию для заметки
     final Animation<double> animation =
         _itemAnimations[note.id] ?? const AlwaysStoppedAnimation(1.0);
 
+    // Мемоизируем построение карточки, чтобы не перестраивать её при незначительных изменениях
     return AnimatedBuilder(
       animation: animation,
       builder: (context, child) {
@@ -261,10 +292,12 @@ class _NotesScreenState extends State<NotesScreen>
           offset: Offset(0, 50 * (1 - animation.value)),
           child: Opacity(
             opacity: animation.value,
+            // Использовано детское свойство для предотвращения перестройки внутренней части
             child: child,
           ),
         );
       },
+      // Внутренняя часть карточки строится только один раз и не перестраивается при анимации
       child: Dismissible(
         key: Key(note.id),
         direction: DismissDirection.horizontal,
@@ -331,7 +364,7 @@ class _NotesScreenState extends State<NotesScreen>
               duration: AppAnimations.mediumDuration,
               curve: Curves.easeOutQuint,
               decoration: BoxDecoration(
-                color: AppColors.cardBackground, // White Asparagus
+                color: AppColors.cardBackground,
                 borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
                 boxShadow: [
                   BoxShadow(
@@ -364,7 +397,7 @@ class _NotesScreenState extends State<NotesScreen>
                           ),
                         ),
                       ),
-                      // Основное содержимое
+                      // Основное содержимое - мемоизировано
                       Expanded(
                         child: Padding(
                           padding:
@@ -450,34 +483,7 @@ class _NotesScreenState extends State<NotesScreen>
                                   note.themeIds.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8),
-                                  child: Row(
-                                    children: [
-                                      if (note.hasImages)
-                                        const Padding(
-                                          padding: EdgeInsets.only(right: 4),
-                                          child: Icon(Icons.photo,
-                                              size: 14,
-                                              color: AppColors.textOnLight),
-                                        ),
-                                      if (note.hasAudio)
-                                        const Padding(
-                                          padding: EdgeInsets.only(right: 4),
-                                          child: Icon(Icons.mic,
-                                              size: 14,
-                                              color: AppColors.textOnLight),
-                                        ),
-                                      if (note.hasFiles)
-                                        const Padding(
-                                          padding: EdgeInsets.only(right: 4),
-                                          child: Icon(Icons.attach_file,
-                                              size: 14,
-                                              color: AppColors.textOnLight),
-                                        ),
-                                      const Spacer(),
-                                      if (note.themeIds.isNotEmpty)
-                                        _buildThemeIndicators(note.themeIds),
-                                    ],
-                                  ),
+                                  child: _buildNoteIndicators(note),
                                 ),
                             ],
                           ),
@@ -514,6 +520,32 @@ class _NotesScreenState extends State<NotesScreen>
           ],
         ),
       ),
+    );
+  }
+
+// Вынесенный метод для отображения индикаторов медиа и тем
+  Widget _buildNoteIndicators(Note note) {
+    return Row(
+      children: [
+        if (note.hasImages)
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.photo, size: 14, color: AppColors.textOnLight),
+          ),
+        if (note.hasAudio)
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.mic, size: 14, color: AppColors.textOnLight),
+          ),
+        if (note.hasFiles)
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child:
+                Icon(Icons.attach_file, size: 14, color: AppColors.textOnLight),
+          ),
+        const Spacer(),
+        if (note.themeIds.isNotEmpty) _buildThemeIndicators(note.themeIds),
+      ],
     );
   }
 

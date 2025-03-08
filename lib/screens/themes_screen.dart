@@ -65,7 +65,9 @@ class _ThemesScreenState extends State<ThemesScreen> {
                       ),
                     ).then((_) {
                       // Перезагружаем темы после возврата
-                      themesProvider.loadThemes();
+                      if (mounted) {
+                        themesProvider.loadThemes();
+                      }
                     });
                   },
                   icon: const Icon(Icons.add),
@@ -74,6 +76,14 @@ class _ThemesScreenState extends State<ThemesScreen> {
               ],
             ),
           );
+        }
+
+        // Предварительно загружаем заметки для каждой темы
+        // для улучшения отзывчивости интерфейса
+        final Map<String, Future<List<Note>>> themeNotesFutures = {};
+        for (final theme in themesProvider.themes) {
+          themeNotesFutures[theme.id] =
+              themesProvider.getNotesForTheme(theme.id);
         }
 
         // Отображаем список тем
@@ -111,7 +121,9 @@ class _ThemesScreenState extends State<ThemesScreen> {
                     ),
                   ).then((_) {
                     // Перезагружаем темы после возврата
-                    themesProvider.loadThemes();
+                    if (mounted) {
+                      themesProvider.loadThemes();
+                    }
                   });
                 },
                 child: Padding(
@@ -186,7 +198,7 @@ class _ThemesScreenState extends State<ThemesScreen> {
                       ),
                       if (theme.noteIds.isNotEmpty)
                         FutureBuilder<List<Note>>(
-                          future: themesProvider.getNotesForTheme(theme.id),
+                          future: themeNotesFutures[theme.id],
                           builder: (context, snapshot) {
                             if (snapshot.connectionState ==
                                 ConnectionState.waiting) {
@@ -253,7 +265,7 @@ class _ThemesScreenState extends State<ThemesScreen> {
                                             ],
                                           ),
                                         ))
-                                    .toList(), // Добавлен .toList()
+                                    .toList(),
                                 if (notes.length > 3)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),

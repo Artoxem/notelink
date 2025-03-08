@@ -872,13 +872,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   }
 
   Future<void> _saveNote() async {
+    // Добавляем индикатор состояния сохранения
+    bool isSaving = false;
+    setState(() {
+      isSaving = true;
+    });
+
     final content = _contentController.text.trim();
 
     if (content.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Содержимое заметки не может быть пустым')),
       );
+      setState(() {
+        isSaving = false;
+      });
       return;
     }
 
@@ -899,6 +909,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
         await notesProvider.updateNote(updatedNote);
 
+        // Обновляем состояние только если виджет все еще в дереве
+        if (!mounted) return;
+
         // Переключаемся в режим просмотра
         if (_isEditMode) {
           setState(() {
@@ -906,6 +919,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             _modeTransitionController.reverse();
             _isContentChanged = false;
             _isSettingsChanged = false; // Сбрасываем флаг изменений настроек
+            isSaving = false;
           });
         }
 
@@ -925,14 +939,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         );
 
         // После создания новой заметки закрываем экран создания
-        if (mounted) {
-          Navigator.pop(context);
-        }
+        if (!mounted) return;
+        Navigator.pop(context);
       }
     } catch (e) {
+      // Обработка ошибок
+      if (!mounted) return;
+
+      setState(() {
+        isSaving = false;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
+        SnackBar(
+          content: Text('Ошибка: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Повторить',
+            textColor: Colors.white,
+            onPressed: _saveNote,
+          ),
+        ),
       );
+
+      // Логирование подробностей ошибки
+      print('Ошибка при сохранении заметки: $e');
+      print(StackTrace.current);
     }
   }
 

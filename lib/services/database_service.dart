@@ -514,58 +514,71 @@ class DatabaseService {
   Future<List<Note>> getNotesForTheme(String themeId) async {
     final db = await database;
 
-    // Получаем ID заметок, связанных с темой
-    final List<Map<String, dynamic>> noteIds = await db.query(
-      'note_theme',
-      columns: ['noteId'],
-      where: 'themeId = ?',
-      whereArgs: [themeId],
-    );
-
-    if (noteIds.isEmpty) return [];
-
-    // Формируем строку условия для запроса IN
-    final idList = noteIds.map((map) => "'${map['noteId']}'").join(', ');
-
-    // Получаем заметки по ID
-    final List<Map<String, dynamic>> maps =
-        await db.rawQuery('SELECT * FROM notes WHERE id IN ($idList)');
-
-    return Future.wait(maps.map((map) async {
-      // Получаем темы для заметки
-      final themeIds = await getThemeIdsForNote(map['id'] as String);
-
-      return Note(
-        id: map['id'] as String,
-        content: map['content'] as String,
-        themeIds: themeIds,
-        createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
-        hasDeadline: (map['hasDeadline'] as int) == 1,
-        deadlineDate: map['deadlineDate'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(map['deadlineDate'] as int)
-            : null,
-        hasDateLink: (map['hasDateLink'] as int) == 1,
-        linkedDate: map['linkedDate'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(map['linkedDate'] as int)
-            : null,
-        isCompleted: (map['isCompleted'] as int) == 1,
-        mediaUrls: List<String>.from(json.decode(map['mediaUrls'] as String)),
-        emoji: map['emoji'] as String?,
-        reminderDates: map['reminderDates'] != null
-            ? List<DateTime>.from(
-                (json.decode(map['reminderDates'] as String) as List)
-                    .map((x) => DateTime.fromMillisecondsSinceEpoch(x as int)))
-            : null,
-        reminderSound: map['reminderSound'] as String?,
-        deadlineExtensions: map['deadlineExtensions'] != null
-            ? List<DeadlineExtension>.from(
-                (json.decode(map['deadlineExtensions'] as String) as List).map(
-                    (x) => DeadlineExtension.fromMap(
-                        Map<String, dynamic>.from(x as Map))))
-            : null,
+    try {
+      // Получаем ID заметок, связанных с темой
+      final List<Map<String, dynamic>> noteIds = await db.query(
+        'note_theme',
+        columns: ['noteId'],
+        where: 'themeId = ?',
+        whereArgs: [themeId],
       );
-    }).toList());
+
+      if (noteIds.isEmpty) return [];
+
+      // Формируем параметры для безопасного запроса IN
+      final List<String> idList =
+          noteIds.map((map) => map['noteId'] as String).toList();
+      final List<String> placeholders = List.filled(idList.length, '?');
+
+      // Используем параметризованный запрос вместо строковой конкатенации
+      final List<Map<String, dynamic>> maps = await db.rawQuery(
+        'SELECT * FROM notes WHERE id IN (${placeholders.join(', ')})',
+        idList,
+      );
+
+      return Future.wait(maps.map((map) async {
+        // Получаем темы для заметки
+        final themeIds = await getThemeIdsForNote(map['id'] as String);
+
+        return Note(
+          id: map['id'] as String,
+          content: map['content'] as String,
+          themeIds: themeIds,
+          createdAt:
+              DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
+          updatedAt:
+              DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
+          hasDeadline: (map['hasDeadline'] as int) == 1,
+          deadlineDate: map['deadlineDate'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(map['deadlineDate'] as int)
+              : null,
+          hasDateLink: (map['hasDateLink'] as int) == 1,
+          linkedDate: map['linkedDate'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(map['linkedDate'] as int)
+              : null,
+          isCompleted: (map['isCompleted'] as int) == 1,
+          isFavorite: (map['isFavorite'] as int) == 1,
+          mediaUrls: List<String>.from(json.decode(map['mediaUrls'] as String)),
+          emoji: map['emoji'] as String?,
+          reminderDates: map['reminderDates'] != null
+              ? List<DateTime>.from((json.decode(map['reminderDates'] as String)
+                      as List)
+                  .map((x) => DateTime.fromMillisecondsSinceEpoch(x as int)))
+              : null,
+          reminderSound: map['reminderSound'] as String?,
+          deadlineExtensions: map['deadlineExtensions'] != null
+              ? List<DeadlineExtension>.from(
+                  (json.decode(map['deadlineExtensions'] as String) as List)
+                      .map((x) => DeadlineExtension.fromMap(
+                          Map<String, dynamic>.from(x as Map))))
+              : null,
+        );
+      }).toList());
+    } catch (e) {
+      print('Ошибка при загрузке заметок для темы: $e');
+      print(StackTrace.current);
+      return [];
+    }
   }
 
   // CRUD операции для NoteLink (новые методы)

@@ -192,6 +192,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   @override
   void dispose() {
     _pageChangeController.dispose();
+    // Убедимся, что все подписки отменены
     super.dispose();
   }
 
@@ -279,6 +280,9 @@ class _CalendarScreenState extends State<CalendarScreen>
         }
       }
     }
+
+    // Проверяем, не был ли виджет размонтирован во время обработки
+    if (!mounted) return;
 
     setState(() {
       _events = events;
