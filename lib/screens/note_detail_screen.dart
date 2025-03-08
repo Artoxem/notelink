@@ -7,7 +7,6 @@ import '../providers/app_provider.dart';
 import '../utils/constants.dart';
 import 'package:intl/intl.dart';
 import '../providers/themes_provider.dart';
-import '../providers/note_links_provider.dart';
 import '../widgets/markdown_editor.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -984,17 +983,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-
-              // Удаляем связи и саму заметку
-              final linksProvider =
-                  Provider.of<NoteLinksProvider>(context, listen: false);
-              await linksProvider.deleteLinksForNote(widget.note!.id);
-              await Provider.of<NotesProvider>(context, listen: false)
-                  .deleteNote(widget.note!.id);
-
-              if (mounted) {
-                Navigator.pop(context);
-              }
             },
             child: const Text(
               'Удалить',

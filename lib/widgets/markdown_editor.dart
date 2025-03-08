@@ -7,10 +7,6 @@ import '../providers/app_provider.dart';
 import '../utils/constants.dart';
 import '../models/note.dart';
 import '../providers/notes_provider.dart';
-import '../providers/note_links_provider.dart';
-import 'package:note_link/widgets/note_link_dialog.dart';
-import '../screens/note_detail_screen.dart';
-import '../models/note_link.dart';
 
 class MarkdownEditor extends StatefulWidget {
   final TextEditingController controller;
@@ -185,11 +181,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                         tooltip: 'Код',
                         onPressed: () =>
                             _formatSelectedText(MarkdownSyntax.inlineCode),
-                      ),
-                      _buildFormatButton(
-                        icon: Icons.link,
-                        tooltip: 'Ссылка',
-                        onPressed: _createNoteLink,
                       ),
                     ],
                   ),
@@ -420,95 +411,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     }
   }
 
-  // Создание ссылки на другую заметку
-  void _createNoteLink() async {
-    _removeOverlay(); // Скрываем меню при создании ссылки
-
-    // Получаем ID текущей заметки
-    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-    final currentNoteId = _getCurrentNoteId(notesProvider);
-
-    if (currentNoteId == null) {
-      // Если ID текущей заметки не удалось определить, показываем сообщение
-      if (!mounted) return; // Проверка mounted перед доступом к context
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Заметка должна быть сохранена, прежде чем создавать связи')),
-      );
-      return;
-    }
-
-    // Показываем диалог выбора заметки
-    if (!mounted) return; // Проверка mounted перед доступом к context
-    final selectedNote = await NoteLinkDialog.show(context, currentNoteId);
-
-    // Если заметка не выбрана, прерываем выполнение
-    if (selectedNote == null || !mounted) return;
-
-    // Вставляем ссылку на заметку в текст
-    _insertNoteLinkInText(selectedNote);
-
-    // Создаем прямую связь между заметками
-    if (!mounted) return; // Проверка mounted перед доступом к context
-    final linksProvider =
-        Provider.of<NoteLinksProvider>(context, listen: false);
-    await linksProvider.createLink(
-      sourceNoteId: currentNoteId,
-      targetNoteId: selectedNote.id,
-      linkType: LinkType.direct,
-    );
-  }
-
-  // Получение ID текущей заметки
-  String? _getCurrentNoteId(NotesProvider notesProvider) {
-    // Ищем заметку по её содержимому
-    // Это временное решение, лучше передавать ID заметки в конструктор
-    final content = widget.controller.text;
-    final matchingNotes =
-        notesProvider.notes.where((note) => note.content == content).toList();
-
-    if (matchingNotes.isNotEmpty) {
-      // Берем самую последнюю заметку, если есть несколько с таким содержимым
-      return matchingNotes.last.id;
-    }
-
-    return null;
-  }
-
-  // Вставка ссылки на заметку в текст
-  void _insertNoteLinkInText(Note note) {
-    // Сохраняем текущую позицию курсора
-    final TextEditingValue value = widget.controller.value;
-    final int start = value.selection.baseOffset;
-    final int end = value.selection.extentOffset;
-
-    if (start < 0) return; // Защита от некорректных значений
-
-    // Создаем текст ссылки
-    final preview = note.content.length > 20
-        ? '${note.content.substring(0, 20).trim()}...'
-        : note.content.trim();
-
-    // Формат ссылки: [[ID заметки:Превью текста]]
-    final linkText = '[[${note.id}:$preview]]';
-
-    // Вставляем ссылку в текст
-    final newText = value.text.replaceRange(start, end, linkText);
-
-    // Устанавливаем новый текст и позицию курсора
-    widget.controller.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: start + linkText.length),
-    );
-
-    // Вызываем колбэк, если он определен
-    if (widget.onChanged != null) {
-      widget.onChanged!(newText);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final appProvider = Provider.of<AppProvider>(context);
@@ -718,14 +620,11 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   }
 
   Widget _buildPreview() {
-    // Получаем текст с заменой ссылок на заметки
-    final processedText = _processNoteLinks(widget.controller.text);
-
     return Container(
       color: AppColors.textBackground,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: processedText.isEmpty
+        child: widget.controller.text.isEmpty
             ? Center(
                 child: Text(
                   'Начните вводить текст для предпросмотра',
@@ -736,7 +635,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                 ),
               )
             : MarkdownBody(
-                data: processedText,
+                data: widget.controller.text,
                 selectable: true,
                 styleSheet: MarkdownStyleSheet(
                   h1: TextStyle(
@@ -804,68 +703,10 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                 ),
                 onTapLink: (text, href, title) {
                   if (href != null) {
-                    if (href.startsWith('notelink:')) {
-                      // Обработка ссылки на заметку
-                      final noteId = href.substring(9); // Удаляем "notelink:"
-                      _openNoteById(noteId);
-                    } else {
-                      // Обычная внешняя ссылка
-                      launchUrl(Uri.parse(href));
-                    }
+                    launchUrl(Uri.parse(href));
                   }
                 },
               ),
-      ),
-    );
-  }
-
-  // Обработка ссылок на заметки в тексте
-  String _processNoteLinks(String text) {
-    // Ищем все ссылки на заметки в формате [[ID:Превью]]
-    final noteLinkRegex = RegExp(r'\[\[(.*?):(.*?)\]\]');
-
-    // Заменяем их на Markdown-ссылки
-    return text.replaceAllMapped(noteLinkRegex, (match) {
-      final noteId = match.group(1);
-      final preview = match.group(2);
-      return '[$preview](notelink:$noteId)';
-    });
-  }
-
-  // Открытие заметки по ID
-  void _openNoteById(String noteId) {
-    // Получаем провайдер заметок
-    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-
-    // Ищем заметку по ID
-    final note = notesProvider.notes.firstWhere(
-      (note) => note.id == noteId,
-      orElse: () => Note(
-        id: '',
-        content: 'Заметка не найдена',
-        themeIds: [],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        hasDeadline: false,
-        hasDateLink: false,
-        isCompleted: false,
-        mediaUrls: [],
-      ),
-    );
-
-    if (note.id.isEmpty) {
-      // Если заметка не найдена, показываем сообщение
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заметка не найдена')),
-      );
-      return;
-    }
-
-    // Открываем заметку
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(note: note),
       ),
     );
   }

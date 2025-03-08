@@ -4,7 +4,6 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../providers/notes_provider.dart';
 import '../providers/themes_provider.dart';
-import '../providers/note_links_provider.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/theme.dart';
@@ -200,8 +199,6 @@ class _CalendarScreenState extends State<CalendarScreen>
     // Загружаем заметки, темы и связи между ними
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
     final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
-    final linksProvider =
-        Provider.of<NoteLinksProvider>(context, listen: false);
 
     try {
       // Загружаем данные, только если они еще не загружены
@@ -211,10 +208,6 @@ class _CalendarScreenState extends State<CalendarScreen>
 
       if (themesProvider.themes.isEmpty) {
         await themesProvider.loadThemes();
-      }
-
-      if (linksProvider.links.isEmpty) {
-        await linksProvider.loadLinks();
       }
 
       _processEvents(notesProvider.notes);

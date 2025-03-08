@@ -1,7 +1,6 @@
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../models/theme.dart';
-import '../models/note_link.dart';
 
 class SampleData {
   // Генерация ID
@@ -336,44 +335,5 @@ class SampleData {
     }
 
     return notes;
-  }
-
-  // Создание связей между заметками
-  static List<NoteLink> generateLinks(List<Note> notes) {
-    final links = <NoteLink>[];
-    final random = DateTime.now().millisecondsSinceEpoch;
-
-    // Создаем несколько прямых связей между заметками
-    links.add(NoteLink(
-      id: generateId(),
-      sourceNoteId: notes[0].id,
-      targetNoteId: notes[2].id,
-      themeId: null,
-      linkType: LinkType.direct,
-      createdAt: DateTime.now(),
-      description: 'Связанные рабочие задачи',
-    ));
-
-    links.add(NoteLink(
-      id: generateId(),
-      sourceNoteId: notes[5].id,
-      targetNoteId: notes[16].id,
-      themeId: null,
-      linkType: LinkType.direct,
-      createdAt: DateTime.now(),
-      description: 'Планирование поездки и идеи для отдыха',
-    ));
-
-    links.add(NoteLink(
-      id: generateId(),
-      sourceNoteId: notes[10].id,
-      targetNoteId: notes[11].id,
-      themeId: null,
-      linkType: LinkType.direct,
-      createdAt: DateTime.now(),
-      description: 'Учебные материалы по программированию',
-    ));
-
-    return links;
   }
 }

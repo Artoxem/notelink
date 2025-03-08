@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../providers/notes_provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/themes_provider.dart';
-import '../providers/note_links_provider.dart';
 import '../models/note.dart';
 import '../utils/constants.dart';
 import 'note_detail_screen.dart';
@@ -68,12 +67,9 @@ class _NotesScreenState extends State<NotesScreen>
     // Загружаем заметки, темы и связи между ними
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
     final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
-    final linksProvider =
-        Provider.of<NoteLinksProvider>(context, listen: false);
 
     await notesProvider.loadNotes();
     await themesProvider.loadThemes();
-    await linksProvider.loadLinks();
 
     // Инициализируем анимации для каждой заметки
     _initializeItemAnimations(notesProvider.notes);
@@ -352,9 +348,6 @@ class _NotesScreenState extends State<NotesScreen>
         onDismissed: (direction) async {
           if (direction == DismissDirection.endToStart) {
             // Удаляем связи и саму заметку
-            final linksProvider =
-                Provider.of<NoteLinksProvider>(context, listen: false);
-            await linksProvider.deleteLinksForNote(note.id);
             await notesProvider.deleteNote(note.id);
           }
         },
@@ -659,9 +652,6 @@ class _NotesScreenState extends State<NotesScreen>
         onDismissed: (direction) async {
           if (direction == DismissDirection.endToStart) {
             // Удаляем связи и саму заметку
-            final linksProvider =
-                Provider.of<NoteLinksProvider>(context, listen: false);
-            await linksProvider.deleteLinksForNote(note.id);
             await notesProvider.deleteNote(note.id);
           }
         },
@@ -1019,8 +1009,6 @@ class _NotesScreenState extends State<NotesScreen>
 
   void _showNoteOptions(Note note) {
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-    final linksProvider =
-        Provider.of<NoteLinksProvider>(context, listen: false);
 
     showModalBottomSheet(
       context: context,
@@ -1155,9 +1143,6 @@ class _NotesScreenState extends State<NotesScreen>
 
     if (shouldDelete ?? false) {
       // Удаляем связи и саму заметку
-      final linksProvider =
-          Provider.of<NoteLinksProvider>(context, listen: false);
-      await linksProvider.deleteLinksForNote(note.id);
       await Provider.of<NotesProvider>(context, listen: false)
           .deleteNote(note.id);
       return true;

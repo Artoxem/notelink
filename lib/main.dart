@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/app_provider.dart';
 import 'providers/notes_provider.dart';
 import 'providers/themes_provider.dart';
-import 'providers/note_links_provider.dart';
 import 'screens/main_screen.dart';
 import 'services/database_service.dart';
 import 'utils/constants.dart';
@@ -95,7 +94,6 @@ class _MyAppState extends State<MyApp> {
       // Создаем экземпляры провайдеров напрямую
       final themesProvider = ThemesProvider();
       final notesProvider = NotesProvider();
-      final linksProvider = NoteLinksProvider();
 
       // Генерируем примеры тем
       final themes = SampleData.generateThemes();
@@ -130,18 +128,6 @@ class _MyAppState extends State<MyApp> {
       await notesProvider.loadNotes();
       final createdNotes = notesProvider.notes;
 
-      // Генерируем связи между заметками
-      final links = SampleData.generateLinks(createdNotes);
-      for (var link in links) {
-        await linksProvider.createLink(
-          sourceNoteId: link.sourceNoteId,
-          targetNoteId: link.targetNoteId,
-          themeId: link.themeId,
-          linkType: link.linkType,
-          description: link.description,
-        );
-      }
-
       print('Примеры данных успешно созданы');
     } catch (e) {
       print('Ошибка при создании примеров данных: $e');
@@ -162,7 +148,6 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider(create: (_) => AppProvider()),
         ChangeNotifierProvider(create: (_) => NotesProvider()),
         ChangeNotifierProvider(create: (_) => ThemesProvider()),
-        ChangeNotifierProvider(create: (_) => NoteLinksProvider()),
       ],
       child: Consumer<AppProvider>(
         builder: (context, appProvider, _) {
