@@ -7,17 +7,41 @@ class NotesProvider with ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
   List<Note> _notes = [];
   bool _isLoading = false;
+  bool _loadingError = false;
+  String _errorMessage = '';
 
+  // Кэширование частых запросов
+  final Map<String, List<Note>> _filteredNotesCache = {};
+  final Map<String, Note> _noteCache = {};
+
+  // Геттеры для состояния
   List<Note> get notes => _notes;
   bool get isLoading => _isLoading;
+  bool get hasError => _loadingError;
+  String get errorMessage => _errorMessage;
 
-  // Получение избранных заметок
+  // Очистка кэша при изменении данных
+  void _invalidateCache() {
+    _filteredNotesCache.clear();
+    _noteCache.clear();
+  }
+
+  // Получение избранных заметок с кэшированием
   List<Note> getFavoriteNotes() {
-    return _notes.where((note) => note.isFavorite == true).toList();
+    const String cacheKey = 'favorites';
+
+    if (_filteredNotesCache.containsKey(cacheKey)) {
+      return _filteredNotesCache[cacheKey]!;
+    }
+
+    final favorites = _notes.where((note) => note.isFavorite == true).toList();
+    _filteredNotesCache[cacheKey] = favorites;
+    return favorites;
   }
 
   // Добавление/удаление заметки из избранного
   Future<bool> toggleFavorite(String id) async {
+    // Находим индекс заметки в кэше
     final index = _notes.indexWhere((n) => n.id == id);
     if (index == -1) return false;
 
@@ -34,26 +58,45 @@ class NotesProvider with ChangeNotifier {
       // При успешном обновлении в БД, обновляем локальное состояние
       _notes[index] = updatedNote;
 
+      // Обновляем кэш для конкретной заметки
+      _noteCache[id] = updatedNote;
+
+      // Инвалидируем кэши, затронутые этим изменением
+      _filteredNotesCache.remove('favorites');
+
       // Уведомляем слушателей об изменении
       notifyListeners();
-
       return true;
     } catch (e) {
+      _errorMessage = "Не удалось обновить статус избранного: ${e.toString()}";
+      _loadingError = true;
+      notifyListeners();
       return false;
     }
   }
 
-  // Получить все заметки
+  // Получить все заметки с улучшенной обработкой ошибок
   Future<void> loadNotes() async {
     // Если загрузка уже идет, не начинаем новую
     if (_isLoading) return;
 
     _isLoading = true;
+    _loadingError = false;
+    _errorMessage = '';
     notifyListeners();
 
     try {
       _notes = await _databaseService.getNotes();
+
+      // Обновляем кэш заметок
+      for (var note in _notes) {
+        _noteCache[note.id] = note;
+      }
+
+      _loadingError = false;
     } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка загрузки заметок: ${e.toString()}";
       // Если у нас есть кэшированные заметки, используем их
       if (_notes.isEmpty) {
         // При первой загрузке создаем пустой список вместо null
@@ -65,22 +108,46 @@ class NotesProvider with ChangeNotifier {
     }
   }
 
-  // Получить заметки с дедлайном
+  // Получить заметки с дедлайном с кэшированием
   List<Note> getDeadlineNotes() {
-    return _notes.where((note) => note.hasDeadline).toList();
+    const String cacheKey = 'deadlines';
+
+    if (_filteredNotesCache.containsKey(cacheKey)) {
+      return _filteredNotesCache[cacheKey]!;
+    }
+
+    final deadlineNotes = _notes.where((note) => note.hasDeadline).toList();
+    _filteredNotesCache[cacheKey] = deadlineNotes;
+    return deadlineNotes;
   }
 
-  // Получить заметки, привязанные к дате
+  // Получить заметки, привязанные к дате с кэшированием
   List<Note> getDateLinkedNotes() {
-    return _notes.where((note) => note.hasDateLink).toList();
+    const String cacheKey = 'dateLinked';
+
+    if (_filteredNotesCache.containsKey(cacheKey)) {
+      return _filteredNotesCache[cacheKey]!;
+    }
+
+    final linkedNotes = _notes.where((note) => note.hasDateLink).toList();
+    _filteredNotesCache[cacheKey] = linkedNotes;
+    return linkedNotes;
   }
 
-  // Получить быстрые заметки
+  // Получить быстрые заметки с кэшированием
   List<Note> getQuickNotes() {
-    return _notes.where((note) => note.isQuickNote).toList();
+    const String cacheKey = 'quick';
+
+    if (_filteredNotesCache.containsKey(cacheKey)) {
+      return _filteredNotesCache[cacheKey]!;
+    }
+
+    final quickNotes = _notes.where((note) => note.isQuickNote).toList();
+    _filteredNotesCache[cacheKey] = quickNotes;
+    return quickNotes;
   }
 
-  // Создать новую заметку
+  // Создать новую заметку с улучшенной обработкой ошибок
   Future<Note?> createNote({
     required String content,
     List<String>? themeIds,
@@ -93,6 +160,9 @@ class NotesProvider with ChangeNotifier {
     List<DateTime>? reminderDates,
     String? reminderSound,
   }) async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
       final note = Note(
         id: const Uuid().v4(),
@@ -118,16 +188,24 @@ class NotesProvider with ChangeNotifier {
       // Затем добавляем в локальный список
       _notes.add(note);
 
-      // Уведомляем об изменениях
-      notifyListeners();
+      // Обновляем кэш
+      _noteCache[note.id] = note;
+      _invalidateCache(); // Инвалидируем фильтрованные списки
 
+      _isLoading = false;
+      _loadingError = false;
+      notifyListeners();
       return note;
     } catch (e) {
+      _isLoading = false;
+      _loadingError = true;
+      _errorMessage = "Ошибка создания заметки: ${e.toString()}";
+      notifyListeners();
       return null;
     }
   }
 
-  // Обновить существующую заметку
+  // Обновить существующую заметку с улучшенной обработкой ошибок
   Future<bool> updateNote(Note note) async {
     try {
       // Обновляем в БД
@@ -138,11 +216,18 @@ class NotesProvider with ChangeNotifier {
       final index = _notes.indexWhere((n) => n.id == note.id);
       if (index != -1) {
         _notes[index] = updatedNote;
+
+        // Обновляем кэш
+        _noteCache[note.id] = updatedNote;
+        _invalidateCache(); // Инвалидируем фильтрованные списки
+
         notifyListeners();
       }
-
       return true;
     } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка обновления заметки: ${e.toString()}";
+      notifyListeners();
       return false;
     }
   }
@@ -164,10 +249,17 @@ class NotesProvider with ChangeNotifier {
 
       // Обновляем локальное состояние
       _notes[index] = updatedNote;
-      notifyListeners();
 
+      // Обновляем кэш
+      _noteCache[id] = updatedNote;
+      _invalidateCache(); // Инвалидируем фильтрованные списки
+
+      notifyListeners();
       return true;
     } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка выполнения заметки: ${e.toString()}";
+      notifyListeners();
       return false;
     }
   }
@@ -202,10 +294,17 @@ class NotesProvider with ChangeNotifier {
 
       // Обновляем локальное состояние
       _notes[index] = updatedNote;
-      notifyListeners();
 
+      // Обновляем кэш
+      _noteCache[id] = updatedNote;
+      _invalidateCache(); // Инвалидируем фильтрованные списки
+
+      notifyListeners();
       return true;
     } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка продления дедлайна: ${e.toString()}";
+      notifyListeners();
       return false;
     }
   }
@@ -218,10 +317,17 @@ class NotesProvider with ChangeNotifier {
 
       // Удаляем из локального состояния
       _notes.removeWhere((n) => n.id == id);
-      notifyListeners();
 
+      // Удаляем из кэша
+      _noteCache.remove(id);
+      _invalidateCache(); // Инвалидируем фильтрованные списки
+
+      notifyListeners();
       return true;
     } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка удаления заметки: ${e.toString()}";
+      notifyListeners();
       return false;
     }
   }
@@ -229,6 +335,9 @@ class NotesProvider with ChangeNotifier {
   // Пакетное обновление заметок
   Future<bool> batchUpdateNotes(List<Note> notesToUpdate) async {
     if (notesToUpdate.isEmpty) return true;
+
+    _isLoading = true;
+    notifyListeners();
 
     bool success = true;
 
@@ -240,21 +349,37 @@ class NotesProvider with ChangeNotifier {
         final index = _notes.indexWhere((n) => n.id == note.id);
         if (index != -1) {
           _notes[index] = updatedNote;
+          _noteCache[note.id] = updatedNote;
         }
       }
 
+      // Инвалидируем фильтрованные списки после всех обновлений
+      _invalidateCache();
+
       // Уведомляем слушателей один раз после всех обновлений
+      _isLoading = false;
       notifyListeners();
     } catch (e) {
       success = false;
+      _loadingError = true;
+      _errorMessage = "Ошибка массового обновления заметок: ${e.toString()}";
+      _isLoading = false;
+      notifyListeners();
     }
 
     return success;
   }
 
-  // Получить заметки для указанного периода
+  // Получить заметки для указанного периода с кэшированием
   List<Note> getNotesForPeriod(DateTime start, DateTime end) {
-    return _notes.where((note) {
+    final String cacheKey =
+        'period_${start.toIso8601String()}_${end.toIso8601String()}';
+
+    if (_filteredNotesCache.containsKey(cacheKey)) {
+      return _filteredNotesCache[cacheKey]!;
+    }
+
+    final periodNotes = _notes.where((note) {
       // Проверяем дату создания
       if (note.createdAt.isAfter(start) && note.createdAt.isBefore(end)) {
         return true;
@@ -278,15 +403,66 @@ class NotesProvider with ChangeNotifier {
 
       return false;
     }).toList();
+
+    _filteredNotesCache[cacheKey] = periodNotes;
+    return periodNotes;
   }
 
   // Поиск заметок по содержимому
   List<Note> searchNotes(String query) {
     if (query.trim().isEmpty) return [];
 
+    final String cacheKey = 'search_${query.toLowerCase()}';
+
+    if (_filteredNotesCache.containsKey(cacheKey)) {
+      return _filteredNotesCache[cacheKey]!;
+    }
+
     final lowercaseQuery = query.toLowerCase();
-    return _notes
+    final searchResults = _notes
         .where((note) => note.content.toLowerCase().contains(lowercaseQuery))
         .toList();
+
+    // Кэшируем только если запрос не очень специфичный (чтобы не засорять кэш)
+    if (query.length > 2) {
+      _filteredNotesCache[cacheKey] = searchResults;
+    }
+
+    return searchResults;
+  }
+
+  // Получить одну заметку по ID с кэшированием
+  Future<Note?> getNoteById(String id) async {
+    // Проверяем кэш сначала
+    if (_noteCache.containsKey(id)) {
+      return _noteCache[id];
+    }
+
+    // Проверяем локальный список
+    final noteIndex = _notes.indexWhere((note) => note.id == id);
+    if (noteIndex != -1) {
+      final localNote = _notes[noteIndex];
+      _noteCache[id] = localNote;
+      return localNote;
+    }
+
+    // Запрашиваем из БД
+    try {
+      final note = await _databaseService.getNote(id);
+      if (note != null) {
+        _noteCache[id] = note;
+      }
+      return note;
+    } catch (e) {
+      _errorMessage = "Ошибка получения заметки: ${e.toString()}";
+      return null;
+    }
+  }
+
+  // Сброс ошибок
+  void resetErrors() {
+    _loadingError = false;
+    _errorMessage = '';
+    notifyListeners();
   }
 }

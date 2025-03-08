@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'; // Добавлен импорт для Color
 import 'package:uuid/uuid.dart';
 import '../models/theme.dart';
 import '../models/note.dart';
@@ -8,33 +9,51 @@ class ThemesProvider with ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
   List<NoteTheme> _themes = [];
   bool _isLoading = false;
+  bool _hasError = false;
+  String _errorMessage = '';
 
-  // Кэширование для быстрого доступа
-  final Map<String, List<Note>> _notesCache = {};
+  // Структурированное кэширование для оптимизации производительности
+  final Map<String, List<Note>> _notesForThemeCache = {};
+  final Map<String, NoteTheme> _themeCache = {};
 
+  // Геттеры
   List<NoteTheme> get themes => _themes;
   bool get isLoading => _isLoading;
+  bool get hasError => _hasError;
+  String get errorMessage => _errorMessage;
 
+  // Загрузка тем с улучшенной обработкой ошибок
   Future<void> loadThemes() async {
     if (_isLoading) return;
 
     _isLoading = true;
+    _hasError = false;
+    _errorMessage = '';
     notifyListeners();
 
     try {
       _themes = await _databaseService.getThemes();
-      // Очищаем кэш при загрузке новых данных
-      _notesCache.clear();
+
+      // Обновляем кэш тем
+      for (var theme in _themes) {
+        _themeCache[theme.id] = theme;
+      }
     } catch (e) {
-      // Тихая обработка ошибок с сохранением текущего состояния
+      _hasError = true;
+      _errorMessage = "Ошибка загрузки тем: ${e.toString()}";
+      // В случае ошибки сохраняем текущее состояние
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<NoteTheme> createTheme(String name, String? description, String color,
+  // Создание новой темы
+  Future<NoteTheme?> createTheme(String name, String? description, String color,
       List<String> noteIds) async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
       final theme = NoteTheme(
         id: const Uuid().v4(),
@@ -49,72 +68,101 @@ class ThemesProvider with ChangeNotifier {
       await _databaseService.insertTheme(theme);
       _themes.add(theme);
 
-      // Очищаем кэш для затронутых заметок
-      _clearCacheForNotes(noteIds);
+      // Обновляем кэш
+      _themeCache[theme.id] = theme;
+      _invalidateNotesCache(noteIds);
 
+      _isLoading = false;
       notifyListeners();
       return theme;
     } catch (e) {
-      throw e;
+      _hasError = true;
+      _errorMessage = "Ошибка создания темы: ${e.toString()}";
+      _isLoading = false;
+      notifyListeners();
+      return null;
     }
   }
 
-  Future<void> updateTheme(NoteTheme theme) async {
+  // Обновление существующей темы
+  Future<bool> updateTheme(NoteTheme theme) async {
     try {
       final updatedTheme = theme.copyWith(updatedAt: DateTime.now());
       await _databaseService.updateTheme(updatedTheme);
 
       final index = _themes.indexWhere((t) => t.id == theme.id);
       if (index != -1) {
-        // Сохраняем старые noteIds для очистки кэша
+        // Сохраняем старые noteIds для инвалидации кэша
         final oldNoteIds = List<String>.from(_themes[index].noteIds);
 
         _themes[index] = updatedTheme;
 
-        // Очищаем кэш для всех затронутых заметок (старых и новых)
-        _clearCacheForNotes([...oldNoteIds, ...updatedTheme.noteIds]);
+        // Обновляем кэш
+        _themeCache[theme.id] = updatedTheme;
+
+        // Инвалидируем кэш для всех затронутых заметок (старых и новых)
+        _invalidateNotesCache([...oldNoteIds, ...updatedTheme.noteIds]);
 
         notifyListeners();
+        return true;
       }
+      return false;
     } catch (e) {
-      // В случае ошибки просто логируем её, но не изменяем состояние
+      _hasError = true;
+      _errorMessage = "Ошибка обновления темы: ${e.toString()}";
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<void> deleteTheme(String id) async {
+  // Удаление темы
+  Future<bool> deleteTheme(String id) async {
     try {
       final index = _themes.indexWhere((t) => t.id == id);
-      if (index == -1) return;
+      if (index == -1) return false;
 
-      // Запоминаем noteIds перед удалением
+      // Запоминаем noteIds перед удалением для инвалидации кэша
       final themeNoteIds = List<String>.from(_themes[index].noteIds);
 
       await _databaseService.deleteTheme(id);
       _themes.removeAt(index);
 
-      // Очищаем кэш для затронутых заметок
-      _clearCacheForNotes(themeNoteIds);
+      // Обновляем кэш
+      _themeCache.remove(id);
+      _invalidateNotesCache(themeNoteIds);
 
       notifyListeners();
+      return true;
     } catch (e) {
-      // В случае ошибки просто логируем её, но не изменяем состояние
+      _hasError = true;
+      _errorMessage = "Ошибка удаления темы: ${e.toString()}";
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<void> linkNotesToTheme(String themeId, List<String> noteIds) async {
+  // Привязка заметок к теме
+  Future<bool> linkNotesToTheme(String themeId, List<String> noteIds) async {
+    if (noteIds.isEmpty) return true;
+
     final index = _themes.indexWhere((t) => t.id == themeId);
-    if (index == -1) return;
+    if (index == -1) return false;
 
     try {
       final theme = _themes[index];
       final updatedNoteIds = [...theme.noteIds];
 
       // Добавляем только новые noteIds
+      bool changed = false;
       for (final noteId in noteIds) {
         if (!updatedNoteIds.contains(noteId)) {
           updatedNoteIds.add(noteId);
+          changed = true;
         }
       }
+
+      // Если нет изменений, возвращаем успех
+      if (!changed) return true;
 
       final updatedTheme = theme.copyWith(
         noteIds: updatedNoteIds,
@@ -124,21 +172,29 @@ class ThemesProvider with ChangeNotifier {
       await _databaseService.updateTheme(updatedTheme);
       _themes[index] = updatedTheme;
 
-      // Очищаем кэш для затронутых заметок
-      _clearCacheForNotes(noteIds);
+      // Обновляем кэш
+      _themeCache[themeId] = updatedTheme;
+      _invalidateNotesCache(noteIds);
 
       notifyListeners();
+      return true;
     } catch (e) {
-      // В случае ошибки просто логируем её, но не изменяем состояние
+      _hasError = true;
+      _errorMessage = "Ошибка привязки заметок к теме: ${e.toString()}";
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<void> unlinkNoteFromTheme(String themeId, String noteId) async {
+  // Отвязка заметки от темы
+  Future<bool> unlinkNoteFromTheme(String themeId, String noteId) async {
     final index = _themes.indexWhere((t) => t.id == themeId);
-    if (index == -1) return;
+    if (index == -1) return false;
 
     try {
       final theme = _themes[index];
+      if (!theme.noteIds.contains(noteId)) return true; // Уже отвязана
+
       final updatedNoteIds = [...theme.noteIds];
       updatedNoteIds.remove(noteId);
 
@@ -150,55 +206,84 @@ class ThemesProvider with ChangeNotifier {
       await _databaseService.updateTheme(updatedTheme);
       _themes[index] = updatedTheme;
 
-      // Очищаем кэш для отвязанной заметки
-      _clearCacheForNotes([noteId]);
+      // Обновляем кэш
+      _themeCache[themeId] = updatedTheme;
+      _invalidateNotesCache([noteId]);
 
       notifyListeners();
+      return true;
     } catch (e) {
-      // В случае ошибки просто логируем её, но не изменяем состояние
+      _hasError = true;
+      _errorMessage = "Ошибка отвязки заметки от темы: ${e.toString()}";
+      notifyListeners();
+      return false;
     }
   }
 
+  // Получение заметок для темы с улучшенным кэшированием
   Future<List<Note>> getNotesForTheme(String themeId) async {
     // Проверяем кэш первым делом
-    if (_notesCache.containsKey(themeId)) {
-      return _notesCache[themeId]!;
+    if (_notesForThemeCache.containsKey(themeId)) {
+      return _notesForThemeCache[themeId]!;
     }
 
     try {
       final notes = await _databaseService.getNotesForTheme(themeId);
       // Сохраняем результат в кэш
-      _notesCache[themeId] = notes;
+      _notesForThemeCache[themeId] = notes;
       return notes;
     } catch (e) {
+      _hasError = true;
+      _errorMessage = "Ошибка получения заметок для темы: ${e.toString()}";
+      notifyListeners();
       return [];
     }
   }
 
-  // Очистка кэша для указанных заметок
-  void _clearCacheForNotes(List<String> noteIds) {
+  // Инвалидация кэша только для затронутых заметок
+  void _invalidateNotesCache(List<String> noteIds) {
     if (noteIds.isEmpty) return;
 
-    // Удаляем кэшированные списки заметок для всех тем,
-    // которые могли содержать какую-либо из указанных заметок
-    _notesCache.clear();
+    // Проверяем каждую тему и инвалидируем кэш, если она содержит любую из заметок
+    for (final themeId in _notesForThemeCache.keys.toList()) {
+      // Получаем тему из кэша или локального списка
+      final themeIndex = _themes.indexWhere((t) => t.id == themeId);
+      if (themeIndex != -1) {
+        // Проверяем, есть ли пересечение noteIds темы с переданными noteIds
+        if (_themes[themeIndex].noteIds.any((id) => noteIds.contains(id))) {
+          _notesForThemeCache.remove(themeId);
+        }
+      }
+    }
   }
 
-  // Получение всех примененных тем для заметки
+  // Получение всех тем для заметки
   List<NoteTheme> getThemesForNote(String noteId) {
     return _themes.where((theme) => theme.noteIds.contains(noteId)).toList();
   }
 
-  // Получение темы по её ID с оптимизированным поиском
+  // Получение темы по ID с оптимизированным кэшированием
   NoteTheme? getThemeById(String id) {
+    // Сначала проверяем кэш
+    if (_themeCache.containsKey(id)) {
+      return _themeCache[id];
+    }
+
+    // Затем проверяем локальный список
     try {
-      return _themes.firstWhere((theme) => theme.id == id);
+      final themeIndex = _themes.indexWhere((theme) => theme.id == id);
+      if (themeIndex != -1) {
+        final theme = _themes[themeIndex];
+        _themeCache[id] = theme; // Сохраняем в кэш
+        return theme;
+      }
+      return null;
     } catch (e) {
       return null;
     }
   }
 
-  // Пакетное добавление/удаление заметок из темы
+  // Пакетное добавление/удаление заметок из темы с оптимизацией
   Future<bool> batchUpdateThemeNotes(String themeId,
       {List<String> addNoteIds = const [],
       List<String> removeNoteIds = const []}) async {
@@ -212,19 +297,24 @@ class ThemesProvider with ChangeNotifier {
       final updatedNoteIds = [...theme.noteIds];
 
       // Добавляем новые ID
+      bool changed = false;
       for (final noteId in addNoteIds) {
         if (!updatedNoteIds.contains(noteId)) {
           updatedNoteIds.add(noteId);
+          changed = true;
         }
       }
 
       // Удаляем указанные ID
       for (final noteId in removeNoteIds) {
-        updatedNoteIds.remove(noteId);
+        if (updatedNoteIds.contains(noteId)) {
+          updatedNoteIds.remove(noteId);
+          changed = true;
+        }
       }
 
       // Если изменений нет, возвращаем true
-      if (listEquals(updatedNoteIds, theme.noteIds)) {
+      if (!changed) {
         return true;
       }
 
@@ -236,13 +326,45 @@ class ThemesProvider with ChangeNotifier {
       await _databaseService.updateTheme(updatedTheme);
       _themes[index] = updatedTheme;
 
-      // Очищаем кэш для всех затронутых заметок
-      _clearCacheForNotes([...addNoteIds, ...removeNoteIds]);
+      // Обновляем кэш
+      _themeCache[themeId] = updatedTheme;
+
+      // Инвалидируем кэш для всех затронутых заметок
+      _invalidateNotesCache([...addNoteIds, ...removeNoteIds]);
 
       notifyListeners();
       return true;
     } catch (e) {
+      _hasError = true;
+      _errorMessage =
+          "Ошибка пакетного обновления заметок темы: ${e.toString()}";
+      notifyListeners();
       return false;
+    }
+  }
+
+  // Сброс ошибок
+  void resetError() {
+    _hasError = false;
+    _errorMessage = '';
+    notifyListeners();
+  }
+
+  // Проверка, есть ли данная заметка в теме
+  bool isNoteInTheme(String themeId, String noteId) {
+    final theme = getThemeById(themeId);
+    return theme != null && theme.noteIds.contains(noteId);
+  }
+
+  // Получение цвета темы по ID
+  Color? getThemeColor(String themeId, {Color? defaultColor}) {
+    final theme = getThemeById(themeId);
+    if (theme == null) return defaultColor;
+
+    try {
+      return Color(int.parse(theme.color));
+    } catch (e) {
+      return defaultColor;
     }
   }
 }

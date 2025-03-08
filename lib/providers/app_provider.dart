@@ -31,10 +31,13 @@ class AppProvider with ChangeNotifier {
   // Режим фокусировки
   bool _enableFocusMode = false;
 
-  // Флаг, который указывает, загружены ли настройки из SharedPreferences
+  // Состояние загрузки
+  bool _isLoading = false;
   bool _initialized = false;
+  bool _hasError = false;
+  String _errorMessage = '';
 
-  // Геттеры
+  // Геттеры для настроек
   AppThemeMode get themeMode => _themeMode;
   bool get notificationsEnabled => _notificationsEnabled;
   String get notificationSound => _notificationSound;
@@ -53,11 +56,21 @@ class AppProvider with ChangeNotifier {
   String get activeNotificationSound => _activeNotificationSound;
   String get deadlineNotificationSound => _deadlineNotificationSound;
   int get deadlineWarningDays => _deadlineWarningDays;
+
+  // Геттеры для состояния
   bool get initialized => _initialized;
+  bool get isLoading => _isLoading;
+  bool get hasError => _hasError;
+  String get errorMessage => _errorMessage;
 
   // Инициализация настроек из SharedPreferences
   Future<void> initSettings() async {
-    if (_initialized) return;
+    if (_initialized || _isLoading) return;
+
+    _isLoading = true;
+    _hasError = false;
+    _errorMessage = '';
+    notifyListeners();
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -99,47 +112,44 @@ class AppProvider with ChangeNotifier {
       _enableFocusMode = prefs.getBool('enableFocusMode') ?? false;
 
       _initialized = true;
+      _isLoading = false;
       notifyListeners();
     } catch (e) {
       // Если произошла ошибка при загрузке настроек, используем значения по умолчанию
-      _initialized = true;
+      _hasError = true;
+      _errorMessage = "Ошибка загрузки настроек: ${e.toString()}";
+      _initialized = true; // Все равно считаем инициализированным, но с ошибкой
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  // Сохранение всех настроек
-  Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+  // Сохранение конкретной настройки
+  Future<bool> _saveSetting(String key, dynamic value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    // Сохранение темы
-    await prefs.setString('themeMode', _getThemeModeString(_themeMode));
+      if (value is String) {
+        await prefs.setString(key, value);
+      } else if (value is bool) {
+        await prefs.setBool(key, value);
+      } else if (value is int) {
+        await prefs.setInt(key, value);
+      } else if (value is double) {
+        await prefs.setDouble(key, value);
+      } else if (value is List<String>) {
+        await prefs.setStringList(key, value);
+      } else {
+        return false; // Неподдерживаемый тип
+      }
 
-    // Сохранение настроек уведомлений
-    await prefs.setBool('notificationsEnabled', _notificationsEnabled);
-    await prefs.setString('notificationSound', _notificationSound);
-    await prefs.setBool('showOnLockScreen', _showOnLockScreen);
-    await prefs.setString('activeNotificationSound', _activeNotificationSound);
-    await prefs.setString(
-        'deadlineNotificationSound', _deadlineNotificationSound);
-    await prefs.setInt('deadlineWarningDays', _deadlineWarningDays);
-
-    // Сохранение настроек внешнего вида
-    await prefs.setDouble('lineThickness', _lineThickness);
-    await prefs.setBool('showThemeLines', _showThemeLines);
-    await prefs.setString(
-        'noteViewMode', _noteViewMode == NoteViewMode.card ? 'card' : 'list');
-    await prefs.setString(
-        'noteSortMode', _getNoteSortModeString(_noteSortMode));
-    await prefs.setBool('showCalendarHeatmap', _showCalendarHeatmap);
-    await prefs.setBool('enableMarkdownFormatting', _enableMarkdownFormatting);
-    await prefs.setBool('showNoteLinkPreviews', _showNoteLinkPreviews);
-
-    // Сохранение настроек поиска
-    await prefs.setBool('showSearchHistory', _showSearchHistory);
-    await prefs.setStringList('searchHistory', _searchHistory);
-    await prefs.setInt('maxSearchHistoryItems', _maxSearchHistoryItems);
-
-    // Сохранение режима фокусировки
-    await prefs.setBool('enableFocusMode', _enableFocusMode);
+      return true;
+    } catch (e) {
+      _hasError = true;
+      _errorMessage = "Ошибка сохранения настройки $key: ${e.toString()}";
+      notifyListeners();
+      return false;
+    }
   }
 
   // Проверка темной темы
@@ -150,82 +160,104 @@ class AppProvider with ChangeNotifier {
     return _themeMode == AppThemeMode.dark;
   }
 
-  // Изменение настроек
-  void setThemeMode(AppThemeMode mode) {
-    if (_themeMode == mode) return;
+  // Методы для изменения настроек с оптимизацией сохранения
+  Future<bool> setThemeMode(AppThemeMode mode) async {
+    if (_themeMode == mode) return true;
+
     _themeMode = mode;
-    _saveSettings();
+    bool success = await _saveSetting('themeMode', _getThemeModeString(mode));
     notifyListeners();
+    return success;
   }
 
-  void toggleNotifications(bool enabled) {
-    if (_notificationsEnabled == enabled) return;
+  Future<bool> toggleNotifications(bool enabled) async {
+    if (_notificationsEnabled == enabled) return true;
+
     _notificationsEnabled = enabled;
-    _saveSettings();
+    bool success = await _saveSetting('notificationsEnabled', enabled);
     notifyListeners();
+    return success;
   }
 
-  void setNotificationSound(String sound) {
-    if (_notificationSound == sound) return;
+  Future<bool> setNotificationSound(String sound) async {
+    if (_notificationSound == sound) return true;
+
     _notificationSound = sound;
-    _saveSettings();
+    bool success = await _saveSetting('notificationSound', sound);
     notifyListeners();
+    return success;
   }
 
-  void toggleLockScreenNotifications(bool show) {
-    if (_showOnLockScreen == show) return;
+  Future<bool> toggleLockScreenNotifications(bool show) async {
+    if (_showOnLockScreen == show) return true;
+
     _showOnLockScreen = show;
-    _saveSettings();
+    bool success = await _saveSetting('showOnLockScreen', show);
     notifyListeners();
+    return success;
   }
 
-  void setLineThickness(double thickness) {
-    if (_lineThickness == thickness) return;
+  Future<bool> setLineThickness(double thickness) async {
+    if (_lineThickness == thickness) return true;
+
     _lineThickness = thickness;
-    _saveSettings();
+    bool success = await _saveSetting('lineThickness', thickness);
     notifyListeners();
+    return success;
   }
 
-  void toggleThemeLines(bool show) {
-    if (_showThemeLines == show) return;
+  Future<bool> toggleThemeLines(bool show) async {
+    if (_showThemeLines == show) return true;
+
     _showThemeLines = show;
-    _saveSettings();
+    bool success = await _saveSetting('showThemeLines', show);
     notifyListeners();
+    return success;
   }
 
   // Методы для новых настроек
-  void setNoteViewMode(NoteViewMode mode) {
-    if (_noteViewMode == mode) return;
+  Future<bool> setNoteViewMode(NoteViewMode mode) async {
+    if (_noteViewMode == mode) return true;
+
     _noteViewMode = mode;
-    _saveSettings();
+    bool success = await _saveSetting(
+        'noteViewMode', mode == NoteViewMode.card ? 'card' : 'list');
     notifyListeners();
+    return success;
   }
 
-  void toggleNoteViewMode() {
+  Future<bool> toggleNoteViewMode() async {
     _noteViewMode = _noteViewMode == NoteViewMode.card
         ? NoteViewMode.list
         : NoteViewMode.card;
-    _saveSettings();
+    bool success = await _saveSetting(
+        'noteViewMode', _noteViewMode == NoteViewMode.card ? 'card' : 'list');
     notifyListeners();
+    return success;
   }
 
-  void setNoteSortMode(NoteSortMode mode) {
-    if (_noteSortMode == mode) return;
+  Future<bool> setNoteSortMode(NoteSortMode mode) async {
+    if (_noteSortMode == mode) return true;
+
     _noteSortMode = mode;
-    _saveSettings();
+    bool success =
+        await _saveSetting('noteSortMode', _getNoteSortModeString(mode));
     notifyListeners();
+    return success;
   }
 
-  void toggleSearchHistory(bool show) {
-    if (_showSearchHistory == show) return;
+  Future<bool> toggleSearchHistory(bool show) async {
+    if (_showSearchHistory == show) return true;
+
     _showSearchHistory = show;
-    _saveSettings();
+    bool success = await _saveSetting('showSearchHistory', show);
     notifyListeners();
+    return success;
   }
 
   // Добавление поискового запроса в историю
-  void addToSearchHistory(String query) {
-    if (query.trim().isEmpty) return;
+  Future<bool> addToSearchHistory(String query) async {
+    if (query.trim().isEmpty) return true;
 
     // Избегаем дублирования: удаляем существующий запрос
     _searchHistory.remove(query);
@@ -238,87 +270,108 @@ class AppProvider with ChangeNotifier {
       _searchHistory = _searchHistory.sublist(0, _maxSearchHistoryItems);
     }
 
-    _saveSettings();
+    bool success = await _saveSetting('searchHistory', _searchHistory);
     notifyListeners();
+    return success;
   }
 
   // Очистка истории поиска
-  void clearSearchHistory() {
-    if (_searchHistory.isEmpty) return;
+  Future<bool> clearSearchHistory() async {
+    if (_searchHistory.isEmpty) return true;
+
     _searchHistory.clear();
-    _saveSettings();
+    bool success = await _saveSetting('searchHistory', _searchHistory);
     notifyListeners();
+    return success;
   }
 
   // Удаление конкретного запроса из истории
-  void removeFromSearchHistory(String query) {
-    final removed = _searchHistory.remove(query);
-    if (removed) {
-      _saveSettings();
-      notifyListeners();
-    }
+  Future<bool> removeFromSearchHistory(String query) async {
+    final bool removed = _searchHistory.remove(query);
+    if (!removed) return true; // Уже удалено, считаем успехом
+
+    bool success = await _saveSetting('searchHistory', _searchHistory);
+    notifyListeners();
+    return success;
   }
 
-  void setMaxSearchHistoryItems(int max) {
-    if (_maxSearchHistoryItems == max) return;
+  Future<bool> setMaxSearchHistoryItems(int max) async {
+    if (_maxSearchHistoryItems == max) return true;
+
     _maxSearchHistoryItems = max;
 
     // Обрезаем существующую историю, если она превышает новый лимит
     if (_searchHistory.length > max) {
       _searchHistory = _searchHistory.sublist(0, max);
+      await _saveSetting('searchHistory', _searchHistory);
     }
 
-    _saveSettings();
+    bool success = await _saveSetting('maxSearchHistoryItems', max);
     notifyListeners();
+    return success;
   }
 
-  void toggleMarkdownFormatting(bool enable) {
-    if (_enableMarkdownFormatting == enable) return;
+  Future<bool> toggleMarkdownFormatting(bool enable) async {
+    if (_enableMarkdownFormatting == enable) return true;
+
     _enableMarkdownFormatting = enable;
-    _saveSettings();
+    bool success = await _saveSetting('enableMarkdownFormatting', enable);
     notifyListeners();
+    return success;
   }
 
-  void toggleFocusMode(bool enable) {
-    if (_enableFocusMode == enable) return;
+  Future<bool> toggleFocusMode(bool enable) async {
+    if (_enableFocusMode == enable) return true;
+
     _enableFocusMode = enable;
-    _saveSettings();
+    bool success = await _saveSetting('enableFocusMode', enable);
     notifyListeners();
+    return success;
   }
 
-  void toggleNoteLinkPreviews(bool show) {
-    if (_showNoteLinkPreviews == show) return;
+  Future<bool> toggleNoteLinkPreviews(bool show) async {
+    if (_showNoteLinkPreviews == show) return true;
+
     _showNoteLinkPreviews = show;
-    _saveSettings();
+    bool success = await _saveSetting('showNoteLinkPreviews', show);
     notifyListeners();
+    return success;
   }
 
-  void toggleCalendarHeatmap(bool show) {
-    if (_showCalendarHeatmap == show) return;
+  Future<bool> toggleCalendarHeatmap(bool show) async {
+    if (_showCalendarHeatmap == show) return true;
+
     _showCalendarHeatmap = show;
-    _saveSettings();
+    bool success = await _saveSetting('showCalendarHeatmap', show);
     notifyListeners();
+    return success;
   }
 
-  void setActiveNotificationSound(String sound) {
-    if (_activeNotificationSound == sound) return;
+  Future<bool> setActiveNotificationSound(String sound) async {
+    if (_activeNotificationSound == sound) return true;
+
     _activeNotificationSound = sound;
-    _saveSettings();
+    bool success = await _saveSetting('activeNotificationSound', sound);
     notifyListeners();
+    return success;
   }
 
-  void setDeadlineNotificationSound(String sound) {
-    if (_deadlineNotificationSound == sound) return;
+  Future<bool> setDeadlineNotificationSound(String sound) async {
+    if (_deadlineNotificationSound == sound) return true;
+
     _deadlineNotificationSound = sound;
-    _saveSettings();
+    bool success = await _saveSetting('deadlineNotificationSound', sound);
     notifyListeners();
+    return success;
   }
 
-  void setDeadlineWarningDays(int days) {
-    if (_deadlineWarningDays == days) return;
+  Future<bool> setDeadlineWarningDays(int days) async {
+    if (_deadlineWarningDays == days) return true;
+
     _deadlineWarningDays = days;
-    _saveSettings();
+    bool success = await _saveSetting('deadlineWarningDays', days);
     notifyListeners();
+    return success;
   }
 
   // Вспомогательные методы для преобразования типов в строки и обратно
@@ -370,7 +423,7 @@ class AppProvider with ChangeNotifier {
   }
 
   // Применить все настройки по умолчанию
-  void resetToDefaults() {
+  Future<bool> resetToDefaults() async {
     _themeMode = AppThemeMode.dark;
     _notificationsEnabled = true;
     _notificationSound = 'default';
@@ -390,7 +443,62 @@ class AppProvider with ChangeNotifier {
     _deadlineNotificationSound = 'urgent';
     _deadlineWarningDays = 3;
 
-    _saveSettings();
+    bool success = await _saveAllSettings();
+    notifyListeners();
+    return success;
+  }
+
+  // Сохранение всех настроек сразу
+  Future<bool> _saveAllSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Сохранение темы
+      await prefs.setString('themeMode', _getThemeModeString(_themeMode));
+
+      // Сохранение настроек уведомлений
+      await prefs.setBool('notificationsEnabled', _notificationsEnabled);
+      await prefs.setString('notificationSound', _notificationSound);
+      await prefs.setBool('showOnLockScreen', _showOnLockScreen);
+      await prefs.setString(
+          'activeNotificationSound', _activeNotificationSound);
+      await prefs.setString(
+          'deadlineNotificationSound', _deadlineNotificationSound);
+      await prefs.setInt('deadlineWarningDays', _deadlineWarningDays);
+
+      // Сохранение настроек внешнего вида
+      await prefs.setDouble('lineThickness', _lineThickness);
+      await prefs.setBool('showThemeLines', _showThemeLines);
+      await prefs.setString(
+          'noteViewMode', _noteViewMode == NoteViewMode.card ? 'card' : 'list');
+      await prefs.setString(
+          'noteSortMode', _getNoteSortModeString(_noteSortMode));
+      await prefs.setBool('showCalendarHeatmap', _showCalendarHeatmap);
+      await prefs.setBool(
+          'enableMarkdownFormatting', _enableMarkdownFormatting);
+      await prefs.setBool('showNoteLinkPreviews', _showNoteLinkPreviews);
+
+      // Сохранение настроек поиска
+      await prefs.setBool('showSearchHistory', _showSearchHistory);
+      await prefs.setStringList('searchHistory', _searchHistory);
+      await prefs.setInt('maxSearchHistoryItems', _maxSearchHistoryItems);
+
+      // Сохранение режима фокусировки
+      await prefs.setBool('enableFocusMode', _enableFocusMode);
+
+      return true;
+    } catch (e) {
+      _hasError = true;
+      _errorMessage = "Ошибка сохранения настроек: ${e.toString()}";
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Сброс состояния ошибки
+  void resetError() {
+    _hasError = false;
+    _errorMessage = '';
     notifyListeners();
   }
 }
