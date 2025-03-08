@@ -6,6 +6,7 @@ import '../providers/notes_provider.dart';
 import '../providers/themes_provider.dart';
 import '../utils/constants.dart';
 import '../screens/note_detail_screen.dart';
+import '../utils/note_status_utils.dart';
 import 'package:intl/intl.dart';
 
 class SwipeableNoteCard extends StatefulWidget {
@@ -25,67 +26,20 @@ class SwipeableNoteCard extends StatefulWidget {
 }
 
 class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
-  // Контроллер для отслеживания смахиваний
-  late final DismissDirectionCallback _onDismissed;
-
   // Флаг для отслеживания, была ли карточка недавно помечена как избранная
   bool _recentlyFavorited = false;
 
   @override
-  void initState() {
-    super.initState();
-
-    // Инициализируем функцию-обработчик для смахиваний
-    _onDismissed = (DismissDirection direction) {
-      if (direction == DismissDirection.endToStart) {
-        // Смахивание влево - удаление
-        if (widget.onDelete != null) {
-          widget.onDelete!();
-        }
-      } else if (direction == DismissDirection.startToEnd) {
-        // Смахивание вправо - добавление в избранное
-        if (widget.onFavorite != null) {
-          widget.onFavorite!();
-          // Устанавливаем флаг для показа анимации
-          setState(() {
-            _recentlyFavorited = true;
-          });
-          // Сбрасываем флаг через некоторое время
-          Future.delayed(const Duration(milliseconds: 1500), () {
-            if (mounted) {
-              setState(() {
-                _recentlyFavorited = false;
-              });
-            }
-          });
-        }
-      }
-    };
-  }
-
-  @override
   Widget build(BuildContext context) {
     // Определяем цвет бордюра в зависимости от статуса
-    final borderColor = _getNoteStatusColor(widget.note);
+    final borderColor = NoteStatusUtils.getNoteStatusColor(widget.note);
 
     return Dismissible(
       key: Key('note-${widget.note.id}'),
       direction: DismissDirection.horizontal,
-      onDismissed: _onDismissed,
-
-      // Фон при смахивании влево (удаление)
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20.0),
-        color: Colors.red,
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
-        ),
-      ),
 
       // Фон при смахивании вправо (добавление в избранное)
-      secondaryBackground: Container(
+      background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20.0),
         color: Colors.amber,
@@ -95,7 +49,18 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
         ),
       ),
 
-      // Подтверждение перед удалением
+      // Фон при смахивании влево (удаление)
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(
+          Icons.delete,
+          color: Colors.white,
+        ),
+      ),
+
+      // Подтверждение перед действием
       confirmDismiss: (DismissDirection direction) async {
         if (direction == DismissDirection.endToStart) {
           // Подтверждение удаления
@@ -120,9 +85,33 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
               );
             },
           );
-        } else {
+        } else if (direction == DismissDirection.startToEnd) {
           // Добавление в избранное не требует подтверждения
-          return true;
+          if (widget.onFavorite != null) {
+            widget.onFavorite!();
+            // Устанавливаем флаг для показа анимации
+            setState(() {
+              _recentlyFavorited = true;
+            });
+            // Сбрасываем флаг через некоторое время
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted) {
+                setState(() {
+                  _recentlyFavorited = false;
+                });
+              }
+            });
+          }
+          return false; // Не убираем карточку после свайпа для избранного
+        }
+        return false;
+      },
+
+      // Действие при успешном свайпе
+      onDismissed: (direction) {
+        if (direction == DismissDirection.endToStart &&
+            widget.onDelete != null) {
+          widget.onDelete!();
         }
       },
 
@@ -285,30 +274,6 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
         );
       },
     );
-  }
-
-  // Определение цвета статуса заметки
-  Color _getNoteStatusColor(Note note) {
-    if (note.isCompleted) {
-      return AppColors.completed;
-    }
-
-    if (!note.hasDeadline || note.deadlineDate == null) {
-      return AppColors.secondary; // Обычный цвет для заметок без дедлайна
-    }
-
-    final now = DateTime.now();
-    final daysUntilDeadline = note.deadlineDate!.difference(now).inDays;
-
-    if (daysUntilDeadline < 0) {
-      return AppColors.deadlineUrgent; // Просрочено
-    } else if (daysUntilDeadline <= 2) {
-      return AppColors.deadlineUrgent; // Срочно (красный)
-    } else if (daysUntilDeadline <= 7) {
-      return AppColors.deadlineNear; // Скоро (оранжевый)
-    } else {
-      return AppColors.deadlineFar; // Не срочно (желтый)
-    }
   }
 
   // Открытие экрана детальной информации о заметке

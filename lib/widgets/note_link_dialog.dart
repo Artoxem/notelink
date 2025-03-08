@@ -5,22 +5,24 @@ import '../models/theme.dart';
 import '../providers/notes_provider.dart';
 import '../providers/themes_provider.dart';
 import '../utils/constants.dart';
+import '../utils/note_status_utils.dart';
 import 'package:intl/intl.dart';
 
 /// Диалог для выбора заметки и создания связи
 class NoteLinkDialog extends StatefulWidget {
   final String sourceNoteId; // ID текущей заметки
-  final Function(Note selectedNote) onNoteSelected; // Коллбэк при выборе заметки
-  
+  final Function(Note selectedNote)
+      onNoteSelected; // Коллбэк при выборе заметки
+
   const NoteLinkDialog({
-    Key? key, 
-    required this.sourceNoteId, 
+    Key? key,
+    required this.sourceNoteId,
     required this.onNoteSelected,
   }) : super(key: key);
 
   @override
   State<NoteLinkDialog> createState() => _NoteLinkDialogState();
-  
+
   /// Показать диалог выбора заметки
   static Future<Note?> show(BuildContext context, String sourceNoteId) async {
     return showDialog<Note>(
@@ -35,20 +37,32 @@ class NoteLinkDialog extends StatefulWidget {
   }
 }
 
-class _NoteLinkDialogState extends State<NoteLinkDialog> {
+class _NoteLinkDialogState extends State<NoteLinkDialog>
+    with TickerProviderStateMixin {
   String _searchQuery = '';
   int _selectedTabIndex = 0;
   String? _selectedThemeId;
-  
+
   // Контроллер для анимации вкладок
-  final PageController _pageController = PageController();
-  
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      setState(() {
+        _selectedTabIndex = _tabController.index;
+      });
+    });
+  }
+
   @override
   void dispose() {
-    _pageController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -80,10 +94,11 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                 ),
               ],
             ),
-            
+
             // Поле поиска
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppDimens.smallPadding),
+              padding:
+                  const EdgeInsets.symmetric(vertical: AppDimens.smallPadding),
               child: TextField(
                 decoration: InputDecoration(
                   hintText: 'Поиск...',
@@ -91,7 +106,8 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                   filled: true,
                   fillColor: AppColors.textBackground,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppDimens.buttonBorderRadius),
+                    borderRadius:
+                        BorderRadius.circular(AppDimens.buttonBorderRadius),
                     borderSide: BorderSide.none,
                   ),
                 ),
@@ -102,46 +118,31 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                 },
               ),
             ),
-            
-            // Вкладки для фильтрации
-            Container(
-              height: 40,
-              margin: const EdgeInsets.only(bottom: AppDimens.smallPadding),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(AppDimens.buttonBorderRadius),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildTabButton(0, 'Все'),
-                  ),
-                  Expanded(
-                    child: _buildTabButton(1, 'По темам'),
-                  ),
-                  Expanded(
-                    child: _buildTabButton(2, 'Недавние'),
-                  ),
-                ],
-              ),
+
+            // Вкладки для фильтрации с использованием TabBar
+            TabBar(
+              controller: _tabController,
+              labelColor: AppColors.textOnLight,
+              unselectedLabelColor: AppColors.textOnLight.withOpacity(0.7),
+              indicatorColor: AppColors.accentSecondary,
+              tabs: const [
+                Tab(text: 'Все'),
+                Tab(text: 'По темам'),
+                Tab(text: 'Недавние'),
+              ],
             ),
-            
+
             // Содержимое вкладок
             Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (index) {
-                  setState(() {
-                    _selectedTabIndex = index;
-                  });
-                },
+              child: TabBarView(
+                controller: _tabController,
                 children: [
                   // Вкладка "Все заметки"
                   _buildAllNotesTab(),
-                  
+
                   // Вкладка "По темам"
                   _buildThemesTab(),
-                  
+
                   // Вкладка "Недавние"
                   _buildRecentNotesTab(),
                 ],
@@ -152,54 +153,25 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
       ),
     );
   }
-  
-  // Кнопка вкладки
-  Widget _buildTabButton(int index, String title) {
-    final isSelected = _selectedTabIndex == index;
-    
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTabIndex = index;
-          _pageController.animateToPage(
-            index,
-            duration: AppAnimations.shortDuration,
-            curve: Curves.easeInOut,
-          );
-        });
-      },
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.accentSecondary : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppDimens.buttonBorderRadius),
-        ),
-        child: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
-  
+
   // Вкладка "Все заметки"
   Widget _buildAllNotesTab() {
-    return Consumer<NotesProvider>(
-      builder: (context, notesProvider, _) {
+    return Selector<NotesProvider, List<Note>>(
+      selector: (_, provider) => provider.notes,
+      builder: (context, notes, _) {
         // Фильтруем заметки
-        final filteredNotes = notesProvider.notes
-            .where((note) => 
+        final filteredNotes = notes
+            .where((note) =>
                 note.id != widget.sourceNoteId && // Исключаем текущую заметку
-                (note.content.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                 _searchQuery.isEmpty)) // Фильтр по поиску
+                (note.content
+                        .toLowerCase()
+                        .contains(_searchQuery.toLowerCase()) ||
+                    _searchQuery.isEmpty)) // Фильтр по поиску
             .toList();
-        
+
         // Сортируем от новых к старым
         filteredNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        
+
         return filteredNotes.isEmpty
             ? const Center(
                 child: Text('Нет доступных заметок'),
@@ -213,7 +185,7 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
       },
     );
   }
-  
+
   // Вкладка "По темам"
   Widget _buildThemesTab() {
     return Column(
@@ -222,14 +194,15 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
         // Выбор темы
         Container(
           padding: const EdgeInsets.symmetric(vertical: AppDimens.smallPadding),
-          child: Consumer<ThemesProvider>(
-            builder: (context, themesProvider, _) {
+          child: Selector<ThemesProvider, List<NoteTheme>>(
+            selector: (_, provider) => provider.themes,
+            builder: (context, themes, _) {
               return Wrap(
                 spacing: 8.0,
                 runSpacing: 4.0,
-                children: themesProvider.themes.map((theme) {
+                children: themes.map((theme) {
                   final isSelected = _selectedThemeId == theme.id;
-                  
+
                   // Парсим цвет из строки
                   Color themeColor;
                   try {
@@ -237,14 +210,16 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                   } catch (e) {
                     themeColor = Colors.blue; // Дефолтный цвет в случае ошибки
                   }
-                  
+
                   return ActionChip(
                     label: Text(theme.name),
-                    backgroundColor: isSelected 
-                        ? themeColor.withOpacity(0.7) 
+                    backgroundColor: isSelected
+                        ? themeColor.withOpacity(0.7)
                         : themeColor.withOpacity(0.3),
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white.withOpacity(0.9),
+                      color: isSelected
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.9),
                     ),
                     onPressed: () {
                       setState(() {
@@ -261,7 +236,7 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
             },
           ),
         ),
-        
+
         // Список заметок выбранной темы
         Expanded(
           child: _selectedThemeId == null
@@ -270,72 +245,79 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                 )
               : Consumer2<NotesProvider, ThemesProvider>(
                   builder: (context, notesProvider, themesProvider, _) {
-                    // Получаем тему
-                    final theme = themesProvider.themes.firstWhere(
-                      (t) => t.id == _selectedThemeId,
-                      orElse: () => NoteTheme(
-                        id: '',
-                        name: '',
-                        color: '0xFF000000',
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                        noteIds: [],
-                      ),
+                    // Используем отдельный метод для выборки заметок по теме для лучшей производительности
+                    return FutureBuilder<List<Note>>(
+                      future:
+                          themesProvider.getNotesForTheme(_selectedThemeId!),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return const Center(
+                              child: Text('Нет заметок в этой теме'));
+                        }
+
+                        final notes = snapshot.data!;
+
+                        // Фильтруем по поиску и исключаем текущую заметку
+                        final filteredNotes = notes
+                            .where((note) =>
+                                note.id != widget.sourceNoteId &&
+                                (note.content
+                                        .toLowerCase()
+                                        .contains(_searchQuery.toLowerCase()) ||
+                                    _searchQuery.isEmpty))
+                            .toList();
+
+                        // Сортируем от новых к старым
+                        filteredNotes
+                            .sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+                        return filteredNotes.isEmpty
+                            ? Center(
+                                child: Text(
+                                    'Нет заметок по теме, соответствующих запросу'),
+                              )
+                            : ListView.builder(
+                                itemCount: filteredNotes.length,
+                                itemBuilder: (context, index) {
+                                  return _buildNoteItem(filteredNotes[index]);
+                                },
+                              );
+                      },
                     );
-                    
-                    if (theme.id.isEmpty) {
-                      return const Center(
-                        child: Text('Тема не найдена'),
-                      );
-                    }
-                    
-                    // Получаем заметки этой темы
-                    final themeNotes = notesProvider.notes
-                        .where((note) => 
-                            note.id != widget.sourceNoteId && // Исключаем текущую заметку
-                            note.themeIds.contains(theme.id) && // Заметки выбранной темы
-                            (note.content.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                             _searchQuery.isEmpty)) // Фильтр по поиску
-                        .toList();
-                    
-                    // Сортируем от новых к старым
-                    themeNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-                    
-                    return themeNotes.isEmpty
-                        ? Center(
-                            child: Text('Нет заметок по теме "${theme.name}"'),
-                          )
-                        : ListView.builder(
-                            itemCount: themeNotes.length,
-                            itemBuilder: (context, index) {
-                              return _buildNoteItem(themeNotes[index]);
-                            },
-                          );
                   },
                 ),
         ),
       ],
     );
   }
-  
+
   // Вкладка "Недавние заметки"
   Widget _buildRecentNotesTab() {
-    return Consumer<NotesProvider>(
-      builder: (context, notesProvider, _) {
+    return Selector<NotesProvider, List<Note>>(
+      selector: (_, provider) => provider.notes,
+      builder: (context, notes, _) {
         // Берем 10 последних заметок
-        final recentNotes = notesProvider.notes
-            .where((note) => 
+        final recentNotes = notes
+            .where((note) =>
                 note.id != widget.sourceNoteId && // Исключаем текущую заметку
-                (note.content.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                 _searchQuery.isEmpty)) // Фильтр по поиску
+                (note.content
+                        .toLowerCase()
+                        .contains(_searchQuery.toLowerCase()) ||
+                    _searchQuery.isEmpty)) // Фильтр по поиску
             .toList();
-        
+
         // Сортируем от новых к старым
         recentNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        
+
         // Берем только первые 10
         final limitedNotes = recentNotes.take(10).toList();
-        
+
         return limitedNotes.isEmpty
             ? const Center(
                 child: Text('Нет недавних заметок'),
@@ -349,12 +331,12 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
       },
     );
   }
-  
+
   // Элемент заметки в списке
   Widget _buildNoteItem(Note note) {
     // Определяем цвет бордюра в зависимости от статуса
-    final borderColor = _getNoteStatusColor(note);
-    
+    final borderColor = NoteStatusUtils.getNoteStatusColor(note);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       color: AppColors.cardBackground.withOpacity(0.7),
@@ -409,7 +391,7 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                     ),
                 ],
               ),
-              
+
               // Содержимое заметки
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -420,18 +402,20 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                   style: AppTextStyles.bodyMedium,
                 ),
               ),
-              
+
               // Темы заметки
               if (note.themeIds.isNotEmpty)
-                Consumer<ThemesProvider>(
-                  builder: (context, themesProvider, _) {
+                Selector<ThemesProvider, List<NoteTheme>>(
+                  selector: (_, provider) => provider.themes,
+                  builder: (context, allThemes, _) {
                     final themes = note.themeIds
-                        .map((id) => themesProvider.themes.firstWhere(
+                        .map((id) => allThemes.firstWhere(
                               (t) => t.id == id,
                               orElse: () => NoteTheme(
                                 id: '',
                                 name: 'Unknown',
-                                color: AppColors.themeColors[0].value.toString(),
+                                color:
+                                    AppColors.themeColors[0].value.toString(),
                                 createdAt: DateTime.now(),
                                 updatedAt: DateTime.now(),
                                 noteIds: [],
@@ -475,7 +459,7 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
                             ),
                           );
                         }).toList(),
-                        
+
                         // Индикатор дополнительных тем
                         if (note.themeIds.length > 3)
                           Container(
@@ -497,29 +481,5 @@ class _NoteLinkDialogState extends State<NoteLinkDialog> {
         ),
       ),
     );
-  }
-  
-  // Определение цвета статуса заметки (такой же как в NotesScreen)
-  Color _getNoteStatusColor(Note note) {
-    if (note.isCompleted) {
-      return AppColors.completed;
-    }
-    
-    if (!note.hasDeadline || note.deadlineDate == null) {
-      return AppColors.secondary; // Обычный цвет для заметок без дедлайна
-    }
-    
-    final now = DateTime.now();
-    final daysUntilDeadline = note.deadlineDate!.difference(now).inDays;
-    
-    if (daysUntilDeadline < 0) {
-      return AppColors.deadlineUrgent; // Просрочено
-    } else if (daysUntilDeadline <= 2) {
-      return AppColors.deadlineUrgent; // Срочно (красный)
-    } else if (daysUntilDeadline <= 7) {
-      return AppColors.deadlineNear; // Скоро (оранжевый)
-    } else {
-      return AppColors.deadlineFar; // Не срочно (желтый)
-    }
   }
 }

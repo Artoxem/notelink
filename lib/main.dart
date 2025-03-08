@@ -23,10 +23,6 @@ void main() async {
   // Получаем текущее значение флага
   bool isFirstRun = prefs.getBool('isFirstRun') ?? true;
 
-  // Если нужно принудительно сбросить данные и создать новые тестовые данные,
-  // раскомментируйте следующую строку и запустите приложение один раз, затем снова закомментируйте
-  // isFirstRun = true;
-
   // Запускаем приложение
   runApp(MyApp(isFirstRun: isFirstRun));
 }
@@ -56,40 +52,24 @@ class _MyAppState extends State<MyApp> {
     try {
       if (widget.isFirstRun) {
         // Создаем примеры данных при первом запуске
-        print('Первый запуск: создаем примеры данных...');
         await _createSampleData();
 
         // Отмечаем, что первый запуск уже был
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isFirstRun', false);
       } else {
-        // При не-первом запуске НЕ загружаем данные здесь,
-        // это будет сделано в провайдерах после построения UI
-        print('Не первый запуск: подготовка к загрузке данных...');
-
-        // Предварительная инициализация базы данных может быть сделана здесь
-        // чтобы ускорить последующую загрузку данных
+        // Предварительная инициализация базы данных
         final databaseService = DatabaseService();
-        // Просто получаем доступ к базе данных, что инициализирует её
         await databaseService.database;
-        print('База данных инициализирована и готова к использованию');
       }
     } catch (e) {
       // Не позволяем ошибкам при инициализации "убить" приложение
       print('Ошибка при инициализации приложения: $e');
-      print(StackTrace.current);
-
-      // Можно добавить телеметрию ошибок в будущем
-      // или механизм восстановления
     }
   }
 
   // Изменяем _createSampleData чтобы он не требовал контекст
   Future<void> _createSampleData() async {
-    print('Создание примеров данных при первом запуске...');
-
-    // Использование BuildContext через глобальный ключ или другой механизм
-    // Лучше инициализировать провайдеры напрямую
     try {
       // Создаем экземпляры провайдеров напрямую
       final themesProvider = ThemesProvider();
@@ -126,19 +106,9 @@ class _MyAppState extends State<MyApp> {
 
       // Загружаем заметки
       await notesProvider.loadNotes();
-      final createdNotes = notesProvider.notes;
-
-      print('Примеры данных успешно созданы');
     } catch (e) {
       print('Ошибка при создании примеров данных: $e');
     }
-  }
-
-  // Изменяем _loadData чтобы он не требовал контекст
-  Future<void> _loadData() async {
-    print('Загрузка данных из базы...');
-    // Данная функция не нуждается в контексте, она нужна для логики инициализации
-    // Реальная загрузка данных будет происходить через провайдеры после построения UI
   }
 
   @override
@@ -151,6 +121,11 @@ class _MyAppState extends State<MyApp> {
       ],
       child: Consumer<AppProvider>(
         builder: (context, appProvider, _) {
+          // Инициализируем настройки при первом построении
+          if (!appProvider.initialized) {
+            appProvider.initSettings();
+          }
+
           return MaterialApp(
             title: 'NoteLink',
             debugShowCheckedModeBanner: false,

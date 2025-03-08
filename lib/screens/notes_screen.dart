@@ -201,27 +201,55 @@ class _NotesScreenState extends State<NotesScreen>
 
   Widget _buildNotesList(
       List<Note> notes, NoteViewMode viewMode, NotesProvider notesProvider) {
-    // Выбираем режим отображения
-    return Padding(
-      padding: const EdgeInsets.all(AppDimens.mediumPadding),
-      child: viewMode == NoteViewMode.card
-          ? GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 0.8, // Соотношение сторон карточки
-              ),
-              itemCount: notes.length,
-              itemBuilder: (context, index) =>
-                  _buildNoteCard(notes[index], notesProvider),
-            )
-          : ListView.builder(
-              itemCount: notes.length,
-              itemBuilder: (context, index) =>
-                  _buildNoteListItem(notes[index], notesProvider),
-            ),
-    );
+    // Используем кастомный ключ для сохранения состояния скролла
+    final key = PageStorageKey<String>('notes_list_$viewMode');
+
+    if (notes.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    // Определяем подходящий адаптивный виджет для списка
+    if (viewMode == NoteViewMode.card) {
+      // Для карточек используем GridView с более эффективным строителем
+      return GridView.builder(
+        key: key,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.8,
+        ),
+        padding: const EdgeInsets.all(AppDimens.mediumPadding),
+        itemCount: notes.length,
+        // Используем кэширование для виджетов заметок
+        cacheExtent: 1000, // Увеличиваем кэш для плавного скролла
+        itemBuilder: (context, index) {
+          // Создаем уникальный ключ для каждой заметки для лучшего управления их жизненным циклом
+          final note = notes[index];
+          return KeyedSubtree(
+            key: ValueKey('note_card_${note.id}'),
+            child: _buildNoteCard(note, notesProvider),
+          );
+        },
+      );
+    } else {
+      // Для списка используем ListView.builder с более эффективными настройками
+      return ListView.builder(
+        key: key,
+        padding: const EdgeInsets.all(AppDimens.mediumPadding),
+        itemCount: notes.length,
+        cacheExtent: 1000,
+        // Используем специальный тип для определения размеров элементов для еще лучшей производительности
+        itemExtent: 120, // Фиксированная высота элементов
+        itemBuilder: (context, index) {
+          final note = notes[index];
+          return KeyedSubtree(
+            key: ValueKey('note_list_${note.id}'),
+            child: _buildNoteListItem(note, notesProvider),
+          );
+        },
+      );
+    }
   }
 
   Widget _buildNoteCard(Note note, NotesProvider notesProvider) {

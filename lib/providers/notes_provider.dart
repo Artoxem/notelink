@@ -13,46 +13,32 @@ class NotesProvider with ChangeNotifier {
 
   // Получение избранных заметок
   List<Note> getFavoriteNotes() {
-    print('Запрос избранных заметок: всего заметок ${_notes.length}');
-    final favorites = _notes.where((note) => note.isFavorite == true).toList();
-    print('Найдено ${favorites.length} избранных заметок');
-    return favorites;
+    return _notes.where((note) => note.isFavorite == true).toList();
   }
 
   // Добавление/удаление заметки из избранного
   Future<bool> toggleFavorite(String id) async {
-    // Находим заметку по ID
     final index = _notes.indexWhere((n) => n.id == id);
-    if (index == -1) {
-      print('Заметка не найдена: id=$id');
-      return false;
-    }
+    if (index == -1) return false;
 
     final note = _notes[index];
-    final currentIsFavorite = note.isFavorite;
-
-    // Создаем копию заметки с противоположным значением isFavorite
     final updatedNote = note.copyWith(
-      isFavorite: !currentIsFavorite,
+      isFavorite: !note.isFavorite,
       updatedAt: DateTime.now(),
     );
 
     try {
-      // 1. Сначала обновляем в базе данных
+      // Обновляем в базе данных
       await _databaseService.updateNote(updatedNote);
 
-      // 2. При успешном обновлении в БД, меняем локальное состояние
+      // При успешном обновлении в БД, обновляем локальное состояние
       _notes[index] = updatedNote;
 
-      // 3. Уведомляем слушателей об изменении
+      // Уведомляем слушателей об изменении
       notifyListeners();
 
-      print(
-          'Заметка ${note.id} обновлена: избранное = ${updatedNote.isFavorite}');
       return true;
     } catch (e) {
-      print('Ошибка при обновлении заметки: $e');
-      print(StackTrace.current);
       return false;
     }
   }
@@ -65,14 +51,9 @@ class NotesProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    print('Загрузка заметок...');
     try {
       _notes = await _databaseService.getNotes();
-      print('Загружено ${_notes.length} заметок');
     } catch (e) {
-      print('Ошибка при загрузке заметок: $e');
-      print(StackTrace.current);
-
       // Если у нас есть кэшированные заметки, используем их
       if (_notes.isEmpty) {
         // При первой загрузке создаем пустой список вместо null
@@ -112,7 +93,6 @@ class NotesProvider with ChangeNotifier {
     List<DateTime>? reminderDates,
     String? reminderSound,
   }) async {
-    print('Создание новой заметки...');
     try {
       final note = Note(
         id: const Uuid().v4(),
@@ -132,20 +112,17 @@ class NotesProvider with ChangeNotifier {
         reminderSound: reminderSound,
       );
 
-      // 1. Сначала добавляем в БД
+      // Сначала добавляем в БД
       await _databaseService.insertNote(note);
 
-      // 2. Затем добавляем в локальный список
+      // Затем добавляем в локальный список
       _notes.add(note);
 
-      // 3. Уведомляем об изменениях
+      // Уведомляем об изменениях
       notifyListeners();
 
-      print('Заметка успешно создана: ${note.id}');
       return note;
     } catch (e) {
-      print('Ошибка при создании заметки: $e');
-      print(StackTrace.current);
       return null;
     }
   }
@@ -153,22 +130,19 @@ class NotesProvider with ChangeNotifier {
   // Обновить существующую заметку
   Future<bool> updateNote(Note note) async {
     try {
-      // 1. Сначала обновляем в БД
+      // Обновляем в БД
       final updatedNote = note.copyWith(updatedAt: DateTime.now());
       await _databaseService.updateNote(updatedNote);
 
-      // 2. Затем обновляем локальное состояние
+      // Обновляем локальное состояние
       final index = _notes.indexWhere((n) => n.id == note.id);
       if (index != -1) {
         _notes[index] = updatedNote;
         notifyListeners();
       }
 
-      print('Заметка успешно обновлена: ${note.id}');
       return true;
     } catch (e) {
-      print('Ошибка при обновлении заметки: $e');
-      print(StackTrace.current);
       return false;
     }
   }
@@ -176,10 +150,7 @@ class NotesProvider with ChangeNotifier {
   // Отметить заметку как выполненную
   Future<bool> completeNote(String id) async {
     final index = _notes.indexWhere((n) => n.id == id);
-    if (index == -1) {
-      print('Заметка не найдена: id=$id');
-      return false;
-    }
+    if (index == -1) return false;
 
     final note = _notes[index];
     final updatedNote = note.copyWith(
@@ -188,18 +159,15 @@ class NotesProvider with ChangeNotifier {
     );
 
     try {
-      // 1. Сначала обновляем в БД
+      // Обновляем в БД
       await _databaseService.updateNote(updatedNote);
 
-      // 2. Затем обновляем локальное состояние
+      // Обновляем локальное состояние
       _notes[index] = updatedNote;
       notifyListeners();
 
-      print('Заметка отмечена как выполненная: ${note.id}');
       return true;
     } catch (e) {
-      print('Ошибка при обновлении статуса заметки: $e');
-      print(StackTrace.current);
       return false;
     }
   }
@@ -207,16 +175,10 @@ class NotesProvider with ChangeNotifier {
   // Продлить дедлайн заметки
   Future<bool> extendDeadline(String id, DateTime newDeadline) async {
     final index = _notes.indexWhere((n) => n.id == id);
-    if (index == -1) {
-      print('Заметка не найдена: id=$id');
-      return false;
-    }
+    if (index == -1) return false;
 
     final note = _notes[index];
-    if (!note.hasDeadline) {
-      print('Заметка не имеет дедлайна: id=$id');
-      return false;
-    }
+    if (!note.hasDeadline) return false;
 
     final originalDeadline = note.deadlineDate!;
     final extension = DeadlineExtension(
@@ -235,18 +197,15 @@ class NotesProvider with ChangeNotifier {
     );
 
     try {
-      // 1. Сначала обновляем в БД
+      // Обновляем в БД
       await _databaseService.updateNote(updatedNote);
 
-      // 2. Затем обновляем локальное состояние
+      // Обновляем локальное состояние
       _notes[index] = updatedNote;
       notifyListeners();
 
-      print('Дедлайн заметки продлен: ${note.id}');
       return true;
     } catch (e) {
-      print('Ошибка при продлении дедлайна: $e');
-      print(StackTrace.current);
       return false;
     }
   }
@@ -254,19 +213,42 @@ class NotesProvider with ChangeNotifier {
   // Удалить заметку
   Future<bool> deleteNote(String id) async {
     try {
-      // 1. Сначала удаляем из БД
+      // Удаляем из БД
       await _databaseService.deleteNote(id);
 
-      // 2. Затем удаляем из локального состояния
+      // Удаляем из локального состояния
       _notes.removeWhere((n) => n.id == id);
       notifyListeners();
 
-      print('Заметка успешно удалена: $id');
       return true;
     } catch (e) {
-      print('Ошибка при удалении заметки: $e');
-      print(StackTrace.current);
       return false;
     }
+  }
+
+  // Пакетное обновление заметок
+  Future<bool> batchUpdateNotes(List<Note> notesToUpdate) async {
+    if (notesToUpdate.isEmpty) return true;
+
+    bool success = true;
+
+    try {
+      for (final note in notesToUpdate) {
+        final updatedNote = note.copyWith(updatedAt: DateTime.now());
+        await _databaseService.updateNote(updatedNote);
+
+        final index = _notes.indexWhere((n) => n.id == note.id);
+        if (index != -1) {
+          _notes[index] = updatedNote;
+        }
+      }
+
+      // Уведомляем слушателей один раз после всех обновлений
+      notifyListeners();
+    } catch (e) {
+      success = false;
+    }
+
+    return success;
   }
 }
