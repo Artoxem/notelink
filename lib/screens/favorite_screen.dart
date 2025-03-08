@@ -5,6 +5,7 @@ import '../models/theme.dart';
 import '../providers/notes_provider.dart';
 import '../providers/themes_provider.dart';
 import '../utils/constants.dart';
+import '../utils/note_status_utils.dart';
 import 'note_detail_screen.dart';
 import 'package:intl/intl.dart';
 
@@ -122,7 +123,7 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
   // Построение карточки избранной заметки
   Widget _buildFavoriteCard(Note note, NotesProvider notesProvider) {
     // Определяем цвет индикатора в зависимости от статуса и темы
-    Color indicatorColor = _getNoteStatusColor(note);
+    Color indicatorColor = NoteStatusUtils.getNoteStatusColor(note);
 
     // Если есть темы, используем цвет темы
     if (note.themeIds.isNotEmpty) {

@@ -149,30 +149,30 @@ class DatabaseService {
 
   // CRUD операции для Note
   Future<String> insertNote(Note note) async {
-  final db = await database;
+    final db = await database;
 
-  try {
-    await db.insert('notes', {
-      'id': note.id,
-      'content': note.content,
-      'createdAt': note.createdAt.millisecondsSinceEpoch,
-      // Другие поля...
-    });
-
-    // Добавляем связи с темами
-    for (final themeId in note.themeIds) {
-      await db.insert('note_theme', {
-        'noteId': note.id,
-        'themeId': themeId,
+    try {
+      await db.insert('notes', {
+        'id': note.id,
+        'content': note.content,
+        'createdAt': note.createdAt.millisecondsSinceEpoch,
+        // Другие поля...
       });
-    }
 
-    return note.id;
-  } catch (e) {
-    // Используем rethrow вместо throw e
-    rethrow;
+      // Добавляем связи с темами
+      for (final themeId in note.themeIds) {
+        await db.insert('note_theme', {
+          'noteId': note.id,
+          'themeId': themeId,
+        });
+      }
+
+      return note.id;
+    } catch (e) {
+      // Используем rethrow вместо throw e
+      rethrow;
+    }
   }
-}
 
   Future<List<Note>> getNotes() async {
     final db = await database;
@@ -661,54 +661,6 @@ class DatabaseService {
     }
   }
 
-  // CRUD операции для связей между заметками
-  Future<String> insertNoteLink(String id, String sourceNoteId,
-      String targetNoteId, String? themeId) async {
-    final db = await database;
-
-    await db.insert('note_links', {
-      'id': id,
-      'sourceNoteId': sourceNoteId,
-      'targetNoteId': targetNoteId,
-      'themeId': themeId,
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
-    });
-
-    return id;
-  }
-
-  Future<List<Map<String, dynamic>>> getLinksForNote(String noteId) async {
-    final db = await database;
-
-    // Получаем все связи, где noteId является источником или целью
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT * FROM note_links
-      WHERE sourceNoteId = ? OR targetNoteId = ?
-    ''', [noteId, noteId]);
-
-    return maps;
-  }
-
-  Future<int> deleteNoteLink(String id) async {
-    final db = await database;
-
-    return await db.delete(
-      'note_links',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<int> deleteNoteLinksByNoteId(String noteId) async {
-    final db = await database;
-
-    return await db.delete(
-      'note_links',
-      where: 'sourceNoteId = ? OR targetNoteId = ?',
-      whereArgs: [noteId, noteId],
-    );
-  }
-
   // Методы для работы с историей поиска
   Future<void> insertSearchQuery(String id, String query) async {
     final db = await database;
@@ -717,6 +669,22 @@ class DatabaseService {
       'id': id,
       'query': query,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  // Метод для пакетного обновления заметок
+  Future<void> batchUpdateNotes(List<Note> notes) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      for (final note in notes) {
+        await txn.update(
+          'notes',
+          note.toMap(),
+          where: 'id = ?',
+          whereArgs: [note.id],
+        );
+      }
     });
   }
 

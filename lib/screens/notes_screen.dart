@@ -5,6 +5,7 @@ import '../providers/app_provider.dart';
 import '../providers/themes_provider.dart';
 import '../models/note.dart';
 import '../utils/constants.dart';
+import '../utils/note_status_utils.dart';
 import 'note_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
@@ -572,7 +573,7 @@ class _NotesScreenState extends State<NotesScreen>
 
   Widget _buildNoteListItem(Note note, NotesProvider notesProvider) {
     // Определяем цвет бордюра в зависимости от статуса заметки
-    final borderColor = _getNoteStatusColor(note);
+    final borderColor = NoteStatusUtils.getNoteStatusColor(note);
 
     // Определяем цвет индикатора темы
     Color themeColor = borderColor;

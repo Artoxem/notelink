@@ -251,4 +251,42 @@ class NotesProvider with ChangeNotifier {
 
     return success;
   }
+
+  // Получить заметки для указанного периода
+  List<Note> getNotesForPeriod(DateTime start, DateTime end) {
+    return _notes.where((note) {
+      // Проверяем дату создания
+      if (note.createdAt.isAfter(start) && note.createdAt.isBefore(end)) {
+        return true;
+      }
+
+      // Проверяем дату дедлайна
+      if (note.hasDeadline &&
+          note.deadlineDate != null &&
+          note.deadlineDate!.isAfter(start) &&
+          note.deadlineDate!.isBefore(end)) {
+        return true;
+      }
+
+      // Проверяем связанную дату
+      if (note.hasDateLink &&
+          note.linkedDate != null &&
+          note.linkedDate!.isAfter(start) &&
+          note.linkedDate!.isBefore(end)) {
+        return true;
+      }
+
+      return false;
+    }).toList();
+  }
+
+  // Поиск заметок по содержимому
+  List<Note> searchNotes(String query) {
+    if (query.trim().isEmpty) return [];
+
+    final lowercaseQuery = query.toLowerCase();
+    return _notes
+        .where((note) => note.content.toLowerCase().contains(lowercaseQuery))
+        .toList();
+  }
 }

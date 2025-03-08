@@ -8,8 +8,6 @@ import '../utils/constants.dart';
 import 'package:intl/intl.dart';
 import '../providers/themes_provider.dart';
 import '../widgets/markdown_editor.dart';
-import '../widgets/linked_notes_section.dart';
-import '../widgets/note_link_dialog.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note? note; // Null если создаем новую заметку
@@ -331,7 +329,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   }
 
   // Построение режима просмотра
-  // Построение режима просмотра
   Widget _buildViewMode() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppDimens.mediumPadding),
@@ -410,35 +407,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             readOnly: true,
             height: MediaQuery.of(context).size.height * 0.6,
           ),
-
-          // Добавляем секцию связанных заметок если есть существующая заметка
-          if (widget.note != null) ...[
-            // Разделитель перед секцией связанных заметок
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16.0),
-              child: Divider(),
-            ),
-
-            // Секция связанных заметок
-            LinkedNotesSection(
-              noteId: widget.note!.id,
-              onNoteSelected: (note) {
-                // Навигация к выбранной заметке
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => NoteDetailScreen(note: note),
-                  ),
-                ).then((_) {
-                  // Перезагружаем данные после возврата
-                  if (mounted) {
-                    Provider.of<NotesProvider>(context, listen: false)
-                        .loadNotes();
-                  }
-                });
-              },
-            ),
-          ],
         ],
       ),
     );

@@ -50,21 +50,27 @@ class _MyAppState extends State<MyApp> {
   // Метод инициализации приложения теперь не принимает контекст
   Future<void> _initializeApp() async {
     try {
-      if (widget.isFirstRun) {
-        // Создаем примеры данных при первом запуске
-        await _createSampleData();
-
-        // Отмечаем, что первый запуск уже был
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('isFirstRun', false);
-      } else {
-        // Предварительная инициализация базы данных
-        final databaseService = DatabaseService();
-        await databaseService.database;
-      }
+      // Добавляем тайм-аут для предотвращения зависания инициализации
+      return await Future.any([
+        _actualInitialization(),
+        Future.delayed(const Duration(seconds: 5), () {
+          print('Предупреждение: инициализация заняла более 5 секунд');
+          return;
+        }),
+      ]);
     } catch (e) {
-      // Не позволяем ошибкам при инициализации "убить" приложение
       print('Ошибка при инициализации приложения: $e');
+    }
+  }
+
+  Future<void> _actualInitialization() async {
+    if (widget.isFirstRun) {
+      await _createSampleData();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isFirstRun', false);
+    } else {
+      final databaseService = DatabaseService();
+      await databaseService.database;
     }
   }
 
