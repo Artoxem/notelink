@@ -5,8 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../utils/constants.dart';
-import '../models/note.dart';
-import '../providers/notes_provider.dart';
 
 class MarkdownEditor extends StatefulWidget {
   final TextEditingController controller;

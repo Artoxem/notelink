@@ -13,33 +13,23 @@ class NotesProvider with ChangeNotifier {
 
   // Получение избранных заметок
   List<Note> getFavoriteNotes() {
-    print('📌 getFavoriteNotes: всего заметок ${_notes.length}');
+    print('Запрос избранных заметок: всего заметок ${_notes.length}');
     final favorites = _notes.where((note) => note.isFavorite == true).toList();
-    print(
-        '📌 getFavoriteNotes: найдено ${favorites.length} избранных заметок:');
-
-    // Печатаем отладочную информацию по избранным заметкам
-    for (var note in favorites) {
-      print('📌 Избранная заметка: ${note.id}');
-    }
-
+    print('Найдено ${favorites.length} избранных заметок');
     return favorites;
   }
 
   // Добавление/удаление заметки из избранного
-  Future<void> toggleFavorite(String id) async {
-    print('📌 toggleFavorite начало: id=$id');
-
+  Future<bool> toggleFavorite(String id) async {
+    // Находим заметку по ID
     final index = _notes.indexWhere((n) => n.id == id);
     if (index == -1) {
-      print('📌 Заметка не найдена: id=$id');
-      return;
+      print('Заметка не найдена: id=$id');
+      return false;
     }
 
     final note = _notes[index];
     final currentIsFavorite = note.isFavorite;
-    print(
-        '📌 Найдена заметка: ${note.id}, текущий isFavorite=$currentIsFavorite');
 
     // Создаем копию заметки с противоположным значением isFavorite
     final updatedNote = note.copyWith(
@@ -47,24 +37,23 @@ class NotesProvider with ChangeNotifier {
       updatedAt: DateTime.now(),
     );
 
-    print('📌 Обновленная заметка: новый isFavorite=${updatedNote.isFavorite}');
-
     try {
-      // 1. Сначала обновляем локальный кэш для немедленной обратной связи
+      // 1. Сначала обновляем в базе данных
+      await _databaseService.updateNote(updatedNote);
+
+      // 2. При успешном обновлении в БД, меняем локальное состояние
       _notes[index] = updatedNote;
 
-      // 2. Сразу уведомляем слушателей об изменениях
+      // 3. Уведомляем слушателей об изменении
       notifyListeners();
 
-      // 3. Затем сохраняем изменения в базу данных
-      await _databaseService.updateNote(updatedNote);
-      print('📌 Заметка успешно обновлена в БД');
+      print(
+          'Заметка ${note.id} обновлена: избранное = ${updatedNote.isFavorite}');
+      return true;
     } catch (e) {
-      // В случае ошибки восстанавливаем предыдущее состояние
-      print('📌 Ошибка при обновлении заметки: $e');
-      _notes[index] = note; // Восстановление исходного состояния
-      notifyListeners(); // Уведомление слушателей о восстановлении
+      print('Ошибка при обновлении заметки: $e');
       print(StackTrace.current);
+      return false;
     }
   }
 
@@ -82,7 +71,6 @@ class NotesProvider with ChangeNotifier {
       print('Загружено ${_notes.length} заметок');
     } catch (e) {
       print('Ошибка при загрузке заметок: $e');
-      // Добавляем стек-трейс для улучшения отладки
       print(StackTrace.current);
 
       // Если у нас есть кэшированные заметки, используем их
@@ -112,7 +100,7 @@ class NotesProvider with ChangeNotifier {
   }
 
   // Создать новую заметку
-  Future<Note> createNote({
+  Future<Note?> createNote({
     required String content,
     List<String>? themeIds,
     bool hasDeadline = false,
@@ -124,8 +112,7 @@ class NotesProvider with ChangeNotifier {
     List<DateTime>? reminderDates,
     String? reminderSound,
   }) async {
-    print(
-        '📝 Создание заметки: ${content.substring(0, content.length > 30 ? 30 : content.length)}...');
+    print('Создание новой заметки...');
     try {
       final note = Note(
         id: const Uuid().v4(),
@@ -145,82 +132,141 @@ class NotesProvider with ChangeNotifier {
         reminderSound: reminderSound,
       );
 
-      print('📝 Вставка заметки в БД: ${note.id}');
+      // 1. Сначала добавляем в БД
       await _databaseService.insertNote(note);
+
+      // 2. Затем добавляем в локальный список
       _notes.add(note);
-      print('✅ Заметка успешно создана и добавлена в список: ${note.id}');
+
+      // 3. Уведомляем об изменениях
       notifyListeners();
+
+      print('Заметка успешно создана: ${note.id}');
       return note;
     } catch (e) {
-      print('❌ Ошибка при создании заметки: $e');
-      // Получим стек ошибки для лучшей отладки
+      print('Ошибка при создании заметки: $e');
       print(StackTrace.current);
-      throw e;
+      return null;
     }
   }
 
   // Обновить существующую заметку
-  Future<void> updateNote(Note note) async {
+  Future<bool> updateNote(Note note) async {
     try {
-      await _databaseService
-          .updateNote(note.copyWith(updatedAt: DateTime.now()));
+      // 1. Сначала обновляем в БД
+      final updatedNote = note.copyWith(updatedAt: DateTime.now());
+      await _databaseService.updateNote(updatedNote);
+
+      // 2. Затем обновляем локальное состояние
       final index = _notes.indexWhere((n) => n.id == note.id);
       if (index != -1) {
-        _notes[index] = note.copyWith(updatedAt: DateTime.now());
+        _notes[index] = updatedNote;
         notifyListeners();
       }
+
+      print('Заметка успешно обновлена: ${note.id}');
+      return true;
     } catch (e) {
       print('Ошибка при обновлении заметки: $e');
+      print(StackTrace.current);
+      return false;
     }
   }
 
   // Отметить заметку как выполненную
-  Future<void> completeNote(String id) async {
+  Future<bool> completeNote(String id) async {
     final index = _notes.indexWhere((n) => n.id == id);
-    if (index != -1) {
-      final note = _notes[index].copyWith(
-        isCompleted: true,
-        updatedAt: DateTime.now(),
-      );
-      await updateNote(note);
+    if (index == -1) {
+      print('Заметка не найдена: id=$id');
+      return false;
+    }
+
+    final note = _notes[index];
+    final updatedNote = note.copyWith(
+      isCompleted: true,
+      updatedAt: DateTime.now(),
+    );
+
+    try {
+      // 1. Сначала обновляем в БД
+      await _databaseService.updateNote(updatedNote);
+
+      // 2. Затем обновляем локальное состояние
+      _notes[index] = updatedNote;
+      notifyListeners();
+
+      print('Заметка отмечена как выполненная: ${note.id}');
+      return true;
+    } catch (e) {
+      print('Ошибка при обновлении статуса заметки: $e');
+      print(StackTrace.current);
+      return false;
     }
   }
 
   // Продлить дедлайн заметки
-  Future<void> extendDeadline(String id, DateTime newDeadline) async {
+  Future<bool> extendDeadline(String id, DateTime newDeadline) async {
     final index = _notes.indexWhere((n) => n.id == id);
-    if (index != -1) {
-      final note = _notes[index];
-      if (!note.hasDeadline) return;
+    if (index == -1) {
+      print('Заметка не найдена: id=$id');
+      return false;
+    }
 
-      final originalDeadline = note.deadlineDate!;
-      final extension = DeadlineExtension(
-        originalDate: originalDeadline,
-        newDate: newDeadline,
-        extendedAt: DateTime.now(),
-      );
+    final note = _notes[index];
+    if (!note.hasDeadline) {
+      print('Заметка не имеет дедлайна: id=$id');
+      return false;
+    }
 
-      final extensions = note.deadlineExtensions ?? [];
-      extensions.add(extension);
+    final originalDeadline = note.deadlineDate!;
+    final extension = DeadlineExtension(
+      originalDate: originalDeadline,
+      newDate: newDeadline,
+      extendedAt: DateTime.now(),
+    );
 
-      final updatedNote = note.copyWith(
-        deadlineDate: newDeadline,
-        deadlineExtensions: extensions,
-        updatedAt: DateTime.now(),
-      );
+    final extensions = note.deadlineExtensions ?? [];
+    extensions.add(extension);
 
-      await updateNote(updatedNote);
+    final updatedNote = note.copyWith(
+      deadlineDate: newDeadline,
+      deadlineExtensions: extensions,
+      updatedAt: DateTime.now(),
+    );
+
+    try {
+      // 1. Сначала обновляем в БД
+      await _databaseService.updateNote(updatedNote);
+
+      // 2. Затем обновляем локальное состояние
+      _notes[index] = updatedNote;
+      notifyListeners();
+
+      print('Дедлайн заметки продлен: ${note.id}');
+      return true;
+    } catch (e) {
+      print('Ошибка при продлении дедлайна: $e');
+      print(StackTrace.current);
+      return false;
     }
   }
 
   // Удалить заметку
-  Future<void> deleteNote(String id) async {
+  Future<bool> deleteNote(String id) async {
     try {
+      // 1. Сначала удаляем из БД
       await _databaseService.deleteNote(id);
+
+      // 2. Затем удаляем из локального состояния
       _notes.removeWhere((n) => n.id == id);
       notifyListeners();
+
+      print('Заметка успешно удалена: $id');
+      return true;
     } catch (e) {
       print('Ошибка при удалении заметки: $e');
+      print(StackTrace.current);
+      return false;
     }
   }
 }

@@ -10,7 +10,6 @@ import '../models/theme.dart';
 import '../utils/constants.dart';
 import 'note_detail_screen.dart';
 import 'dart:math' as math;
-import 'search_screen.dart';
 import 'favorite_screen.dart';
 
 // Класс для рисования треугольника

@@ -4,7 +4,6 @@ import 'dart:async';
 import '../models/note.dart';
 import 'dart:convert';
 import '../models/theme.dart';
-import '../models/note_link.dart'; // Добавлен импорт модели связей
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -104,24 +103,7 @@ class DatabaseService {
   )
   ''');
     print('✅ Создана таблица note_theme');
-
-    // Таблица для связей между заметками
-    await db.execute('''
-  CREATE TABLE note_links(
-    id TEXT PRIMARY KEY,
-    sourceNoteId TEXT NOT NULL,
-    targetNoteId TEXT NOT NULL,
-    themeId TEXT,
-    linkType INTEGER NOT NULL,
-    createdAt INTEGER NOT NULL,
-    description TEXT,
-    FOREIGN KEY (sourceNoteId) REFERENCES notes(id) ON DELETE CASCADE,
-    FOREIGN KEY (targetNoteId) REFERENCES notes(id) ON DELETE CASCADE,
-    FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE SET NULL
-  )
-  ''');
-    print('✅ Создана таблица note_links');
-
+   
     // Таблица для истории поиска
     await db.execute('''
   CREATE TABLE search_history(
@@ -581,103 +563,7 @@ class DatabaseService {
     }
   }
 
-  // CRUD операции для NoteLink (новые методы)
-  Future<String> insertNoteLink(NoteLink link) async {
-    final db = await database;
-
-    await db.insert('note_links', {
-      'id': link.id,
-      'sourceNoteId': link.sourceNoteId,
-      'targetNoteId': link.targetNoteId,
-      'themeId': link.themeId,
-      'linkType': link.linkType.index,
-      'createdAt': link.createdAt.millisecondsSinceEpoch,
-      'description': link.description,
-    });
-
-    return link.id;
-  }
-
-  Future<List<NoteLink>> getNoteLinks() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('note_links');
-
-    return List.generate(maps.length, (i) {
-      return NoteLink(
-        id: maps[i]['id'] as String,
-        sourceNoteId: maps[i]['sourceNoteId'] as String,
-        targetNoteId: maps[i]['targetNoteId'] as String,
-        themeId: maps[i]['themeId'] as String?,
-        linkType: LinkType.values[maps[i]['linkType'] as int],
-        createdAt:
-            DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt'] as int),
-        description: maps[i]['description'] as String?,
-      );
-    });
-  }
-
-  Future<NoteLink?> getNoteLink(String id) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'note_links',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (maps.isEmpty) return null;
-
-    return NoteLink(
-      id: maps[0]['id'] as String,
-      sourceNoteId: maps[0]['sourceNoteId'] as String,
-      targetNoteId: maps[0]['targetNoteId'] as String,
-      themeId: maps[0]['themeId'] as String?,
-      linkType: LinkType.values[maps[0]['linkType'] as int],
-      createdAt:
-          DateTime.fromMillisecondsSinceEpoch(maps[0]['createdAt'] as int),
-      description: maps[0]['description'] as String?,
-    );
-  }
-
-  Future<List<NoteLink>> getLinksForNote(String noteId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'note_links',
-      where: 'sourceNoteId = ? OR targetNoteId = ?',
-      whereArgs: [noteId, noteId],
-    );
-
-    return List.generate(maps.length, (i) {
-      return NoteLink(
-        id: maps[i]['id'] as String,
-        sourceNoteId: maps[i]['sourceNoteId'] as String,
-        targetNoteId: maps[i]['targetNoteId'] as String,
-        themeId: maps[i]['themeId'] as String?,
-        linkType: LinkType.values[maps[i]['linkType'] as int],
-        createdAt:
-            DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt'] as int),
-        description: maps[i]['description'] as String?,
-      );
-    });
-  }
-
-  Future<int> updateNoteLink(NoteLink link) async {
-    final db = await database;
-
-    return await db.update(
-      'note_links',
-      {
-        'sourceNoteId': link.sourceNoteId,
-        'targetNoteId': link.targetNoteId,
-        'themeId': link.themeId,
-        'linkType': link.linkType.index,
-        'description': link.description,
-      },
-      where: 'id = ?',
-      whereArgs: [link.id],
-    );
-  }
-
-  Future<int> deleteNoteLink(String id) async {
+    Future<int> deleteNoteLink(String id) async {
     final db = await database;
 
     return await db.delete(
