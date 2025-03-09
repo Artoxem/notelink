@@ -277,14 +277,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                     ),
                   ),
                 const PopupMenuItem<String>(
-                  value: 'link',
-                  child: ListTile(
-                    leading: Icon(Icons.link),
-                    title: Text('Управление связями'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                const PopupMenuItem<String>(
                   value: 'share',
                   child: ListTile(
                     leading: Icon(Icons.share),

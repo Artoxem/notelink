@@ -1189,15 +1189,7 @@ class _NotesScreenState extends State<NotesScreen>
                     }
                   },
                 ),
-              ListTile(
-                leading: const Icon(Icons.link, color: AppColors.accentPrimary),
-                title: const Text('Связи и ссылки'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Здесь будет логика отображения и управления связями
-                  // TODO: Реализовать экран управления связями
-                },
-              ),
+
               ListTile(
                 leading: Icon(
                   note.isFavorite ? Icons.star : Icons.star_border,
