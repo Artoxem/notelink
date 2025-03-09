@@ -13,11 +13,14 @@ import 'package:flutter_markdown/flutter_markdown.dart'; // Добавлен и�
 class NoteDetailScreen extends StatefulWidget {
   final Note? note; // Null если создаем новую заметку
   final DateTime? initialDate; // Начальная дата, если пришли из календаря
+  final bool
+      isEditMode; // Добавляем параметр для начального режима редактирования
 
   const NoteDetailScreen({
     super.key,
     this.note,
     this.initialDate,
+    this.isEditMode = false, // По умолчанию режим просмотра
   });
 
   @override
@@ -124,7 +127,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       _selectedThemeIds = List.from(widget.note!.themeIds);
       _emoji = widget.note!.emoji;
       _isEditing = true;
-      _isEditMode = false;
+
+      // Используем переданный параметр для определения начального режима
+      _isEditMode = widget.isEditMode;
+
+      // Если нужен режим редактирования, сразу устанавливаем состояние анимации
+      if (_isEditMode) {
+        _modeTransitionController.value = 1.0; // Анимация в конечном состоянии
+      }
     } else {
       // Создание новой заметки - сразу включаем режим редактирования
       _isEditMode = true;
@@ -147,36 +157,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         _isPreviewMode = _selectedTabIndex == 1;
       });
     });
-
-    if (widget.note != null) {
-      // Редактирование существующей заметки
-      _contentController.text = widget.note!.content;
-      _hasDeadline = widget.note!.hasDeadline;
-      _deadlineDate = widget.note!.deadlineDate;
-      _hasDateLink = widget.note!.hasDateLink;
-      _linkedDate = widget.note!.linkedDate;
-      _selectedThemeIds = List.from(widget.note!.themeIds);
-      _emoji = widget.note!.emoji;
-      _isEditing = true;
-      // Начинаем в режиме просмотра для существующих заметок
-      _isEditMode = false;
-    } else {
-      // Создание новой заметки - сразу включаем режим редактирования
-      _isEditMode = true;
-      _modeTransitionController.value = 1.0; // Анимация в конечном состоянии
-
-      // Если пришли из календаря, автоматически привязываем к выбранной дате
-      if (widget.initialDate != null) {
-        _hasDateLink = true;
-        _linkedDate = widget.initialDate;
-
-        // Не устанавливаем дедлайн автоматически
-      } else {
-        // Иначе привязываем к текущей дате
-        _hasDateLink = true;
-        _linkedDate = DateTime.now();
-      }
-    }
 
     // Слушаем изменения фокуса
     _focusNode.addListener(_handleFocusChange);
@@ -1059,6 +1039,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+
+              if (widget.note != null) {
+                final notesProvider =
+                    Provider.of<NotesProvider>(context, listen: false);
+
+                try {
+                  await notesProvider.deleteNote(widget.note!.id);
+
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Заметка удалена')),
+                    );
+                    Navigator.pop(context); // Возвращаемся на предыдущий экран
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text('Ошибка удаления: ${e.toString()}')),
+                    );
+                  }
+                }
+              }
             },
             child: const Text(
               'Удалить',
