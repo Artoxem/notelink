@@ -92,9 +92,21 @@ class DatabaseService {
         await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_notes_deadlineDate ON notes(deadlineDate);');
       }
+      // Добавляем поддержку для голосовых заметок, если обновляемся до версии 3
+      if (oldVersion < 3) {
+        // Проверяем, есть ли уже колонка voiceNotes
+        var tableInfo = await db.rawQuery("PRAGMA table_info(notes)");
+        bool hasVoiceNotes =
+            tableInfo.any((column) => column['name'] == 'voiceNotes');
+
+        if (!hasVoiceNotes) {
+          await db.execute(
+              "ALTER TABLE notes ADD COLUMN voiceNotes TEXT DEFAULT '[]'");
+        }
+      }
     } catch (e) {
       print('Ошибка обновления базы данных: $e');
-      rethrow; // Прокидываем ошибку дальше для обработки
+      rethrow;
     }
   }
 

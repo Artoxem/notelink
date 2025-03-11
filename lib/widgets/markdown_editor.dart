@@ -1,3 +1,4 @@
+// lib/widgets/markdown_editor.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -5,6 +6,9 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../utils/constants.dart';
+import '../services/voice_note_recorder.dart';
+import '../widgets/voice_record_button.dart';
+import '../widgets/voice_note_player.dart';
 
 class MarkdownEditor extends StatefulWidget {
   final TextEditingController controller;
@@ -337,6 +341,31 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     }
   }
 
+  // Вставка голосовой заметки в текст
+  void _insertVoiceNote(String audioPath) {
+    final TextEditingValue value = widget.controller.value;
+    final int start = value.selection.baseOffset;
+
+    if (start < 0) return; // Защита от некорректных значений
+
+    // Формат вставки: ![voice](voice:id)
+    final String voiceMarkup = ' ![voice](voice:$audioPath) ';
+
+    // Вставляем метку голосового сообщения в текст
+    final String newText = value.text.replaceRange(start, start, voiceMarkup);
+
+    // Обновляем текст и позицию курсора
+    widget.controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + voiceMarkup.length),
+    );
+
+    // Вызываем колбэк, если он определен
+    if (widget.onChanged != null) {
+      widget.onChanged!(newText);
+    }
+  }
+
   // Вставка Markdown-синтаксиса
   void _insertMarkdown(String markdownSyntax, {bool surroundSelection = true}) {
     // Сохраняем текущую позицию и выделение
@@ -528,22 +557,11 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                                   // Расширитель для создания пространства между группами кнопок
                                   Expanded(child: Container()),
 
-                                  // Кнопка голосового сообщения (увеличенная, с привязкой к правому краю)
-                                  Transform.scale(
-                                    scale: 1.2,
-                                    child: IconButton(
-                                      icon: const Icon(Icons.mic),
-                                      tooltip: 'Быстрое голосовое',
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Голосовые записи будут доступны в следующей версии'),
-                                          ),
-                                        );
-                                      },
-                                    ),
+                                  // Кнопка голосовой записи
+                                  VoiceRecordButton(
+                                    onRecordComplete: (audioPath) {
+                                      _insertVoiceNote(audioPath);
+                                    },
                                   ),
                                 ],
                               ),
@@ -632,80 +650,266 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                   ),
                 ),
               )
-            : MarkdownBody(
-                data: widget.controller.text,
-                selectable: true,
-                styleSheet: MarkdownStyleSheet(
-                  h1: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textOnLight,
-                  ),
-                  h2: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textOnLight,
-                  ),
-                  h3: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textOnLight,
-                  ),
-                  p: TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textOnLight,
-                  ),
-                  listBullet: TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textOnLight,
-                  ),
-                  listIndent: 20.0,
-                  a: TextStyle(
+            : _buildMarkdownWithVoiceNotes(widget.controller.text),
+      ),
+    );
+  }
+
+  // Метод для отображения markdown с голосовыми сообщениями
+  Widget _buildMarkdownWithVoiceNotes(String content) {
+    // Проверяем наличие голосовых сообщений в тексте
+    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:([^)]+)\)');
+    final matches = voiceRegex.allMatches(content);
+
+    if (matches.isEmpty) {
+      // Если голосовых сообщений нет, просто отображаем markdown
+      return MarkdownBody(
+        data: content,
+        selectable: true,
+        styleSheet: MarkdownStyleSheet(
+          h1: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          h2: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          h3: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          p: TextStyle(
+            fontSize: 16,
+            color: AppColors.textOnLight,
+          ),
+          listBullet: TextStyle(
+            fontSize: 16,
+            color: AppColors.textOnLight,
+          ),
+          listIndent: 20.0,
+          a: TextStyle(
+            color: AppColors.accentPrimary,
+            decoration: TextDecoration.underline,
+          ),
+          em: TextStyle(
+            fontStyle: FontStyle.italic,
+            color: AppColors.textOnLight,
+          ),
+          strong: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          blockquoteDecoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: AppColors.accentPrimary,
+                width: 4,
+              ),
+            ),
+            color: AppColors.accentPrimary.withOpacity(0.1),
+          ),
+          blockquote: TextStyle(
+            fontStyle: FontStyle.italic,
+            color: AppColors.textOnLight.withOpacity(0.8),
+          ),
+          code: TextStyle(
+            fontFamily: 'monospace',
+            backgroundColor: AppColors.secondary.withOpacity(0.2),
+            color: AppColors.textOnLight,
+          ),
+          codeblockDecoration: BoxDecoration(
+            color: AppColors.secondary.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: AppColors.secondary.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+        ),
+        onTapLink: (text, href, title) {
+          if (href != null) {
+            launchUrl(Uri.parse(href));
+          }
+        },
+      );
+    }
+
+    // Если голосовые сообщения есть, создаем комбинированный виджет
+    List<Widget> contentWidgets = [];
+    int lastEnd = 0;
+
+    for (final match in matches) {
+      // Текст до голосового сообщения
+      if (match.start > lastEnd) {
+        final textBefore = content.substring(lastEnd, match.start);
+        contentWidgets.add(
+          MarkdownBody(
+            data: textBefore,
+            selectable: true,
+            styleSheet: MarkdownStyleSheet(
+              h1: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              h2: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              h3: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              p: TextStyle(
+                fontSize: 16,
+                color: AppColors.textOnLight,
+              ),
+              listBullet: TextStyle(
+                fontSize: 16,
+                color: AppColors.textOnLight,
+              ),
+              listIndent: 20.0,
+              a: TextStyle(
+                color: AppColors.accentPrimary,
+                decoration: TextDecoration.underline,
+              ),
+              em: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: AppColors.textOnLight,
+              ),
+              strong: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              blockquoteDecoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
                     color: AppColors.accentPrimary,
-                    decoration: TextDecoration.underline,
-                  ),
-                  em: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.textOnLight,
-                  ),
-                  strong: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textOnLight,
-                  ),
-                  blockquoteDecoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: AppColors.accentPrimary,
-                        width: 4,
-                      ),
-                    ),
-                    color: AppColors.accentPrimary.withOpacity(0.1),
-                  ),
-                  blockquote: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.textOnLight.withOpacity(0.8),
-                  ),
-                  code: TextStyle(
-                    fontFamily: 'monospace',
-                    backgroundColor: AppColors.secondary.withOpacity(0.2),
-                    color: AppColors.textOnLight,
-                  ),
-                  codeblockDecoration: BoxDecoration(
-                    color: AppColors.secondary.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: AppColors.secondary.withOpacity(0.3),
-                      width: 1,
-                    ),
+                    width: 4,
                   ),
                 ),
-                onTapLink: (text, href, title) {
-                  if (href != null) {
-                    launchUrl(Uri.parse(href));
-                  }
-                },
+                color: AppColors.accentPrimary.withOpacity(0.1),
               ),
-      ),
+              blockquote: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: AppColors.textOnLight.withOpacity(0.8),
+              ),
+              code: TextStyle(
+                fontFamily: 'monospace',
+                backgroundColor: AppColors.secondary.withOpacity(0.2),
+                color: AppColors.textOnLight,
+              ),
+              codeblockDecoration: BoxDecoration(
+                color: AppColors.secondary.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: AppColors.secondary.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Добавляем виджет голосового сообщения
+      final voiceNoteId = match.group(1);
+      if (voiceNoteId != null) {
+        contentWidgets.add(
+          VoiceNotePlayer(
+            audioPath: voiceNoteId,
+            maxWidth: 280,
+          ),
+        );
+      }
+
+      lastEnd = match.end;
+    }
+
+    // Добавляем оставшийся текст
+    if (lastEnd < content.length) {
+      final textAfter = content.substring(lastEnd);
+      contentWidgets.add(
+        MarkdownBody(
+          data: textAfter,
+          selectable: true,
+          styleSheet: MarkdownStyleSheet(
+            h1: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            h2: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            h3: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            p: TextStyle(
+              fontSize: 16,
+              color: AppColors.textOnLight,
+            ),
+            listBullet: TextStyle(
+              fontSize: 16,
+              color: AppColors.textOnLight,
+            ),
+            listIndent: 20.0,
+            a: TextStyle(
+              color: AppColors.accentPrimary,
+              decoration: TextDecoration.underline,
+            ),
+            em: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppColors.textOnLight,
+            ),
+            strong: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            blockquoteDecoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: AppColors.accentPrimary,
+                  width: 4,
+                ),
+              ),
+              color: AppColors.accentPrimary.withOpacity(0.1),
+            ),
+            blockquote: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppColors.textOnLight.withOpacity(0.8),
+            ),
+            code: TextStyle(
+              fontFamily: 'monospace',
+              backgroundColor: AppColors.secondary.withOpacity(0.2),
+              color: AppColors.textOnLight,
+            ),
+            codeblockDecoration: BoxDecoration(
+              color: AppColors.secondary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: AppColors.secondary.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: contentWidgets,
     );
   }
 }

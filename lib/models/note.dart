@@ -17,6 +17,7 @@ class Note {
   String? reminderSound;
   List<DeadlineExtension>? deadlineExtensions;
   bool isFavorite;
+  List<String> voiceNotes; // Новое поле для голосовых заметок
 
   Note({
     required this.id,
@@ -29,12 +30,13 @@ class Note {
     required this.hasDateLink,
     this.linkedDate,
     required this.isCompleted,
-    this.isFavorite = false, // Новый параметр с значением по умолчанию
+    this.isFavorite = false,
     required this.mediaUrls,
     this.emoji,
     this.reminderDates,
     this.reminderSound,
     this.deadlineExtensions,
+    this.voiceNotes = const [], // Значение по умолчанию - пустой список
   });
 
   bool get isQuickNote => !hasDeadline && !hasDateLink;
@@ -46,6 +48,8 @@ class Note {
       url.endsWith('.mp3') || url.endsWith('.wav') || url.endsWith('.m4a'));
   bool get hasFiles => mediaUrls.any((url) =>
       url.endsWith('.pdf') || url.endsWith('.doc') || url.endsWith('.txt'));
+  // Новый хелпер для проверки наличия голосовых заметок
+  bool get hasVoiceNotes => voiceNotes.isNotEmpty;
 
   // Хелпер для получения "заголовка" из контента - первые несколько слов
   String get previewText {
@@ -74,6 +78,7 @@ class Note {
     List<DateTime>? reminderDates,
     String? reminderSound,
     List<DeadlineExtension>? deadlineExtensions,
+    List<String>? voiceNotes,
   }) {
     return Note(
       id: id ?? this.id,
@@ -92,6 +97,7 @@ class Note {
       reminderDates: reminderDates ?? this.reminderDates,
       reminderSound: reminderSound ?? this.reminderSound,
       deadlineExtensions: deadlineExtensions ?? this.deadlineExtensions,
+      voiceNotes: voiceNotes ?? this.voiceNotes,
     );
   }
 
@@ -114,13 +120,14 @@ class Note {
           reminderDates?.map((x) => x.millisecondsSinceEpoch).toList(),
       'reminderSound': reminderSound,
       'deadlineExtensions': deadlineExtensions?.map((x) => x.toMap()).toList(),
+      'voiceNotes':
+          json.encode(voiceNotes), // Добавляем сериализацию голосовых заметок
     };
   }
 
   factory Note.fromMap(Map<String, dynamic> map) {
     return Note(
       id: map['id'],
-      isFavorite: map['isFavorite'] == 1,
       content: map['content'],
       themeIds: List<String>.from(map['themeIds']),
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
@@ -134,6 +141,7 @@ class Note {
           ? DateTime.fromMillisecondsSinceEpoch(map['linkedDate'])
           : null,
       isCompleted: map['isCompleted'] == 1,
+      isFavorite: map['isFavorite'] == 1,
       mediaUrls: List<String>.from(json.decode(map['mediaUrls'])),
       emoji: map['emoji'],
       reminderDates: map['reminderDates'] != null
@@ -145,6 +153,10 @@ class Note {
           ? List<DeadlineExtension>.from(map['deadlineExtensions']
               .map((x) => DeadlineExtension.fromMap(x)))
           : null,
+      // Добавляем десериализацию голосовых заметок
+      voiceNotes: map['voiceNotes'] != null
+          ? List<String>.from(json.decode(map['voiceNotes']))
+          : [],
     );
   }
 
