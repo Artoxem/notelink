@@ -1,8 +1,8 @@
-// lib/widgets/voice_record_button.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/voice_note_recorder.dart';
 import '../utils/constants.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class VoiceRecordButton extends StatefulWidget {
   final Function(String audioPath) onRecordComplete;
@@ -22,6 +22,7 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
     with SingleTickerProviderStateMixin {
   final VoiceNoteRecorder _recorder = VoiceNoteRecorder();
   bool _isRecording = false;
+  bool _isInitialized = false;
   double _currentAmplitude = 0.0;
   StreamSubscription<double>? _amplitudeSubscription;
   late AnimationController _pulseController;
@@ -34,6 +35,16 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
       vsync: this,
       duration: const Duration(milliseconds: 500),
     )..repeat(reverse: true);
+
+    // Проверка разрешений при инициализации
+    _checkPermission();
+  }
+
+  Future<void> _checkPermission() async {
+    final initialized = await _recorder.initialize();
+    setState(() {
+      _isInitialized = initialized;
+    });
   }
 
   @override
@@ -45,26 +56,59 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
   }
 
   void _startRecording() async {
+    // Если инициализация не выполнена или в процессе записи, выходим
+    if (!_isInitialized || _isRecording) return;
+
+    // Проверяем разрешения ещё раз
+    final status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      if (mounted) {
+        // Показываем диалог с объяснением, почему нам нужен доступ к микрофону
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+                'Для записи голосовых заметок необходим доступ к микрофону'),
+            action: SnackBarAction(
+              label: 'Настройки',
+              onPressed: () {
+                openAppSettings();
+              },
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     final started = await _recorder.startRecording();
 
-    if (started) {
+    if (started && mounted) {
       setState(() {
         _isRecording = true;
       });
 
       // Слушаем изменения амплитуды
       _amplitudeSubscription = _recorder.amplitudeStream?.listen((amplitude) {
-        setState(() {
-          _currentAmplitude = amplitude;
-        });
+        if (mounted) {
+          setState(() {
+            _currentAmplitude = amplitude;
+          });
+        }
       });
 
       // Показываем индикатор записи
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Запись голосового сообщения..."),
+          content: Text("Идет запись голосового сообщения..."),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 1),
+          duration: Duration(seconds: 60), // Длительный срок
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Не удалось начать запись"),
+          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -75,41 +119,60 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
 
     final audioPath = await _recorder.stopRecording();
     _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
 
-    setState(() {
-      _isRecording = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+      });
 
-    if (audioPath != null) {
-      widget.onRecordComplete(audioPath);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      if (audioPath != null) {
+        widget.onRecordComplete(audioPath);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Голосовое сообщение записано"),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Ошибка при записи голосового сообщения"),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
-
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Голосовое сообщение записано"),
-        duration: Duration(seconds: 1),
-      ),
-    );
   }
 
-  void _cancelRecording() {
+  void _cancelRecording() async {
     if (!_isRecording) return;
 
-    _recorder.cancelRecording();
+    await _recorder.cancelRecording();
     _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
 
-    setState(() {
-      _isRecording = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+      });
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Запись отменена"),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onLongPress: _startRecording,
+      onLongPress: _isInitialized ? _startRecording : _checkPermission,
       onLongPressEnd: (_) => _stopRecording(),
       onLongPressCancel: _cancelRecording,
       child: AnimatedBuilder(

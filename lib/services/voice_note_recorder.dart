@@ -1,24 +1,30 @@
-// lib/services/voice_note_recorder.dart
 import 'dart:async';
-import 'dart:math';
-import 'package:flutter/material.dart';
-import '../utils/constants.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
+import 'dart:io';
+import 'package:path/path.dart' as path;
 
 class VoiceNoteRecorder {
+  final _audioRecorder = AudioRecorder();
   bool _isRecording = false;
   String? _currentRecordingPath;
   StreamController<double>? _amplitudeStreamController;
   Timer? _amplitudeTimer;
-  final Random _random = Random();
 
   bool get isRecording => _isRecording;
   Stream<double>? get amplitudeStream => _amplitudeStreamController?.stream;
 
-  // Инициализация (имитация запроса разрешений)
+  // Инициализация и запрос разрешений
   Future<bool> initialize() async {
-    // Имитируем запрос разрешений и всегда возвращаем true
-    await Future.delayed(const Duration(milliseconds: 300));
-    return true;
+    try {
+      // Запрашиваем разрешение на использование микрофона
+      final status = await Permission.microphone.request();
+      return status.isGranted;
+    } catch (e) {
+      print('Ошибка при запросе разрешений: $e');
+      return false;
+    }
   }
 
   // Начало записи
@@ -33,17 +39,41 @@ class VoiceNoteRecorder {
         return false;
       }
 
-      // Генерируем имитацию пути к файлу
-      _currentRecordingPath =
+      // Создаем директорию для хранения аудиозаписей, если её нет
+      final directory = await getApplicationDocumentsDirectory();
+      final audioDir = Directory('${directory.path}/voice_notes');
+      if (!await audioDir.exists()) {
+        await audioDir.create(recursive: true);
+      }
+
+      // Генерируем имя файла на основе текущего времени
+      final fileName =
           'voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      _currentRecordingPath = path.join(audioDir.path, fileName);
 
-      _isRecording = true;
+      // Проверка значения перед передачей
+      if (_currentRecordingPath != null) {
+        // Настраиваем запись
+        await _audioRecorder.start(
+          RecordConfig(
+            encoder: AudioEncoder.aacLc,
+            bitRate: 128000,
+            sampleRate: 44100,
+          ),
+          path:
+              _currentRecordingPath!, // Используем ! для утверждения ненулевого значения
+        );
 
-      // Настраиваем поток для анимации уровня звука
-      _amplitudeStreamController = StreamController<double>();
-      _startAmplitudeListener();
+        // Настраиваем поток для анимации уровня звука
+        _amplitudeStreamController = StreamController<double>();
+        _startAmplitudeListener();
 
-      return true;
+        _isRecording = true;
+        return true;
+      } else {
+        print('Ошибка: путь к файлу не определен');
+        return false;
+      }
     } catch (e) {
       print('Ошибка при начале записи: $e');
       return false;
@@ -64,11 +94,13 @@ class VoiceNoteRecorder {
       await _amplitudeStreamController?.close();
       _amplitudeStreamController = null;
 
-      final String? recordingPath = _currentRecordingPath;
+      // Останавливаем запись
+      final path = await _audioRecorder.stop();
+      final String? recordingPath = path;
       _currentRecordingPath = null;
       _isRecording = false;
 
-      // Возвращаем имитацию пути к файлу
+      // Возвращаем путь к файлу
       return recordingPath;
     } catch (e) {
       print('Ошибка при остановке записи: $e');
@@ -85,9 +117,18 @@ class VoiceNoteRecorder {
 
     try {
       _amplitudeTimer?.cancel();
-
       await _amplitudeStreamController?.close();
       _amplitudeStreamController = null;
+
+      await _audioRecorder.stop();
+
+      // Удаляем файл, если он был создан
+      if (_currentRecordingPath != null) {
+        final file = File(_currentRecordingPath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
 
       _currentRecordingPath = null;
       _isRecording = false;
@@ -106,8 +147,8 @@ class VoiceNoteRecorder {
       }
 
       try {
-        // Генерируем случайный уровень амплитуды
-        final double level = 0.2 + 0.8 * _random.nextDouble();
+        final amplitude = await _audioRecorder.getAmplitude();
+        final double level = amplitude.current / 100; // Нормализация значения
         _amplitudeStreamController?.add(level.clamp(0.0, 1.0));
       } catch (e) {
         // Игнорируем ошибки
@@ -121,5 +162,6 @@ class VoiceNoteRecorder {
     _amplitudeTimer?.cancel();
     await _amplitudeStreamController?.close();
     _amplitudeStreamController = null;
+    _audioRecorder.dispose();
   }
 }
