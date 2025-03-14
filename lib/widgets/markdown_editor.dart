@@ -9,6 +9,7 @@ import '../utils/constants.dart';
 import '../services/voice_note_recorder.dart';
 import '../widgets/voice_record_button.dart';
 import '../widgets/voice_note_player.dart';
+import '../services/media_service.dart';
 
 class MarkdownEditor extends StatefulWidget {
   final TextEditingController controller;
@@ -18,6 +19,7 @@ class MarkdownEditor extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final bool readOnly;
   final double? height;
+  final Function(String mediaPath)? onMediaAdded;
 
   const MarkdownEditor({
     Key? key,
@@ -28,6 +30,7 @@ class MarkdownEditor extends StatefulWidget {
     this.onChanged,
     this.readOnly = false,
     this.height,
+    this.onMediaAdded, // Добавить сюда
   }) : super(key: key);
 
   @override
@@ -39,6 +42,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   late FocusNode _focusNode;
   bool _isPreviewMode = false;
   bool _isFocusMode = false;
+  bool _isLoading = false;
   late TabController _tabController;
   int _selectedTabIndex = 0;
 
@@ -97,6 +101,81 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     _focusModeController.dispose();
     _removeOverlay();
     super.dispose();
+  }
+
+  void _showImagePickerOptions(BuildContext context) {
+    // Предотвращаем множественные вызовы
+    if (_isLoading) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.camera_alt,
+                    color: AppColors.accentPrimary),
+                title: const Text('Сделать фото'),
+                onTap: () async {
+                  // Закрываем модальное окно перед началом операции
+                  Navigator.pop(context);
+
+                  final MediaService mediaService = MediaService();
+                  final imagePath = await mediaService.pickImageFromCamera();
+
+                  // Проверяем, что виджет все еще монтирован
+                  if (imagePath != null &&
+                      widget.onMediaAdded != null &&
+                      mounted) {
+                    widget.onMediaAdded!(imagePath);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library,
+                    color: AppColors.accentPrimary),
+                title: const Text('Выбрать из галереи'),
+                onTap: () async {
+                  // Закрываем модальное окно перед началом операции
+                  Navigator.pop(context);
+
+                  final MediaService mediaService = MediaService();
+                  final imagePath = await mediaService.pickImageFromGallery();
+
+                  // Проверяем, что виджет все еще монтирован
+                  if (imagePath != null &&
+                      widget.onMediaAdded != null &&
+                      mounted) {
+                    widget.onMediaAdded!(imagePath);
+                  }
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Отмена'),
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _pickFile() async {
+    // Предотвращаем множественные вызовы
+    if (_isLoading) return;
+
+    final MediaService mediaService = MediaService();
+    final filePath = await mediaService.pickFile();
+
+    // Проверяем, что виджет все еще монтирован
+    if (filePath != null && widget.onMediaAdded != null && mounted) {
+      widget.onMediaAdded!(filePath);
+    }
   }
 
   void _checkTextSelection() {
@@ -513,31 +592,21 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                               padding: const EdgeInsets.all(8.0),
                               child: Row(
                                 children: [
-                                  // Кнопки с привязкой к левому краю
+                                  // Кнопка для прикрепления изображения
                                   IconButton(
                                     icon: const Icon(Icons.image),
                                     tooltip: 'Прикрепить изображение',
                                     onPressed: () {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Добавление изображений будет доступно в следующей версии'),
-                                        ),
-                                      );
+                                      _showImagePickerOptions(context);
                                     },
                                   ),
+
+                                  // Кнопка для прикрепления файла
                                   IconButton(
                                     icon: const Icon(Icons.attach_file),
                                     tooltip: 'Прикрепить файл',
                                     onPressed: () {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Прикрепление файлов будет доступно в следующей версии'),
-                                        ),
-                                      );
+                                      _pickFile();
                                     },
                                   ),
                                   IconButton(

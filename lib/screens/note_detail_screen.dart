@@ -1,4 +1,3 @@
-// lib/screens/note_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/note.dart';
@@ -10,6 +9,8 @@ import 'package:intl/intl.dart';
 import '../providers/themes_provider.dart';
 import '../widgets/markdown_editor.dart';
 import '../widgets/voice_note_player.dart';
+import '../widgets/media_attachment_widget.dart'; // Новый импорт
+import '../services/media_service.dart'; // Новый импорт
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -46,6 +47,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   bool _isEditMode = false;
   bool _isContentChanged = false;
   bool _isFocusMode = false;
+  List<String> _mediaFiles = []; // Новое поле для медиафайлов
 
   // Для перехода между режимами
   late AnimationController _modeTransitionController;
@@ -129,6 +131,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
       _selectedThemeIds = List.from(widget.note!.themeIds);
       _emoji = widget.note!.emoji;
+
+      // Загружаем медиафайлы
+      _mediaFiles = List.from(widget.note!.mediaUrls);
+
       _isEditing = true;
 
       // Используем переданный параметр для определения начального режима
@@ -149,6 +155,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       // Автоматически привязываем к выбранной или текущей дате
       _hasDateLink = true;
       _linkedDate = widget.initialDate ?? DateTime.now();
+
+      // Инициализируем пустой список для медиафайлов
+      _mediaFiles = [];
 
       // Не устанавливаем дедлайн автоматически
     }
@@ -196,6 +205,84 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       _focusNode.removeListener(_handleFocusChange);
     }
     super.dispose();
+  }
+
+  // Добавляем метод для выбора медиафайлов
+  void _pickMedia(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.camera_alt,
+                    color: AppColors.accentPrimary),
+                title: const Text('Сделать фото'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final MediaService mediaService = MediaService();
+                  final imagePath = await mediaService.pickImageFromCamera();
+                  if (imagePath != null && mounted) {
+                    setState(() {
+                      _mediaFiles.add(imagePath);
+                      _isSettingsChanged = true;
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library,
+                    color: AppColors.accentPrimary),
+                title: const Text('Выбрать из галереи'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final MediaService mediaService = MediaService();
+                  final imagePath = await mediaService.pickImageFromGallery();
+                  if (imagePath != null && mounted) {
+                    setState(() {
+                      _mediaFiles.add(imagePath);
+                      _isSettingsChanged = true;
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.attach_file,
+                    color: AppColors.accentPrimary),
+                title: const Text('Прикрепить файл'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final MediaService mediaService = MediaService();
+                  final filePath = await mediaService.pickFile();
+                  if (filePath != null && mounted) {
+                    setState(() {
+                      _mediaFiles.add(filePath);
+                      _isSettingsChanged = true;
+                    });
+                  }
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Отмена'),
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Метод для удаления медиафайла
+  void _removeMedia(int index) {
+    setState(() {
+      _mediaFiles.removeAt(index);
+      _isSettingsChanged = true;
+    });
   }
 
   @override
@@ -304,7 +391,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
-  // Построение режима просмотра
+  // Построение режима просмотра с добавлением медиафайлов
   Widget _buildViewMode() {
     final bool enableMarkdown =
         Provider.of<AppProvider>(context).enableMarkdownFormatting;
@@ -396,270 +483,100 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               _contentController.text,
               style: AppTextStyles.bodyMediumLight,
             ),
+
+          // Отображение медиафайлов в режиме просмотра
+          if (_mediaFiles.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Прикрепленные файлы:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _mediaFiles.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      return MediaAttachmentWidget(
+                        mediaPath: _mediaFiles[index],
+                        onRemove: () {}, // В режиме просмотра кнопка не видна
+                        isEditing: false,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 
-  // Метод для отображения markdown с голосовыми сообщениями
-  Widget _buildMarkdownWithVoiceNotes(String content) {
-    // Проверяем наличие голосовых сообщений в тексте
-    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:([^)]+)\)');
-    final matches = voiceRegex.allMatches(content);
-
-    if (matches.isEmpty) {
-      // Если голосовых сообщений нет, просто отображаем markdown
-      return MarkdownBody(
-        data: content,
-        selectable: true,
-        styleSheet: MarkdownStyleSheet(
-          h1: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textOnLight,
-          ),
-          h2: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textOnLight,
-          ),
-          h3: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textOnLight,
-          ),
-          p: TextStyle(
-            fontSize: 16,
-            color: AppColors.textOnLight,
-          ),
-          listBullet: TextStyle(
-            fontSize: 16,
-            color: AppColors.textOnLight,
-          ),
-          listIndent: 20.0,
-          a: TextStyle(
-            color: AppColors.accentPrimary,
-            decoration: TextDecoration.underline,
-          ),
-          em: TextStyle(
-            fontStyle: FontStyle.italic,
-            color: AppColors.textOnLight,
-          ),
-          strong: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppColors.textOnLight,
-          ),
-          blockquoteDecoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                color: AppColors.accentPrimary,
-                width: 4,
-              ),
-            ),
-            color: AppColors.accentPrimary.withOpacity(0.1),
-          ),
-          blockquote: TextStyle(
-            fontStyle: FontStyle.italic,
-            color: AppColors.textOnLight.withOpacity(0.8),
-          ),
-          code: TextStyle(
-            fontFamily: 'monospace',
-            backgroundColor: AppColors.secondary.withOpacity(0.2),
-            color: AppColors.textOnLight,
-          ),
-          codeblockDecoration: BoxDecoration(
-            color: AppColors.secondary.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: AppColors.secondary.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-        ),
-        onTapLink: (text, href, title) {
-          if (href != null) {
-            launchUrl(Uri.parse(href));
-          }
-        },
-      );
-    }
-
-    // Если голосовые сообщения есть, создаем комбинированный виджет
-    List<Widget> contentWidgets = [];
-    int lastEnd = 0;
-
-    for (final match in matches) {
-      // Текст до голосового сообщения
-      if (match.start > lastEnd) {
-        final textBefore = content.substring(lastEnd, match.start);
-        contentWidgets.add(
-          MarkdownBody(
-            data: textBefore,
-            selectable: true,
-            styleSheet: MarkdownStyleSheet(
-              h1: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textOnLight,
-              ),
-              h2: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textOnLight,
-              ),
-              h3: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textOnLight,
-              ),
-              p: TextStyle(
-                fontSize: 16,
-                color: AppColors.textOnLight,
-              ),
-              listBullet: TextStyle(
-                fontSize: 16,
-                color: AppColors.textOnLight,
-              ),
-              listIndent: 20.0,
-              a: TextStyle(
-                color: AppColors.accentPrimary,
-                decoration: TextDecoration.underline,
-              ),
-              em: TextStyle(
-                fontStyle: FontStyle.italic,
-                color: AppColors.textOnLight,
-              ),
-              strong: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textOnLight,
-              ),
-              blockquoteDecoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(
-                    color: AppColors.accentPrimary,
-                    width: 4,
-                  ),
-                ),
-                color: AppColors.accentPrimary.withOpacity(0.1),
-              ),
-              blockquote: TextStyle(
-                fontStyle: FontStyle.italic,
-                color: AppColors.textOnLight.withOpacity(0.8),
-              ),
-              code: TextStyle(
-                fontFamily: 'monospace',
-                backgroundColor: AppColors.secondary.withOpacity(0.2),
-                color: AppColors.textOnLight,
-              ),
-              codeblockDecoration: BoxDecoration(
-                color: AppColors.secondary.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: AppColors.secondary.withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-
-      // Добавляем виджет голосового сообщения
-      final voiceNoteId = match.group(1);
-      if (voiceNoteId != null) {
-        contentWidgets.add(
-          VoiceNotePlayer(
-            audioPath: voiceNoteId,
-            maxWidth: 280,
-          ),
-        );
-      }
-
-      lastEnd = match.end;
-    }
-
-    // Добавляем оставшийся текст
-    if (lastEnd < content.length) {
-      final textAfter = content.substring(lastEnd);
-      contentWidgets.add(
-        MarkdownBody(
-          data: textAfter,
-          selectable: true,
-          styleSheet: MarkdownStyleSheet(
-            h1: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textOnLight,
-            ),
-            h2: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textOnLight,
-            ),
-            h3: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textOnLight,
-            ),
-            p: TextStyle(
-              fontSize: 16,
-              color: AppColors.textOnLight,
-            ),
-            listBullet: TextStyle(
-              fontSize: 16,
-              color: AppColors.textOnLight,
-            ),
-            listIndent: 20.0,
-            a: TextStyle(
-              color: AppColors.accentPrimary,
-              decoration: TextDecoration.underline,
-            ),
-            em: TextStyle(
-              fontStyle: FontStyle.italic,
-              color: AppColors.textOnLight,
-            ),
-            strong: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.textOnLight,
-            ),
-            blockquoteDecoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: AppColors.accentPrimary,
-                  width: 4,
-                ),
-              ),
-              color: AppColors.accentPrimary.withOpacity(0.1),
-            ),
-            blockquote: TextStyle(
-              fontStyle: FontStyle.italic,
-              color: AppColors.textOnLight.withOpacity(0.8),
-            ),
-            code: TextStyle(
-              fontFamily: 'monospace',
-              backgroundColor: AppColors.secondary.withOpacity(0.2),
-              color: AppColors.textOnLight,
-            ),
-            codeblockDecoration: BoxDecoration(
-              color: AppColors.secondary.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: AppColors.secondary.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
+  // Создаем виджет для раздела медиафайлов
+  Widget _buildMediaSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: contentWidgets,
+      children: [
+        // Заголовок и кнопка добавления медиафайлов
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Прикрепленные файлы:',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_photo_alternate),
+              onPressed: () => _pickMedia(context),
+              tooltip: 'Добавить медиафайл',
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Список прикрепленных медиафайлов
+        if (_mediaFiles.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text(
+              'Нет прикрепленных файлов',
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _mediaFiles.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              return MediaAttachmentWidget(
+                mediaPath: _mediaFiles[index],
+                onRemove: () => _removeMedia(index),
+                isEditing: _isEditMode,
+              );
+            },
+          ),
+      ],
     );
   }
 
-  // Построение режима редактирования
+  // Построение режима редактирования с добавлением медиафайлов
   Widget _buildEditMode() {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -680,6 +597,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               autofocus: false,
             ),
           ),
+
+          // Раздел с медиафайлами
+          const SizedBox(height: 16),
+          _buildMediaSection(),
 
           // Нижняя панель с настройками заметки в двух колонках
           Container(
@@ -997,6 +918,264 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     }
   }
 
+  // Метод для отображения markdown с голосовыми сообщениями
+  Widget _buildMarkdownWithVoiceNotes(String content) {
+    // Проверяем наличие голосовых сообщений в тексте
+    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:([^)]+)\)');
+    final matches = voiceRegex.allMatches(content);
+
+    if (matches.isEmpty) {
+      // Если голосовых сообщений нет, просто отображаем markdown
+      return MarkdownBody(
+        data: content,
+        selectable: true,
+        styleSheet: MarkdownStyleSheet(
+          h1: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          h2: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          h3: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          p: TextStyle(
+            fontSize: 16,
+            color: AppColors.textOnLight,
+          ),
+          listBullet: TextStyle(
+            fontSize: 16,
+            color: AppColors.textOnLight,
+          ),
+          listIndent: 20.0,
+          a: TextStyle(
+            color: AppColors.accentPrimary,
+            decoration: TextDecoration.underline,
+          ),
+          em: TextStyle(
+            fontStyle: FontStyle.italic,
+            color: AppColors.textOnLight,
+          ),
+          strong: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textOnLight,
+          ),
+          blockquoteDecoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: AppColors.accentPrimary,
+                width: 4,
+              ),
+            ),
+            color: AppColors.accentPrimary.withOpacity(0.1),
+          ),
+          blockquote: TextStyle(
+            fontStyle: FontStyle.italic,
+            color: AppColors.textOnLight.withOpacity(0.8),
+          ),
+          code: TextStyle(
+            fontFamily: 'monospace',
+            backgroundColor: AppColors.secondary.withOpacity(0.2),
+            color: AppColors.textOnLight,
+          ),
+          codeblockDecoration: BoxDecoration(
+            color: AppColors.secondary.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: AppColors.secondary.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+        ),
+        onTapLink: (text, href, title) {
+          if (href != null) {
+            launchUrl(Uri.parse(href));
+          }
+        },
+      );
+    }
+
+    // Если голосовые сообщения есть, создаем комбинированный виджет
+    List<Widget> contentWidgets = [];
+    int lastEnd = 0;
+
+    for (final match in matches) {
+      // Текст до голосового сообщения
+      if (match.start > lastEnd) {
+        final textBefore = content.substring(lastEnd, match.start);
+        contentWidgets.add(
+          MarkdownBody(
+            data: textBefore,
+            selectable: true,
+            styleSheet: MarkdownStyleSheet(
+              h1: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              h2: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              h3: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              p: TextStyle(
+                fontSize: 16,
+                color: AppColors.textOnLight,
+              ),
+              listBullet: TextStyle(
+                fontSize: 16,
+                color: AppColors.textOnLight,
+              ),
+              listIndent: 20.0,
+              a: TextStyle(
+                color: AppColors.accentPrimary,
+                decoration: TextDecoration.underline,
+              ),
+              em: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: AppColors.textOnLight,
+              ),
+              strong: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+              blockquoteDecoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: AppColors.accentPrimary,
+                    width: 4,
+                  ),
+                ),
+                color: AppColors.accentPrimary.withOpacity(0.1),
+              ),
+              blockquote: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: AppColors.textOnLight.withOpacity(0.8),
+              ),
+              code: TextStyle(
+                fontFamily: 'monospace',
+                backgroundColor: AppColors.secondary.withOpacity(0.2),
+                color: AppColors.textOnLight,
+              ),
+              codeblockDecoration: BoxDecoration(
+                color: AppColors.secondary.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: AppColors.secondary.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Добавляем виджет голосового сообщения
+      final voiceNoteId = match.group(1);
+      if (voiceNoteId != null) {
+        contentWidgets.add(
+          VoiceNotePlayer(
+            audioPath: voiceNoteId,
+            maxWidth: 280,
+          ),
+        );
+      }
+
+      lastEnd = match.end;
+    }
+
+    // Добавляем оставшийся текст
+    if (lastEnd < content.length) {
+      final textAfter = content.substring(lastEnd);
+      contentWidgets.add(
+        MarkdownBody(
+          data: textAfter,
+          selectable: true,
+          styleSheet: MarkdownStyleSheet(
+            h1: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            h2: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            h3: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            p: TextStyle(
+              fontSize: 16,
+              color: AppColors.textOnLight,
+            ),
+            listBullet: TextStyle(
+              fontSize: 16,
+              color: AppColors.textOnLight,
+            ),
+            listIndent: 20.0,
+            a: TextStyle(
+              color: AppColors.accentPrimary,
+              decoration: TextDecoration.underline,
+            ),
+            em: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppColors.textOnLight,
+            ),
+            strong: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textOnLight,
+            ),
+            blockquoteDecoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: AppColors.accentPrimary,
+                  width: 4,
+                ),
+              ),
+              color: AppColors.accentPrimary.withOpacity(0.1),
+            ),
+            blockquote: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppColors.textOnLight.withOpacity(0.8),
+            ),
+            code: TextStyle(
+              fontFamily: 'monospace',
+              backgroundColor: AppColors.secondary.withOpacity(0.2),
+              color: AppColors.textOnLight,
+            ),
+            codeblockDecoration: BoxDecoration(
+              color: AppColors.secondary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: AppColors.secondary.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: contentWidgets,
+    );
+  }
+
   // Переключение между режимами просмотра и редактирования
   void _toggleEditMode() {
     setState(() {
@@ -1048,6 +1227,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               _linkedDate = widget.note!.linkedDate;
               _selectedThemeIds = List.from(widget.note!.themeIds);
               _emoji = widget.note!.emoji;
+              _mediaFiles = List.from(
+                  widget.note!.mediaUrls); // Сбрасываем список медиафайлов
             }
 
             _isContentChanged = false;
@@ -1151,6 +1332,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           hasDateLink: true,
           linkedDate: _linkedDate ?? DateTime.now(),
           emoji: _emoji,
+          mediaUrls: _mediaFiles, // Добавляем медиафайлы в обновленную заметку
         );
 
         await notesProvider.updateNote(updatedNote);
@@ -1182,6 +1364,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           hasDateLink: true,
           linkedDate: _linkedDate ?? DateTime.now(),
           emoji: _emoji,
+          mediaUrls: _mediaFiles, // Добавляем медиафайлы в новую заметку
         );
 
         // После создания новой заметки закрываем экран создания

@@ -29,6 +29,12 @@
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>
+	<key>NSCameraUsageDescription</key>
+    <string>Для съемки фото и прикрепления их к заметкам</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Для выбора изображений и прикрепления их к заметкам</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Для записи голосовых заметок</string>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
