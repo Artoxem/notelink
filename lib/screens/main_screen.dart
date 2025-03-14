@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
-// Убираем неиспользуемый импорт
 import '../utils/constants.dart';
 import 'notes_screen.dart';
 import 'calendar_screen.dart';
@@ -19,7 +18,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
-  int _currentIndex = 0;
+  // Изменяем стартовый индекс на 2 (экран с темами)
+  int _currentIndex = 2;
   late AnimationController _fabAnimationController;
   late Animation<double> _fabScaleAnimation;
   late Animation<double> _fabRotateAnimation;
@@ -124,7 +124,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         ],
       ),
       body: IndexedStack(
-        key: const ValueKey('main_screen_stack'), // Добавляем постоянный ключ
+        key: const ValueKey('main_screen_stack'),
         index: _currentIndex,
         children: _screens,
       ),
@@ -172,7 +172,6 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
       floatingActionButton: _currentIndex != 1
           ? MouseRegion(
-              // Не показываем FAB для экрана календаря (индекс 1)
               onEnter: (_) => _fabAnimationController.forward(),
               onExit: (_) => _fabAnimationController.reverse(),
               child: GestureDetector(
@@ -239,8 +238,6 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       ),
     );
   }
-
-  // Удаляем неиспользуемый метод
 
   void _showAddThemeDialog() {
     ThemesScreen.showAddThemeDialog(context);
