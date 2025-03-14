@@ -174,10 +174,9 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
             // Название
             TextField(
               controller: _nameController,
-              autofocus: false, // Отключаем автофокус
+              autofocus: false,
               decoration: const InputDecoration(
-                labelText: 'Theme Name',
-                hintText: 'Enter theme name',
+                hintText: 'Введите название темы',
                 border: OutlineInputBorder(),
               ),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -188,8 +187,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
             TextField(
               controller: _descriptionController,
               decoration: const InputDecoration(
-                labelText: 'Description (Optional)',
-                hintText: 'Enter theme description',
+                hintText: 'Введите описание темы (необязательно)',
                 border: OutlineInputBorder(),
               ),
               maxLines: 2,
@@ -198,7 +196,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
 
             // Выбор цвета
             const Text(
-              'Theme Color:',
+              'Цвет темы:',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -246,75 +244,19 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Notes in Theme:',
+                        'Заметки в теме:',
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       TextButton.icon(
                         onPressed: _showAddNotesToThemeDialog,
                         icon: const Icon(Icons.add),
-                        label: const Text('Add Notes'),
+                        label: const Text('Добавить заметки'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (_themeNotes.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Center(
-                        child: Text(
-                          'No notes in this theme yet',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontStyle: FontStyle.italic,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _themeNotes.length,
-                      itemBuilder: (context, index) {
-                        final note = _themeNotes[index];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            subtitle: Text(
-                              note.content,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            leading: CircleAvatar(
-                              backgroundColor: _selectedColor,
-                              child: const Icon(
-                                Icons.note,
-                                color: Colors.white,
-                              ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.remove_circle,
-                                  color: Colors.red),
-                              onPressed: () => _removeNoteFromTheme(note.id),
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      NoteDetailScreen(note: note),
-                                ),
-                              ).then((_) {
-                                // Перезагружаем заметки после возврата
-                                _loadNotes();
-                              });
-                            },
-                          ),
-                        );
-                      },
-                    ),
+                  _buildThemeNotesList(),
                 ],
               ),
 
@@ -324,7 +266,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Select Notes to Include:',
+                    'Выберите заметки для добавления:',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
@@ -333,7 +275,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                       padding: EdgeInsets.all(16.0),
                       child: Center(
                         child: Text(
-                          'No notes available',
+                          'Нет доступных заметок',
                           style: TextStyle(
                             fontSize: 16,
                             fontStyle: FontStyle.italic,
@@ -354,10 +296,22 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: CheckboxListTile(
-                            subtitle: Text(
-                              note.content,
+                            title: Text(
+                              _getNoteTitleFromContent(note.content),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textOnLight,
+                              ),
+                            ),
+                            subtitle: Text(
+                              _getNotePreviewFromContent(note.content),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppColors.textOnLight.withOpacity(0.8),
+                              ),
                             ),
                             value: isSelected,
                             secondary: CircleAvatar(
@@ -387,6 +341,267 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+// Метод для отображения списка заметок с поддержкой свайпов
+  Widget _buildThemeNotesList() {
+    return _themeNotes.isEmpty
+        ? const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(
+              child: Text(
+                'В этой теме пока нет заметок',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+          )
+        : ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _themeNotes.length,
+            itemBuilder: (context, index) {
+              final note = _themeNotes[index];
+              return _buildSwipeableNoteItem(note);
+            },
+          );
+  }
+
+// Метод для создания свайпабельной заметки
+  Widget _buildSwipeableNoteItem(Note note) {
+    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+    return Dismissible(
+      key: Key('theme_note_${note.id}'),
+      direction: DismissDirection.horizontal,
+
+      // Фон при свайпе вправо (добавление/удаление из избранного)
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20.0),
+        color: Colors.amber,
+        child: Icon(
+          note.isFavorite ? Icons.star_border : Icons.star,
+          color: Colors.white,
+        ),
+      ),
+
+      // Фон при свайпе влево (отвязка от темы)
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.blue,
+        child: const Icon(
+          Icons.link_off,
+          color: Colors.white,
+        ),
+      ),
+
+      // Обработка свайпов
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) {
+          // Свайп влево - отвязка заметки от темы
+          return await _showUnlinkConfirmation(note);
+        } else if (direction == DismissDirection.startToEnd) {
+          // Свайп вправо - добавление/удаление из избранного
+          await notesProvider.toggleFavorite(note.id);
+          // Перезагружаем заметки чтобы увидеть изменение
+          _loadNotes();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(note.isFavorite
+                  ? 'Заметка удалена из избранного'
+                  : 'Заметка добавлена в избранное'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          return false; // Не убираем карточку
+        }
+        return false;
+      },
+
+      // Действие при свайпе
+      onDismissed: (direction) {
+        if (direction == DismissDirection.endToStart) {
+          _removeNoteFromTheme(note.id);
+        }
+      },
+
+      // Сама карточка заметки
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: InkWell(
+          onLongPress: () => _showNoteOptionsMenu(note),
+          child: ListTile(
+            title: Text(
+              _getNoteTitleFromContent(note.content),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textOnLight,
+              ),
+            ),
+            subtitle: Text(
+              _getNotePreviewFromContent(note.content),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.textOnLight.withOpacity(0.8),
+              ),
+            ),
+            leading: CircleAvatar(
+              backgroundColor: _selectedColor,
+              child: const Icon(
+                Icons.note,
+                color: Colors.white,
+              ),
+            ),
+            trailing: note.isFavorite
+                ? const Icon(Icons.star, color: Colors.amber)
+                : null,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(note: note),
+                ),
+              ).then((_) {
+                // Перезагружаем заметки после возврата
+                _loadNotes();
+              });
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+// Диалог подтверждения отвязки заметки от темы
+  Future<bool> _showUnlinkConfirmation(Note note) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Отвязать заметку'),
+            content: const Text(
+              'Вы хотите отвязать эту заметку от текущей темы? '
+              'Заметка не будет удалена и останется доступна.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Отвязать'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+// Контекстное меню по долгому нажатию
+  void _showNoteOptionsMenu(Note note) {
+    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit, color: AppColors.accentSecondary),
+              title: const Text('Редактировать заметку'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => NoteDetailScreen(
+                      note: note,
+                      isEditMode: true,
+                    ),
+                  ),
+                ).then((_) => _loadNotes());
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                note.isFavorite ? Icons.star_border : Icons.star,
+                color: Colors.amber,
+              ),
+              title: Text(note.isFavorite
+                  ? 'Удалить из избранного'
+                  : 'Добавить в избранное'),
+              onTap: () async {
+                Navigator.pop(context);
+                await notesProvider.toggleFavorite(note.id);
+                _loadNotes();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.link_off, color: Colors.blue),
+              title: const Text('Отвязать от темы'),
+              onTap: () {
+                Navigator.pop(context);
+                _removeNoteFromTheme(note.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Удалить заметку',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteNoteConfirmation(note);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+// Диалог подтверждения удаления заметки
+  void _showDeleteNoteConfirmation(Note note) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить заметку'),
+        content: const Text(
+          'Вы уверены, что хотите удалить эту заметку? '
+          'Это действие нельзя будет отменить.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final notesProvider =
+                  Provider.of<NotesProvider>(context, listen: false);
+              await notesProvider.deleteNote(note.id);
+              _loadNotes();
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Заметка удалена')),
+                );
+              }
+            },
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
