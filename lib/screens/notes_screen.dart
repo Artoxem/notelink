@@ -508,6 +508,20 @@ class _NotesScreenState extends State<NotesScreen>
                   ),
                 ),
               ),
+
+            // Нижний индикатор (оставляем только его)
+            Positioned(
+              bottom: 10,
+              right: 10,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: indicatorColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
           ],
         ),
       ),

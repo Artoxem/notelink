@@ -222,10 +222,8 @@ class ThemesProvider with ChangeNotifier {
 
   // Получение заметок для темы с улучшенным кэшированием
   Future<List<Note>> getNotesForTheme(String themeId) async {
-    // Проверяем кэш первым делом
-    if (_notesForThemeCache.containsKey(themeId)) {
-      return _notesForThemeCache[themeId]!;
-    }
+    // Всегда очищаем кэш для этой темы перед запросом новых данных
+    _notesForThemeCache.remove(themeId);
 
     try {
       final notes = await _databaseService.getNotesForTheme(themeId);
@@ -244,17 +242,14 @@ class ThemesProvider with ChangeNotifier {
   void _invalidateNotesCache(List<String> noteIds) {
     if (noteIds.isEmpty) return;
 
-    // Проверяем каждую тему и инвалидируем кэш, если она содержит любую из заметок
-    for (final themeId in _notesForThemeCache.keys.toList()) {
-      // Получаем тему из кэша или локального списка
-      final themeIndex = _themes.indexWhere((t) => t.id == themeId);
-      if (themeIndex != -1) {
-        // Проверяем, есть ли пересечение noteIds темы с переданными noteIds
-        if (_themes[themeIndex].noteIds.any((id) => noteIds.contains(id))) {
-          _notesForThemeCache.remove(themeId);
-        }
-      }
-    }
+    // Полностью очищаем кэш заметок для обновления данных
+    _notesForThemeCache.clear();
+  }
+
+  // Полная очистка кэша заметок
+  void clearNotesCache() {
+    _notesForThemeCache.clear();
+    notifyListeners();
   }
 
   // Получение всех тем для заметки
