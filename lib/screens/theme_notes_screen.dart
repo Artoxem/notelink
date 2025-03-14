@@ -6,6 +6,7 @@ import '../providers/themes_provider.dart';
 import '../providers/notes_provider.dart';
 import '../utils/constants.dart';
 import 'note_detail_screen.dart';
+import 'theme_detail_screen.dart';
 import '../utils/note_status_utils.dart';
 import 'package:intl/intl.dart';
 
@@ -53,6 +54,39 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
     }
   }
 
+  // Метод для создания новой заметки, привязанной к теме
+  void _createNoteInTheme() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NoteDetailScreen(
+          initialThemeIds: [
+            widget.theme.id
+          ], // Автоматически привязываем к теме
+        ),
+      ),
+    ).then((_) {
+      // После возврата обновляем список заметок
+      _loadNotes();
+    });
+  }
+
+  // Метод для редактирования темы
+  void _editTheme() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ThemeDetailScreen(
+          theme: widget.theme,
+          isEditMode: true, // Сразу переходим в режим редактирования
+        ),
+      ),
+    ).then((_) {
+      // После возврата обновляем данные
+      _loadNotes();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Парсим цвет темы
@@ -69,6 +103,12 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
         backgroundColor: themeColor.withOpacity(0.9),
         foregroundColor: Colors.white,
         actions: [
+          // Кнопка редактирования темы
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: _editTheme,
+            tooltip: 'Редактировать тему',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadNotes,
@@ -91,6 +131,13 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                     },
                   ),
                 ),
+      // Добавляем кнопку создания заметки
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: themeColor,
+        onPressed: _createNoteInTheme,
+        tooltip: 'Создать заметку',
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 
@@ -115,6 +162,12 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
             'Создайте заметку и добавьте её в эту тему',
             style: TextStyle(fontSize: 16),
             textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _createNoteInTheme,
+            icon: const Icon(Icons.add),
+            label: const Text('Создать заметку'),
           ),
         ],
       ),

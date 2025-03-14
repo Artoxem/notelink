@@ -17,14 +17,16 @@ import 'package:url_launcher/url_launcher.dart';
 class NoteDetailScreen extends StatefulWidget {
   final Note? note; // Null если создаем новую заметку
   final DateTime? initialDate; // Начальная дата, если пришли из календаря
-  final bool
-      isEditMode; // Добавляем параметр для начального режима редактирования
+  final bool isEditMode; // Параметр для начального режима редактирования
+  final List<String>?
+      initialThemeIds; // Добавлен новый параметр для автоматической привязки к теме
 
   const NoteDetailScreen({
     super.key,
     this.note,
     this.initialDate,
     this.isEditMode = false, // По умолчанию режим просмотра
+    this.initialThemeIds, // Новый параметр
   });
 
   @override
@@ -158,6 +160,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
       // Инициализируем пустой список для медиафайлов
       _mediaFiles = [];
+
+      // Инициализируем темы, если они переданы
+      if (widget.initialThemeIds != null &&
+          widget.initialThemeIds!.isNotEmpty) {
+        _selectedThemeIds = List.from(widget.initialThemeIds!);
+        _isSettingsChanged = true; // Отмечаем, что настройки изменены
+      }
 
       // Не устанавливаем дедлайн автоматически
     }
