@@ -1,4 +1,5 @@
 // lib/widgets/markdown_editor.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -30,7 +31,7 @@ class MarkdownEditor extends StatefulWidget {
     this.onChanged,
     this.readOnly = false,
     this.height,
-    this.onMediaAdded, // Добавить сюда
+    this.onMediaAdded,
   }) : super(key: key);
 
   @override
@@ -45,11 +46,8 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   bool _isLoading = false;
   late TabController _tabController;
   int _selectedTabIndex = 0;
-
-  // Для контекстного меню
-  final LayerLink _layerLink = LayerLink();
-  OverlayEntry? _overlayEntry;
-  bool _isTextSelected = false;
+  bool _showFormattingToolbar =
+      true; // По умолчанию отображаем панель форматирования
 
   // Контроллер анимации для режима фокусировки
   late AnimationController _focusModeController;
@@ -60,9 +58,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     super.initState();
     _focusNode = widget.focusNode ?? FocusNode();
     _tabController = TabController(length: 2, vsync: this);
-
-    // Добавляем слушатель изменений для контроллера текста
-    widget.controller.addListener(_checkTextSelection);
 
     // Инициализация контроллера анимации
     _focusModeController = AnimationController(
@@ -80,9 +75,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
       setState(() {
         _selectedTabIndex = _tabController.index;
         _isPreviewMode = _selectedTabIndex == 1;
-
-        // Скрываем контекстное меню при переключении вкладок
-        _removeOverlay();
       });
     });
 
@@ -96,10 +88,8 @@ class _MarkdownEditorState extends State<MarkdownEditor>
       _focusNode.dispose();
     }
     _focusNode.removeListener(_handleFocusChange);
-    widget.controller.removeListener(_checkTextSelection);
     _tabController.dispose();
     _focusModeController.dispose();
-    _removeOverlay();
     super.dispose();
   }
 
@@ -178,214 +168,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     }
   }
 
-  void _checkTextSelection() {
-    // Проверяем, есть ли выделенный текст
-    final selection = widget.controller.selection;
-    if (!selection.isValid || selection.baseOffset == selection.extentOffset) {
-      return;
-    }
-
-    final hasSelection = selection.baseOffset != selection.extentOffset;
-
-    if (hasSelection && !_isPreviewMode) {
-      _showSelectionOverlay();
-      setState(() {
-        _isTextSelected = true;
-      });
-    } else {
-      _removeOverlay();
-      setState(() {
-        _isTextSelected = false;
-      });
-    }
-  }
-
-  void _showSelectionOverlay() {
-    // Сначала удаляем старое, если оно есть
-    _removeOverlay();
-
-    // Создаем новое всплывающее меню
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        width: 220, // Фиксированная ширина для меню
-        child: CompositedTransformFollower(
-          link: _layerLink,
-          showWhenUnlinked: false,
-          offset: const Offset(0, 30), // Показываем меню ниже текста
-          child: Material(
-            elevation: 4.0,
-            borderRadius: BorderRadius.circular(8),
-            color: AppColors.cardBackground,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      // Текстовое форматирование
-                      _buildFormatButton(
-                        icon: Icons.format_bold,
-                        tooltip: 'Жирный',
-                        onPressed: () =>
-                            _formatSelectedText(MarkdownSyntax.bold),
-                      ),
-                      _buildFormatButton(
-                        icon: Icons.format_italic,
-                        tooltip: 'Курсив',
-                        onPressed: () =>
-                            _formatSelectedText(MarkdownSyntax.italic),
-                      ),
-                      _buildFormatButton(
-                        icon: Icons.format_list_bulleted,
-                        tooltip: 'Маркированный список',
-                        onPressed: () =>
-                            _formatSelectedText(MarkdownSyntax.bulletList),
-                      ),
-                      _buildFormatButton(
-                        icon: Icons.format_list_numbered,
-                        tooltip: 'Нумерованный список',
-                        onPressed: () =>
-                            _formatSelectedText(MarkdownSyntax.numberedList),
-                      ),
-                      _buildFormatButton(
-                        icon: Icons.format_quote,
-                        tooltip: 'Цитата',
-                        onPressed: () =>
-                            _formatSelectedText(MarkdownSyntax.quote),
-                      ),
-                      _buildFormatButton(
-                        icon: Icons.code,
-                        tooltip: 'Код',
-                        onPressed: () =>
-                            _formatSelectedText(MarkdownSyntax.inlineCode),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                // Кнопки для копирования и вырезания
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8.0, vertical: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.content_cut, size: 20),
-                        tooltip: 'Вырезать',
-                        onPressed: () {
-                          final selection = widget.controller.selection;
-                          if (selection.isValid &&
-                              selection.baseOffset != selection.extentOffset) {
-                            final text = widget.controller.text;
-                            final selectedText = text.substring(
-                                selection.baseOffset, selection.extentOffset);
-                            Clipboard.setData(
-                                ClipboardData(text: selectedText));
-
-                            final newText = text.replaceRange(
-                                selection.baseOffset,
-                                selection.extentOffset,
-                                '');
-                            widget.controller.value = TextEditingValue(
-                              text: newText,
-                              selection: TextSelection.collapsed(
-                                  offset: selection.baseOffset),
-                            );
-
-                            if (widget.onChanged != null) {
-                              widget.onChanged!(newText);
-                            }
-
-                            _removeOverlay();
-                          }
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.content_copy, size: 20),
-                        tooltip: 'Копировать',
-                        onPressed: () {
-                          final selection = widget.controller.selection;
-                          if (selection.isValid &&
-                              selection.baseOffset != selection.extentOffset) {
-                            final text = widget.controller.text;
-                            final selectedText = text.substring(
-                                selection.baseOffset, selection.extentOffset);
-                            Clipboard.setData(
-                                ClipboardData(text: selectedText));
-                            _removeOverlay();
-                          }
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.select_all, size: 20),
-                        tooltip: 'Выделить всё',
-                        onPressed: () {
-                          widget.controller.selection = TextSelection(
-                            baseOffset: 0,
-                            extentOffset: widget.controller.text.length,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    // Добавляем меню в наложение
-    Overlay.of(context)?.insert(_overlayEntry!);
-  }
-
-  // Удалить контекстное меню
-  void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-  }
-
-  // Кнопки форматирования для контекстного меню
-  Widget _buildFormatButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: () {
-          onPressed();
-          _removeOverlay();
-        },
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          child: Icon(
-            icon,
-            size: 20,
-            color: AppColors.textOnDark,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Форматирование выделенного текста
-  void _formatSelectedText(String markdownSyntax) {
-    final selection = widget.controller.selection;
-    if (!selection.isValid || selection.baseOffset == selection.extentOffset)
-      return;
-
-    _insertMarkdown(markdownSyntax, surroundSelection: true);
-  }
-
   void _handleFocusChange() {
     final appProvider = Provider.of<AppProvider>(context, listen: false);
 
@@ -394,11 +176,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
       _setFocusMode(true);
     } else {
       _setFocusMode(false);
-    }
-
-    // Если теряем фокус, скрываем контекстное меню
-    if (!_focusNode.hasFocus) {
-      _removeOverlay();
     }
   }
 
@@ -517,6 +294,45 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     }
   }
 
+  // Переключение отображения панели форматирования
+  void _toggleFormattingToolbar() {
+    setState(() {
+      _showFormattingToolbar = !_showFormattingToolbar;
+    });
+  }
+
+  // Методы для копирования и вырезания текста
+  void _cutSelectedText() {
+    final selection = widget.controller.selection;
+    if (selection.isValid && selection.baseOffset != selection.extentOffset) {
+      final text = widget.controller.text;
+      final selectedText =
+          text.substring(selection.baseOffset, selection.extentOffset);
+      Clipboard.setData(ClipboardData(text: selectedText));
+
+      final newText =
+          text.replaceRange(selection.baseOffset, selection.extentOffset, '');
+      widget.controller.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: selection.baseOffset),
+      );
+
+      if (widget.onChanged != null) {
+        widget.onChanged!(newText);
+      }
+    }
+  }
+
+  void _copySelectedText() {
+    final selection = widget.controller.selection;
+    if (selection.isValid && selection.baseOffset != selection.extentOffset) {
+      final text = widget.controller.text;
+      final selectedText =
+          text.substring(selection.baseOffset, selection.extentOffset);
+      Clipboard.setData(ClipboardData(text: selectedText));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appProvider = Provider.of<AppProvider>(context);
@@ -609,18 +425,16 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                                       _pickFile();
                                     },
                                   ),
+
+                                  // Кнопка меню форматирования (теперь переключает панель форматирования)
                                   IconButton(
-                                    icon: const Icon(Icons.menu),
-                                    tooltip: 'Меню редактирования текста',
-                                    onPressed: () {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Меню редактирования будет доступно в следующей версии'),
-                                        ),
-                                      );
-                                    },
+                                    icon: Icon(_showFormattingToolbar
+                                        ? Icons.keyboard_arrow_down
+                                        : Icons.keyboard_arrow_up),
+                                    tooltip: _showFormattingToolbar
+                                        ? 'Скрыть панель форматирования'
+                                        : 'Показать панель форматирования',
+                                    onPressed: _toggleFormattingToolbar,
                                   ),
 
                                   // Расширитель для создания пространства между группами кнопок
@@ -664,6 +478,15 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                   ),
                 ],
               ),
+
+              // Панель форматирования, которая всегда отображается внизу экрана
+              if (!_isPreviewMode && markdownEnabled && _showFormattingToolbar)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildBottomFormattingToolbar(),
+                ),
             ],
           ),
         );
@@ -673,33 +496,24 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
   // Построение редактора
   Widget _buildEditor() {
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: TextField(
-          controller: widget.controller,
-          focusNode: _focusNode,
-          style: AppTextStyles.bodyMediumLight,
-          decoration: InputDecoration(
-            hintText: widget.placeholder ?? 'Введите текст...',
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
-          ),
-          keyboardType: TextInputType.multiline,
-          maxLines: null,
-          expands: true,
-          autofocus: widget.autofocus || _isFocusMode,
-          readOnly: widget.readOnly,
-          onChanged: widget.onChanged,
-          textCapitalization: TextCapitalization.sentences,
-          // Отключаем стандартное контекстное меню, чтобы использовать свое
-          enableInteractiveSelection: true,
-          contextMenuBuilder: (context, editableTextState) {
-            // Возвращаем пустой контейнер, чтобы отключить стандартное меню
-            return Container();
-          },
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: TextField(
+        controller: widget.controller,
+        focusNode: _focusNode,
+        style: AppTextStyles.bodyMediumLight,
+        decoration: InputDecoration(
+          hintText: widget.placeholder ?? 'Введите текст...',
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
         ),
+        keyboardType: TextInputType.multiline,
+        maxLines: null,
+        expands: true,
+        autofocus: widget.autofocus || _isFocusMode,
+        readOnly: widget.readOnly,
+        onChanged: widget.onChanged,
+        textCapitalization: TextCapitalization.sentences,
       ),
     );
   }
@@ -720,6 +534,103 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                 ),
               )
             : _buildMarkdownWithVoiceNotes(widget.controller.text),
+      ),
+    );
+  }
+
+  // Новая панель форматирования в нижней части экрана
+  Widget _buildBottomFormattingToolbar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(12),
+          topRight: Radius.circular(12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildToolbarButton(
+            icon: Icons.format_bold,
+            tooltip: 'Жирный',
+            onPressed: () => _insertMarkdown(MarkdownSyntax.bold),
+          ),
+          _buildToolbarButton(
+            icon: Icons.format_italic,
+            tooltip: 'Курсив',
+            onPressed: () => _insertMarkdown(MarkdownSyntax.italic),
+          ),
+          _buildToolbarButton(
+            icon: Icons.format_list_bulleted,
+            tooltip: 'Маркированный список',
+            onPressed: () => _insertMarkdown(MarkdownSyntax.bulletList),
+          ),
+          _buildToolbarButton(
+            icon: Icons.format_list_numbered,
+            tooltip: 'Нумерованный список',
+            onPressed: () => _insertMarkdown(MarkdownSyntax.numberedList),
+          ),
+          Container(
+              width: 1,
+              height: 24,
+              color: AppColors.secondary.withOpacity(0.3)),
+          _buildToolbarButton(
+            icon: Icons.format_quote,
+            tooltip: 'Цитата',
+            onPressed: () => _insertMarkdown(MarkdownSyntax.quote),
+          ),
+          _buildToolbarButton(
+            icon: Icons.code,
+            tooltip: 'Код',
+            onPressed: () => _insertMarkdown(MarkdownSyntax.inlineCode),
+          ),
+          Container(
+              width: 1,
+              height: 24,
+              color: AppColors.secondary.withOpacity(0.3)),
+          _buildToolbarButton(
+            icon: Icons.content_cut,
+            tooltip: 'Вырезать',
+            onPressed: _cutSelectedText,
+          ),
+          _buildToolbarButton(
+            icon: Icons.content_copy,
+            tooltip: 'Копировать',
+            onPressed: _copySelectedText,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Кнопка для панели инструментов форматирования
+  Widget _buildToolbarButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Icon(
+            icon,
+            size: 20,
+            color: AppColors.textOnLight,
+          ),
+        ),
       ),
     );
   }
