@@ -581,81 +581,57 @@ class _NotesScreenState extends State<NotesScreen>
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             // Левая часть: аватар и дата создания в одном ряду
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Дата с аватаром
+                                // Дата и дедлайн теперь в одной строке
                                 Row(
                                   children: [
-                                    CircleAvatar(
-                                      backgroundColor:
-                                          statusColor.withOpacity(0.8),
-                                      radius: 14,
-                                      child: note.emoji != null &&
-                                              note.emoji!.isNotEmpty
-                                          ? Text(
-                                              note.emoji!,
-                                              style:
-                                                  const TextStyle(fontSize: 12),
-                                            )
-                                          : Icon(
-                                              note.hasDeadline
-                                                  ? (note.isCompleted
-                                                      ? Icons.check_circle
-                                                      : Icons.timer)
-                                                  : Icons.note,
-                                              color: Colors.white,
-                                              size: 14,
-                                            ),
-                                    ),
-                                    const SizedBox(width: 8),
+                                    // Дата
                                     Text(
-                                      DateFormat('d MMMM yyyy, HH:mm')
+                                      DateFormat('d MMM yyyy')
                                           .format(note.createdAt),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textOnLight
-                                            .withOpacity(0.8),
-                                      ),
+                                      style: AppTextStyles.bodySmallLight,
                                     ),
+
+                                    // Дедлайн справа от даты
+                                    if (note.hasDeadline &&
+                                        note.deadlineDate != null)
+                                      Container(
+                                        margin: const EdgeInsets.only(
+                                            left: 8), // Отступ слева от даты
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color.fromRGBO(
+                                              255, 255, 7, 0.35),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              note.isCompleted
+                                                  ? Icons.check_circle
+                                                  : Icons.timer,
+                                              size: 12,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              note.isCompleted
+                                                  ? 'Выполнено'
+                                                  : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
+                                              style: AppTextStyles.deadlineText,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                   ],
                                 ),
-
-                                // Дедлайн под датой
-                                if (note.hasDeadline &&
-                                    note.deadlineDate != null)
-                                  Container(
-                                    margin: const EdgeInsets.only(
-                                        top: 4, left: 36), // Отступ от аватара
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color.fromRGBO(
-                                          255, 255, 7, 0.35),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          note.isCompleted
-                                              ? Icons.check_circle
-                                              : Icons.timer,
-                                          size: 12,
-                                          color: AppColors.textOnLight,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          note.isCompleted
-                                              ? 'Выполнено'
-                                              : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
-                                          style: AppTextStyles.deadlineText,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                               ],
                             ),
 
