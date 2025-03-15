@@ -64,6 +64,7 @@ class _NotesScreenState extends State<NotesScreen>
   final RegExp _italicRegex = RegExp(r'\*|_(?!\*)');
   final RegExp _linksRegex = RegExp(r'\[([^\]]+)\]\([^)]+\)');
   final RegExp _codeRegex = RegExp(r'`[^`]+`');
+  final RegExp _voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
 
   // Контролируем состояние загрузки
   bool _isRefreshing = false;
@@ -139,6 +140,11 @@ class _NotesScreenState extends State<NotesScreen>
     } catch (e) {
       return defaultColor;
     }
+  }
+
+  // Проверка наличия голосовых заметок
+  bool _hasVoiceNotes(String content) {
+    return _voiceRegex.hasMatch(content);
   }
 
   // Асинхронная загрузка данных с параллельными запросами
@@ -402,12 +408,57 @@ class _NotesScreenState extends State<NotesScreen>
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Дата
-                                Text(
-                                  DateFormat('d MMM yyyy')
-                                      .format(note.createdAt),
-                                  style: AppTextStyles.bodySmallLight,
+                                // Колонка для даты и дедлайна (выровнены по левому краю)
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Дата
+                                    Text(
+                                      DateFormat('d MMM yyyy')
+                                          .format(note.createdAt),
+                                      style: AppTextStyles.bodySmallLight,
+                                    ),
+
+                                    // ПЕРЕМЕЩЕННЫЙ блок с дедлайном с минимальным отступом
+                                    if (note.hasDeadline &&
+                                        note.deadlineDate != null)
+                                      Container(
+                                        margin: const EdgeInsets.only(
+                                            top:
+                                                4), // Минимальный отступ сверху
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color.fromRGBO(255, 255,
+                                              7, 0.35), // Новый цвет фона
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              note.isCompleted
+                                                  ? Icons.check_circle
+                                                  : Icons.timer,
+                                              size: 12,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              note.isCompleted
+                                                  ? 'Выполнено'
+                                                  : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
+                                              style: AppTextStyles.deadlineText,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
                                 ),
+
                                 // Кнопка меню
                                 InkWell(
                                   onTap: () => _showNoteOptions(note),
@@ -420,63 +471,26 @@ class _NotesScreenState extends State<NotesScreen>
                                 ),
                               ],
                             ),
+
                             const SizedBox(height: 8),
 
-                            // Содержимое заметки - увеличиваем maxLines с 2 до 5
+                            // Содержимое заметки
                             Expanded(
                               child: Text(
-                                _createPreviewFromMarkdown(note.content,
-                                    120), // Увеличиваем длину превью
-                                maxLines: 5, // Увеличиваем с 2 до 5
+                                _createPreviewFromMarkdown(note.content, 120),
+                                maxLines: 5,
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.bodySmallLight,
                               ),
                             ),
 
-                            // Перенесем индикаторы медиа и тем после текста
+                            // Индикаторы медиа и тем
                             if (note.mediaUrls.isNotEmpty ||
-                                note.themeIds.isNotEmpty)
+                                note.themeIds.isNotEmpty ||
+                                _hasVoiceNotes(note.content))
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: _buildNoteIndicators(note),
-                              ),
-
-                            // Переносим информацию о дедлайне в нижнюю часть
-                            if (note.hasDeadline && note.deadlineDate != null)
-                              Container(
-                                margin: const EdgeInsets.only(top: 8),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: note.isCompleted
-                                      ? AppColors.deadlineBgGray
-                                      : AppColors.deadlineBgGreen,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      note.isCompleted
-                                          ? Icons.check_circle
-                                          : Icons.timer,
-                                      size: 12,
-                                      color: AppColors.textOnLight,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: Text(
-                                        note.isCompleted
-                                            ? 'Выполнено'
-                                            : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
-                                        style: AppTextStyles.deadlineText,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
                               ),
                           ],
                         ),
@@ -508,20 +522,6 @@ class _NotesScreenState extends State<NotesScreen>
                   ),
                 ),
               ),
-
-            // Нижний индикатор (оставляем только его)
-            Positioned(
-              bottom: 10,
-              right: 10,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: indicatorColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -578,60 +578,88 @@ class _NotesScreenState extends State<NotesScreen>
                         // Верхняя часть с датами и меню
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment
-                              .center, // Выравниваем по центру
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             // Левая часть: аватар и дата создания в одном ряду
-                            Row(
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircleAvatar(
-                                  backgroundColor: statusColor.withOpacity(0.8),
-                                  radius:
-                                      14, // Немного уменьшаем размер аватара
-                                  child: note.emoji != null &&
-                                          note.emoji!.isNotEmpty
-                                      ? Text(
-                                          note.emoji!,
-                                          style: const TextStyle(fontSize: 12),
-                                        )
-                                      : Icon(
-                                          note.hasDeadline
-                                              ? (note.isCompleted
-                                                  ? Icons.check_circle
-                                                  : Icons.timer)
-                                              : Icons.note,
-                                          color: Colors.white,
-                                          size: 14,
+                                // Дата с аватаром
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor:
+                                          statusColor.withOpacity(0.8),
+                                      radius: 14,
+                                      child: note.emoji != null &&
+                                              note.emoji!.isNotEmpty
+                                          ? Text(
+                                              note.emoji!,
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                            )
+                                          : Icon(
+                                              note.hasDeadline
+                                                  ? (note.isCompleted
+                                                      ? Icons.check_circle
+                                                      : Icons.timer)
+                                                  : Icons.note,
+                                              color: Colors.white,
+                                              size: 14,
+                                            ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      DateFormat('d MMMM yyyy, HH:mm')
+                                          .format(note.createdAt),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textOnLight
+                                            .withOpacity(0.8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                // Дедлайн под датой
+                                if (note.hasDeadline &&
+                                    note.deadlineDate != null)
+                                  Container(
+                                    margin: const EdgeInsets.only(
+                                        top: 4, left: 36), // Отступ от аватара
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color.fromRGBO(
+                                          255, 255, 7, 0.35),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          note.isCompleted
+                                              ? Icons.check_circle
+                                              : Icons.timer,
+                                          size: 12,
+                                          color: AppColors.textOnLight,
                                         ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  DateFormat('d MMMM yyyy, HH:mm')
-                                      .format(note.createdAt),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color:
-                                        AppColors.textOnLight.withOpacity(0.8),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          note.isCompleted
+                                              ? 'Выполнено'
+                                              : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
+                                          style: AppTextStyles.deadlineText,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
 
-                            // Увеличиваем пространство между датами
-                            const Spacer(), // Добавляем гибкое пространство между датами
-
-                            // Дата дедлайна (если есть)
-                            if (note.hasDeadline && note.deadlineDate != null)
-                              Text(
-                                'Дедлайн: ${DateFormat('d MMMM yyyy').format(note.deadlineDate!)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.red,
-                                ),
-                              ),
-
-                            const SizedBox(width: 8), // Отступ перед меню
+                            const SizedBox(width: 8),
 
                             // Кнопка меню
                             InkWell(
@@ -649,7 +677,7 @@ class _NotesScreenState extends State<NotesScreen>
                         ),
 
                         // Убираем лишнее пространство и сразу переходим к контенту
-                        const SizedBox(height: 4), // Уменьшаем отступ
+                        const SizedBox(height: 4),
 
                         // Заголовок заметки (берем первую строку)
                         Text(
@@ -663,23 +691,53 @@ class _NotesScreenState extends State<NotesScreen>
                           overflow: TextOverflow.ellipsis,
                         ),
 
-                        const SizedBox(height: 2), // Минимальный отступ
+                        const SizedBox(height: 2),
 
                         // Содержимое заметки
                         Text(
-                          _createPreviewFromMarkdown(
-                              _getContentWithoutFirstLine(note.content), 200),
+                          _getContentWithoutFirstLine(note.content),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.bodyMediumLight,
                         ),
 
-                        // Темы заметки (в виде маленьких тегов)
-                        if (note.themeIds.isNotEmpty)
+                        // Индикаторы
+                        if (note.mediaUrls.isNotEmpty ||
+                            note.themeIds.isNotEmpty ||
+                            _hasVoiceNotes(note.content))
                           Padding(
-                            padding: const EdgeInsets.only(
-                                top: 6), // Уменьшаем отступ
-                            child: _buildThemeTags(note.themeIds),
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Row(
+                              children: [
+                                // Индикаторы медиа
+                                if (_hasVoiceNotes(note.content) ||
+                                    note.hasVoiceNotes ||
+                                    note.hasAudio)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Icon(Icons.mic,
+                                        size: 16, color: Colors.purple),
+                                  ),
+                                if (note.hasImages)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 8),
+                                    child: Icon(Icons.photo,
+                                        size: 16, color: AppColors.textOnLight),
+                                  ),
+                                if (note.hasFiles)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 8),
+                                    child: Icon(Icons.attach_file,
+                                        size: 16, color: AppColors.textOnLight),
+                                  ),
+
+                                const Spacer(),
+
+                                // Теги тем
+                                if (note.themeIds.isNotEmpty)
+                                  _buildThemeTags(note.themeIds),
+                              ],
+                            ),
                           ),
                       ],
                     ),
@@ -716,63 +774,51 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-// Вспомогательные методы для извлечения заголовка и содержимого
+  // Вспомогательные методы для извлечения заголовка и содержимого
   String _getFirstLine(String content) {
-    final firstLineEnd = content.indexOf('\n');
-    if (firstLineEnd == -1) return content;
-    return content
+    // Сначала удаляем голосовые метки
+    String cleanContent = content.replaceAll(_voiceRegex, '');
+
+    final firstLineEnd = cleanContent.indexOf('\n');
+    if (firstLineEnd == -1) return cleanContent;
+    return cleanContent
         .substring(0, firstLineEnd)
         .trim()
         .replaceAll(RegExp(r'^#+\s+'), '');
   }
 
   String _getContentWithoutFirstLine(String content) {
-    final firstLineEnd = content.indexOf('\n');
+    // Сначала удаляем голосовые метки
+    String cleanContent = content.replaceAll(_voiceRegex, '');
+
+    final firstLineEnd = cleanContent.indexOf('\n');
     if (firstLineEnd == -1) return '';
-    return content.substring(firstLineEnd + 1).trim();
+    return cleanContent.substring(firstLineEnd + 1).trim();
   }
 
-  // Выделенный виджет для отображения содержимого заметки с Markdown
-  Widget _buildNoteContent(Note note) {
-    return Consumer<AppProvider>(
-      builder: (context, appProvider, _) {
-        return appProvider.enableMarkdownFormatting
-            ? SizedBox(
-                height: 50,
-                child: MarkdownBody(
-                  data: note.content.length > 100
-                      ? note.content.substring(0, 100) + "..."
-                      : note.content,
-                  softLineBreak: true,
-                  selectable: false,
-                  shrinkWrap: true,
-                  styleSheet: MarkdownStyleSheet(
-                    p: AppTextStyles.bodySmallLight,
-                    h1: AppTextStyles.bodySmallLight.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    h2: AppTextStyles.bodySmallLight.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    strong: AppTextStyles.bodySmallLight.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    em: AppTextStyles.bodySmallLight.copyWith(
-                      fontStyle: FontStyle.italic,
-                    ),
-                    listBullet: AppTextStyles.bodySmallLight,
-                  ),
-                ),
-              )
-            : Text(
-                note.content,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.bodySmallLight,
-              );
-      },
+  // Построение индикаторов медиа
+  Widget _buildNoteIndicators(Note note) {
+    return Row(
+      children: [
+        if (_hasVoiceNotes(note.content) || note.hasVoiceNotes || note.hasAudio)
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.mic, size: 14, color: Colors.purple),
+          ),
+        if (note.hasImages)
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.photo, size: 14, color: AppColors.textOnLight),
+          ),
+        if (note.hasFiles)
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child:
+                Icon(Icons.attach_file, size: 14, color: AppColors.textOnLight),
+          ),
+        const Spacer(),
+        if (note.themeIds.isNotEmpty) _buildThemeIndicators(note.themeIds),
+      ],
     );
   }
 
@@ -789,6 +835,7 @@ class _NotesScreenState extends State<NotesScreen>
     return Dismissible(
       key: dismissKey,
       direction: DismissDirection.horizontal,
+
       // Фон для свайпа вправо (избранное)
       background: Container(
         alignment: Alignment.centerLeft,
@@ -849,7 +896,7 @@ class _NotesScreenState extends State<NotesScreen>
               setState(() {});
             }
 
-            return false; // Не убираем виджет после свайпа в избранное
+            return false; // Не убираем виджет после свайпа для избранного
           }
           return false;
         } catch (e) {
@@ -1134,14 +1181,19 @@ class _NotesScreenState extends State<NotesScreen>
         _codeRegex.hasMatch(markdown);
 
     if (!hasMarkdown) {
-      // Если разметки нет, просто обрезаем текст
-      return markdown.length > maxLength
-          ? '${markdown.substring(0, maxLength)}...'
-          : markdown;
+      // Если разметки нет, просто обрезаем текст,
+      // но сначала удаляем ссылки на голосовые заметки
+      String cleanText = markdown.replaceAll(_voiceRegex, '');
+      return cleanText.length > maxLength
+          ? '${cleanText.substring(0, maxLength)}...'
+          : cleanText;
     }
 
     // Последовательно удаляем разметку
     String text = markdown;
+
+    // Удаляем голосовые заметки полностью
+    text = text.replaceAll(_voiceRegex, '');
 
     // Заменяем ссылки их текстовым представлением
     text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
@@ -1217,6 +1269,7 @@ class _NotesScreenState extends State<NotesScreen>
   String _createComparisonText(String content) {
     return content
         .toLowerCase()
+        .replaceAll(_voiceRegex, '') // Удаляем голосовые метки
         .replaceAll(RegExp(r'[#*_`\[\]\(\)]+'), '') // Удаляем Markdown символы
         .replaceAll(RegExp(r'\s+'), ' ') // Нормализуем пробелы
         .trim();
@@ -1256,32 +1309,6 @@ class _NotesScreenState extends State<NotesScreen>
           ),
         ],
       ),
-    );
-  }
-
-  // Отображение индикаторов медиа и тем
-  Widget _buildNoteIndicators(Note note) {
-    return Row(
-      children: [
-        if (note.hasImages)
-          const Padding(
-            padding: EdgeInsets.only(right: 4),
-            child: Icon(Icons.photo, size: 14, color: AppColors.textOnLight),
-          ),
-        if (note.hasAudio)
-          const Padding(
-            padding: EdgeInsets.only(right: 4),
-            child: Icon(Icons.mic, size: 14, color: AppColors.textOnLight),
-          ),
-        if (note.hasFiles)
-          const Padding(
-            padding: EdgeInsets.only(right: 4),
-            child:
-                Icon(Icons.attach_file, size: 14, color: AppColors.textOnLight),
-          ),
-        const Spacer(),
-        if (note.themeIds.isNotEmpty) _buildThemeIndicators(note.themeIds),
-      ],
     );
   }
 

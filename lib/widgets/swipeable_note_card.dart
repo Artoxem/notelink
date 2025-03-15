@@ -34,182 +34,194 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
     // Определяем цвет бордюра в зависимости от статуса
     final borderColor = NoteStatusUtils.getNoteStatusColor(widget.note);
 
-    return Dismissible(
-      key: Key('note-${widget.note.id}'),
-      direction: DismissDirection.horizontal,
+    // Создаем константы для отступов и радиуса скругления для согласованности
+    const cardMargin = EdgeInsets.symmetric(vertical: 8, horizontal: 4);
+    const borderRadius =
+        BorderRadius.all(Radius.circular(AppDimens.cardBorderRadius));
 
-      // Фон при смахивании вправо (добавление в избранное)
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20.0),
-        color: Colors.amber,
-        child: const Icon(
-          Icons.star,
-          color: Colors.white,
+    // Используем Padding снаружи, чтобы сохранить пространство между карточками
+    return Padding(
+      padding: cardMargin,
+      child: Dismissible(
+        key: Key('note-${widget.note.id}'),
+        direction: DismissDirection.horizontal,
+
+        // Фон для свайпа вправо (избранное) - с тем же радиусом скругления
+        background: Container(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.only(left: 20.0),
+          decoration: const BoxDecoration(
+            color: Colors.amber,
+            borderRadius: borderRadius,
+          ),
+          child: const Icon(
+            Icons.star,
+            color: Colors.white,
+          ),
         ),
-      ),
 
-      // Фон при смахивании влево (удаление)
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20.0),
-        color: Colors.red,
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
+        // Фон для свайпа влево (удаление) - с тем же радиусом скругления
+        secondaryBackground: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20.0),
+          decoration: const BoxDecoration(
+            color: Colors.red,
+            borderRadius: borderRadius,
+          ),
+          child: const Icon(
+            Icons.delete,
+            color: Colors.white,
+          ),
         ),
-      ),
 
-      // Подтверждение перед действием
-      confirmDismiss: (DismissDirection direction) async {
-        if (direction == DismissDirection.endToStart) {
-          // Подтверждение удаления
-          return await showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('Удалить заметку'),
-                content:
-                    const Text('Вы уверены, что хотите удалить эту заметку?'),
-                actions: <Widget>[
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Отмена'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: const Text('Удалить',
-                        style: TextStyle(color: Colors.red)),
-                  ),
-                ],
-              );
-            },
-          );
-        } else if (direction == DismissDirection.startToEnd) {
-          // Добавление в избранное не требует подтверждения
-          if (widget.onFavorite != null) {
-            widget.onFavorite!();
-            // Устанавливаем флаг для показа анимации
-            setState(() {
-              _recentlyFavorited = true;
-            });
-            // Сбрасываем флаг через некоторое время
-            Future.delayed(const Duration(milliseconds: 1500), () {
-              if (mounted) {
-                setState(() {
-                  _recentlyFavorited = false;
-                });
-              }
-            });
+        // Подтверждение действия при свайпе
+        confirmDismiss: (direction) async {
+          if (direction == DismissDirection.endToStart) {
+            // Свайп влево - удаление
+            return await showDialog(
+              context: context,
+              builder: (BuildContext context) {
+                return AlertDialog(
+                  title: const Text('Удалить заметку'),
+                  content:
+                      const Text('Вы уверены, что хотите удалить эту заметку?'),
+                  actions: <Widget>[
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Отмена'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Удалить',
+                          style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                );
+              },
+            );
+          } else if (direction == DismissDirection.startToEnd) {
+            // Свайп вправо - добавление в избранное
+            if (widget.onFavorite != null) {
+              widget.onFavorite!();
+              // Устанавливаем флаг для показа анимации
+              setState(() {
+                _recentlyFavorited = true;
+              });
+              // Сбрасываем флаг через некоторое время
+              Future.delayed(const Duration(milliseconds: 1500), () {
+                if (mounted) {
+                  setState(() {
+                    _recentlyFavorited = false;
+                  });
+                }
+              });
+            }
+            return false; // Не убираем карточку после свайпа для избранного
           }
-          return false; // Не убираем карточку после свайпа для избранного
-        }
-        return false;
-      },
+          return false;
+        },
 
-      // Действие при успешном свайпе
-      onDismissed: (direction) {
-        if (direction == DismissDirection.endToStart &&
-            widget.onDelete != null) {
-          widget.onDelete!();
-        }
-      },
+        // Действие при успешном свайпе
+        onDismissed: (direction) {
+          if (direction == DismissDirection.endToStart &&
+              widget.onDelete != null) {
+            widget.onDelete!();
+          }
+        },
 
-      // Основной контент карточки
-      child: Stack(
-        children: [
-          _buildNoteCard(borderColor),
+        // Основной контент карточки - без внешних отступов
+        child: Stack(
+          children: [
+            Card(
+              // Важно! Убираем отступы у самой карточки
+              margin: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: borderRadius,
+                side: BorderSide(
+                  color: borderColor,
+                  width: 2,
+                ),
+              ),
+              elevation: AppDimens.cardElevation,
+              child: InkWell(
+                onTap: () => _openNoteDetails(widget.note),
+                borderRadius: borderRadius,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Верхняя часть с датой
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            DateFormat('d MMMM yyyy')
+                                .format(widget.note.createdAt),
+                            style: AppTextStyles.bodySmall,
+                          ),
+                          if (widget.note.hasDeadline &&
+                              widget.note.deadlineDate != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: borderColor.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                widget.note.isCompleted
+                                    ? 'Выполнено'
+                                    : 'до ${DateFormat('d MMM').format(widget.note.deadlineDate!)}',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: borderColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
 
-          // Анимированная звездочка при добавлении в избранное
-          if (_recentlyFavorited || widget.note.isFavorite)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: AnimatedOpacity(
-                opacity: _recentlyFavorited
-                    ? 1.0
-                    : (widget.note.isFavorite ? 0.8 : 0.0),
-                duration: const Duration(milliseconds: 300),
-                child: Icon(
-                  Icons.star,
-                  color: Colors.amber,
-                  size: _recentlyFavorited ? 36 : 24,
+                      // Содержимое заметки
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          widget.note.content,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodyMedium,
+                        ),
+                      ),
+
+                      // Темы заметки
+                      if (widget.note.themeIds.isNotEmpty)
+                        _buildThemeTags(widget.note.themeIds),
+                    ],
+                  ),
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
 
-  // Построение карточки заметки
-  Widget _buildNoteCard(Color borderColor) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-        side: BorderSide(
-          color: borderColor,
-          width: 2,
-        ),
-      ),
-      elevation: AppDimens.cardElevation,
-      child: InkWell(
-        onTap: () => _openNoteDetails(widget.note),
-        borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Верхняя часть с датой
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    DateFormat('d MMMM yyyy').format(widget.note.createdAt),
-                    style: AppTextStyles.bodySmall,
+            // Анимированная звездочка при добавлении в избранное
+            if (_recentlyFavorited || widget.note.isFavorite)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: AnimatedOpacity(
+                  opacity: _recentlyFavorited
+                      ? 1.0
+                      : (widget.note.isFavorite ? 0.8 : 0.0),
+                  duration: const Duration(milliseconds: 300),
+                  child: Icon(
+                    Icons.star,
+                    color: Colors.amber,
+                    size: _recentlyFavorited ? 36 : 24,
                   ),
-                  if (widget.note.hasDeadline &&
-                      widget.note.deadlineDate != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: borderColor.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        widget.note.isCompleted
-                            ? 'Выполнено'
-                            : 'до ${DateFormat('d MMM').format(widget.note.deadlineDate!)}',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: borderColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-
-              // Содержимое заметки
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  widget.note.content,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.bodyMedium,
                 ),
               ),
-
-              // Темы заметки
-              if (widget.note.themeIds.isNotEmpty)
-                _buildThemeTags(widget.note.themeIds),
-            ],
-          ),
+          ],
         ),
       ),
     );
