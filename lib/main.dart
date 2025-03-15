@@ -7,7 +7,6 @@ import 'providers/themes_provider.dart';
 import 'screens/main_screen.dart';
 import 'services/database_service.dart';
 import 'utils/constants.dart';
-import 'utils/sample_data.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
@@ -17,121 +16,50 @@ void main() async {
   // Инициализируем данные форматирования даты
   await initializeDateFormatting('ru', null);
 
-  // Проверяем, был ли уже первый запуск
-  final prefs = await SharedPreferences.getInstance();
+  // Инициализация базы данных
+  final databaseService = DatabaseService();
+  await databaseService.database;
 
-  // Получаем текущее значение флага
-  bool isFirstRun = prefs.getBool('isFirstRun') ?? true;
+  // Создаем провайдеры заранее
+  final appProvider = AppProvider();
+  final notesProvider = NotesProvider();
+  final themesProvider = ThemesProvider();
 
-  // Запускаем приложение
-  runApp(MyApp(isFirstRun: isFirstRun));
+  // Инициализируем настройки
+  await appProvider.initSettings();
+
+  // Запускаем приложение с готовыми провайдерами
+  runApp(MyApp(
+    appProvider: appProvider,
+    notesProvider: notesProvider,
+    themesProvider: themesProvider,
+  ));
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
+  final AppProvider appProvider;
+  final NotesProvider notesProvider;
+  final ThemesProvider themesProvider;
   final bool isFirstRun;
 
-  const MyApp({super.key, required this.isFirstRun});
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  // Храним Future для инициализации как состояние
-  late Future<void> _initializationFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    // Создаем Future только один раз при инициализации состояния
-    _initializationFuture = _initializeApp();
-  }
-
-  // Метод инициализации приложения теперь не принимает контекст
-  Future<void> _initializeApp() async {
-    try {
-      // Добавляем тайм-аут для предотвращения зависания инициализации
-      return await Future.any([
-        _actualInitialization(),
-        Future.delayed(const Duration(seconds: 5), () {
-          print('Предупреждение: инициализация заняла более 5 секунд');
-          return;
-        }),
-      ]);
-    } catch (e) {
-      print('Ошибка при инициализации приложения: $e');
-    }
-  }
-
-  Future<void> _actualInitialization() async {
-    if (widget.isFirstRun) {
-      await _createSampleData();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isFirstRun', false);
-    } else {
-      final databaseService = DatabaseService();
-      await databaseService.database;
-    }
-  }
-
-  // Изменяем _createSampleData чтобы он не требовал контекст
-  Future<void> _createSampleData() async {
-    try {
-      // Создаем экземпляры провайдеров напрямую
-      final themesProvider = ThemesProvider();
-      final notesProvider = NotesProvider();
-
-      // Генерируем примеры тем
-      final themes = SampleData.generateThemes();
-      for (var theme in themes) {
-        await themesProvider.createTheme(
-          theme.name,
-          theme.description,
-          theme.color,
-          theme.noteIds,
-        );
-      }
-
-      // Загружаем только что созданные темы, чтобы получить их реальные ID
-      await themesProvider.loadThemes();
-      final createdThemes = themesProvider.themes;
-
-      // Генерируем примеры заметок
-      final notes = SampleData.generateNotes(createdThemes);
-      for (var note in notes) {
-        await notesProvider.createNote(
-          content: note.content,
-          themeIds: note.themeIds,
-          hasDeadline: note.hasDeadline,
-          deadlineDate: note.deadlineDate,
-          hasDateLink: note.hasDateLink,
-          linkedDate: note.linkedDate,
-          emoji: note.emoji,
-        );
-      }
-
-      // Загружаем заметки
-      await notesProvider.loadNotes();
-    } catch (e) {
-      print('Ошибка при создании примеров данных: $e');
-    }
-  }
+  const MyApp({
+    super.key,
+    required this.appProvider,
+    required this.notesProvider,
+    required this.themesProvider,
+    this.isFirstRun = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppProvider()),
-        ChangeNotifierProvider(create: (_) => NotesProvider()),
-        ChangeNotifierProvider(create: (_) => ThemesProvider()),
+        ChangeNotifierProvider.value(value: appProvider),
+        ChangeNotifierProvider.value(value: notesProvider),
+        ChangeNotifierProvider.value(value: themesProvider),
       ],
       child: Consumer<AppProvider>(
         builder: (context, appProvider, _) {
-          // Инициализируем настройки при первом построении
-          if (!appProvider.initialized) {
-            appProvider.initSettings();
-          }
-
           return MaterialApp(
             title: 'NoteLink',
             debugShowCheckedModeBanner: false,
@@ -368,22 +296,7 @@ class _MyAppState extends State<MyApp> {
                 : appProvider.themeMode == AppThemeMode.dark
                     ? ThemeMode.dark
                     : ThemeMode.system,
-            home: FutureBuilder(
-              // Используем сохраненный Future, который не пересоздается при перестроении
-              future: _initializationFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Scaffold(
-                    body: Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
-
-                // Используем GlobalKey для сохранения состояния MainScreen
-                return const MainScreen(key: PageStorageKey('main_screen'));
-              },
-            ),
+            home: const MainScreen(key: PageStorageKey('main_screen')),
           );
         },
       ),
