@@ -127,14 +127,25 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                     NoteListAction.favorite,
                     NoteListAction.delete
                   ],
-                  onNoteDeleted: (note) {
+                  onNoteDeleted: (note) async {
+                    final notesProvider =
+                        Provider.of<NotesProvider>(context, listen: false);
+                    await notesProvider.deleteNote(note.id);
                     _loadNotes();
                   },
                   onNoteFavoriteToggled: (note) {
                     _loadNotes();
                   },
                   onActionSelected: (note, action) {
-                    _loadNotes();
+                    if (action == NoteListAction.delete) {
+                      final notesProvider =
+                          Provider.of<NotesProvider>(context, listen: false);
+                      notesProvider
+                          .deleteNote(note.id)
+                          .then((_) => _loadNotes());
+                    } else {
+                      _loadNotes();
+                    }
                   },
                 ),
       floatingActionButton: FloatingActionButton(

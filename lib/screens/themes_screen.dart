@@ -26,7 +26,6 @@ class ThemesScreen extends StatefulWidget {
 }
 
 class _ThemesScreenState extends State<ThemesScreen> {
-  String? _selectedThemeId;
   bool _isLoading = true;
 
   @override
@@ -95,18 +94,10 @@ class _ThemesScreenState extends State<ThemesScreen> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final themes = themesProvider.themes;
-
                       // Фильтрация тем, если выбрана конкретная
-                      final filteredThemes = _selectedThemeId != null
-                          ? themes
-                              .where((t) => t.id == _selectedThemeId)
-                              .toList()
-                          : themes;
-
-                      if (index >= filteredThemes.length) return null;
-
-                      final theme = filteredThemes[index];
+                      final themes = themesProvider.themes;
+                      if (index >= themes.length) return null;
+                      final theme = themes[index];
                       return _buildThemeCard(theme, themesProvider);
                     },
                   ),
@@ -126,36 +117,11 @@ class _ThemesScreenState extends State<ThemesScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: themesProvider.themes.length + 1, // +1 для кнопки "Все"
+        itemCount: themesProvider
+            .themes.length, // Убираем +1, так как не нужна кнопка "Все темы"
         itemBuilder: (context, index) {
-          // Первая кнопка - "Все темы"
-          if (index == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                label: const Text('Все темы'),
-                selected: _selectedThemeId == null,
-                onSelected: (_) {
-                  setState(() => _selectedThemeId = null);
-                },
-                backgroundColor: AppColors.secondary.withOpacity(0.2),
-                selectedColor: AppColors.accentSecondary.withOpacity(0.7),
-                checkmarkColor: Colors.white,
-                labelStyle: TextStyle(
-                  color: _selectedThemeId == null
-                      ? Colors.white
-                      : AppColors.textOnLight,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-            );
-          }
-
-          // Кнопки для конкретных тем
-          final theme = themesProvider.themes[index - 1];
+          // Получаем тему для кнопки
+          final theme = themesProvider.themes[index];
 
           // Парсим цвет из строки
           Color themeColor;
@@ -167,25 +133,26 @@ class _ThemesScreenState extends State<ThemesScreen> {
 
           return Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
+            child: ActionChip(
               label: Text(theme.name),
-              selected: _selectedThemeId == theme.id,
-              onSelected: (_) {
-                setState(() => _selectedThemeId =
-                    _selectedThemeId == theme.id ? null : theme.id);
-              },
               backgroundColor: themeColor.withOpacity(0.3),
-              selectedColor: themeColor.withOpacity(0.7),
-              checkmarkColor: Colors.white,
               labelStyle: TextStyle(
-                color: _selectedThemeId == theme.id
-                    ? Colors.white
-                    : AppColors.textOnLight,
+                color: AppColors.textOnLight,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+              onPressed: () {
+                // Переходим на экран выбранной темы
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ThemeNotesScreen(theme: theme),
+                  ),
+                ).then((_) {
+                  // Перезагружаем темы после возврата
+                  if (mounted) {
+                    _loadData();
+                  }
+                });
+              },
             ),
           );
         },

@@ -8,22 +8,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_link/main.dart';
+import 'package:note_link/providers/app_provider.dart';
+import 'package:note_link/providers/notes_provider.dart';
+import 'package:note_link/providers/themes_provider.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  testWidgets('App initializes correctly', (WidgetTester tester) async {
+    // Создаем необходимые провайдеры для тестирования
+    final appProvider = AppProvider();
+    final notesProvider = NotesProvider();
+    final themesProvider = ThemesProvider();
+
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp(isFirstRun: true));
+    await tester.pumpWidget(MyApp(
+      appProvider: appProvider,
+      notesProvider: notesProvider,
+      themesProvider: themesProvider,
+      isFirstRun: true,
+    ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Базовый тест на успешную инициализацию приложения
+    expect(find.byType(MaterialApp), findsOneWidget);
   });
 }
