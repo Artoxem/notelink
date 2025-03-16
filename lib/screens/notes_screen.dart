@@ -1,16 +1,22 @@
+import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../models/note.dart';
+import '../models/theme.dart';
 import '../providers/notes_provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/themes_provider.dart';
-import '../models/note.dart';
 import '../utils/constants.dart';
 import '../utils/note_status_utils.dart';
+import '../utils/image_cache_helper.dart';
+import '../widgets/audio_wave_preview.dart';
+import '../widgets/media_badge.dart';
 import 'note_detail_screen.dart';
 import 'package:intl/intl.dart';
-import 'dart:math' as math;
-import '../models/theme.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -55,6 +61,12 @@ class _NotesScreenState extends State<NotesScreen>
   final Map<String, Color> _themeColorCache = {};
   final Map<String, List<Widget>> _themeTagsCache = {};
 
+  // Кэш для медиа-статистики
+  final Map<String, Map<String, int>> _mediaCountCache = {};
+
+  // Кэш миниатюр изображений
+  final ImageCacheHelper _imageCacheHelper = ImageCacheHelper();
+
   // Время последнего обновления для инвалидации кэшей
   DateTime _lastCacheUpdate = DateTime.now();
 
@@ -69,6 +81,50 @@ class _NotesScreenState extends State<NotesScreen>
   // Контролируем состояние загрузки
   bool _isRefreshing = false;
 
+  // Подсчитаем количество каждого типа медиа в заметке
+  Map<String, int> _getMediaCounts(Note note) {
+    // Проверяем кэш сначала
+    if (_mediaCountCache.containsKey(note.id)) {
+      return _mediaCountCache[note.id]!;
+    }
+
+    int imagesCount = 0;
+    int audioCount = 0;
+    int fileCount = 0;
+    int voiceCount = 0;
+
+    // Подсчитываем разные типы медиа
+    for (final mediaPath in note.mediaUrls) {
+      final extension = mediaPath.toLowerCase();
+      if (extension.endsWith('.jpg') ||
+          extension.endsWith('.jpeg') ||
+          extension.endsWith('.png')) {
+        imagesCount++;
+      } else if (extension.endsWith('.mp3') ||
+          extension.endsWith('.wav') ||
+          extension.endsWith('.m4a')) {
+        audioCount++;
+      } else {
+        fileCount++;
+      }
+    }
+
+    // Подсчитываем голосовые заметки из содержимого
+    final voiceMatches = _voiceRegex.allMatches(note.content);
+    voiceCount = voiceMatches.length;
+
+    // Сохраняем результат в кэш
+    final result = {
+      'images': imagesCount,
+      'audio': audioCount,
+      'files': fileCount,
+      'voice': voiceCount,
+    };
+
+    _mediaCountCache[note.id] = result;
+    return result;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -78,6 +134,9 @@ class _NotesScreenState extends State<NotesScreen>
       vsync: this,
       duration: AppAnimations.shortDuration,
     );
+
+    // Инициализация кэша изображений
+    _imageCacheHelper.initialize();
 
     // Загружаем заметки при инициализации
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -98,6 +157,7 @@ class _NotesScreenState extends State<NotesScreen>
     _noteColorCache.clear();
     _themeColorCache.clear();
     _themeTagsCache.clear();
+    _mediaCountCache.clear();
   }
 
   // Инвалидация кэша темы при изменении
@@ -110,7 +170,7 @@ class _NotesScreenState extends State<NotesScreen>
   // Инвалидация кэшей, связанных с заметкой
   void _invalidateNoteCache(String noteId) {
     _noteColorCache.remove(noteId);
-    // Также можно очистить другие кэши, связанные с заметкой
+    _mediaCountCache.remove(noteId);
   }
 
   // Метод для получения цвета темы с кэшированием
@@ -145,6 +205,20 @@ class _NotesScreenState extends State<NotesScreen>
   // Проверка наличия голосовых заметок
   bool _hasVoiceNotes(String content) {
     return _voiceRegex.hasMatch(content);
+  }
+
+  // Метод для получения пути к первому изображению заметки
+  String? _getFirstImagePath(Note note) {
+    if (note.mediaUrls.isEmpty) return null;
+
+    for (final mediaPath in note.mediaUrls) {
+      if (mediaPath.toLowerCase().endsWith('.jpg') ||
+          mediaPath.toLowerCase().endsWith('.jpeg') ||
+          mediaPath.toLowerCase().endsWith('.png')) {
+        return mediaPath;
+      }
+    }
+    return null;
   }
 
   // Асинхронная загрузка данных с параллельными запросами
@@ -282,11 +356,11 @@ class _NotesScreenState extends State<NotesScreen>
     if (viewMode == NoteViewMode.card) {
       listWidget = GridView.builder(
         key: key,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.8,
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 220, // Максимальная ширина элемента
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
+          childAspectRatio: 0.98, // Более квадратные карточки
         ),
         padding: const EdgeInsets.all(AppDimens.mediumPadding),
         itemCount: notes.length,
@@ -357,7 +431,14 @@ class _NotesScreenState extends State<NotesScreen>
         _itemAnimations[note.id] ?? const AlwaysStoppedAnimation(1.0);
 
     // Получаем отформатированный текст превью
-    final String previewText = _createPreviewFromMarkdown(note.content, 120);
+    final String previewText = _createPreviewFromMarkdown(note.content, 150);
+
+    // Проверяем наличие изображений
+    final hasImages = note.hasImages;
+    final firstImagePath = hasImages ? _getFirstImagePath(note) : null;
+
+    // Получаем статистику медиа
+    final mediaCounts = _getMediaCounts(note);
 
     return AnimatedBuilder(
       animation: animation,
@@ -403,39 +484,49 @@ class _NotesScreenState extends State<NotesScreen>
                     // Основное содержимое
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.all(AppDimens.mediumPadding),
+                        padding: const EdgeInsets.all(16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Верхняя часть с датой и меню
+                            // Верхняя часть с датой, дедлайном и меню
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Колонка для даты и дедлайна (выровнены по левому краю)
+                                // Компактная таблица дат
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Дата
+                                    // Дата создания
                                     Text(
                                       DateFormat('d MMM yyyy')
                                           .format(note.createdAt),
-                                      style: AppTextStyles.bodySmallLight,
+                                      style:
+                                          AppTextStyles.bodySmallLight.copyWith(
+                                        fontSize: 13,
+                                      ),
                                     ),
 
-                                    // ПЕРЕМЕЩЕННЫЙ блок с дедлайном с минимальным отступом
+                                    // Минимальный вертикальный отступ
+                                    if (note.hasDeadline &&
+                                        note.deadlineDate != null)
+                                      const SizedBox(height: 2),
+
+                                    // Дедлайн под датой создания
                                     if (note.hasDeadline &&
                                         note.deadlineDate != null)
                                       Container(
-                                        margin: const EdgeInsets.only(
-                                            top:
-                                                4), // Минимальный отступ сверху
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: const Color.fromRGBO(255, 255,
-                                              7, 0.35), // Новый цвет фона
+                                          color: const Color.fromRGBO(
+                                              255,
+                                              255,
+                                              7,
+                                              0.35), // Восстановлен желтый фон
                                           borderRadius:
                                               BorderRadius.circular(4),
                                         ),
@@ -449,7 +540,7 @@ class _NotesScreenState extends State<NotesScreen>
                                               size: 12,
                                               color: AppColors.textOnLight,
                                             ),
-                                            const SizedBox(width: 4),
+                                            const SizedBox(width: 2),
                                             Text(
                                               note.isCompleted
                                                   ? 'Выполнено'
@@ -463,15 +554,25 @@ class _NotesScreenState extends State<NotesScreen>
                                 ),
 
                                 // Кнопка меню
-                                InkWell(
-                                  onTap: () => _showNoteOptions(note),
-                                  borderRadius: BorderRadius.circular(15),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4.0),
-                                    child: Icon(
-                                      Icons.more_vert,
-                                      size: 18,
-                                      color: AppColors.textOnLight,
+                                AnimatedContainer(
+                                  duration: AppAnimations.feedbackDuration,
+                                  decoration: BoxDecoration(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(15),
+                                      onTap: () => _showNoteOptions(note),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4.0),
+                                        child: Icon(
+                                          Icons.more_vert,
+                                          size: 18,
+                                          color: AppColors.textOnLight,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -480,23 +581,94 @@ class _NotesScreenState extends State<NotesScreen>
 
                             const SizedBox(height: 8),
 
-                            // Содержимое заметки (с правильным форматированием)
+                            // Заголовок заметки с увеличенным размером шрифта
+                            Text(
+                              _getFirstLine(note.content),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textOnLight,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+
+                            const SizedBox(height: 4),
+
+                            // Содержимое заметки с градиентным затемнением
                             Expanded(
-                              child: Text(
-                                previewText,
-                                maxLines: 5,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.bodySmallLight,
+                              child: ShaderMask(
+                                shaderCallback: (Rect bounds) {
+                                  return LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.black, Colors.transparent],
+                                    stops: const [0.7, 1.0],
+                                  ).createShader(bounds);
+                                },
+                                blendMode: BlendMode.dstIn,
+                                child: Text(
+                                  previewText,
+                                  style: AppTextStyles.bodySmallLight.copyWith(
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 8,
+                                ),
                               ),
                             ),
 
-                            // Индикаторы медиа и тем
-                            if (note.mediaUrls.isNotEmpty ||
-                                note.themeIds.isNotEmpty ||
-                                _hasVoiceNotes(note.content))
+                            // Индикатор продолжения текста
+                            if (note.content.length > 150)
+                              Align(
+                                alignment: Alignment.bottomRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        height: 1,
+                                        width: 40,
+                                        color: AppColors.textOnLight
+                                            .withOpacity(0.3),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'ещё',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontStyle: FontStyle.italic,
+                                          color: AppColors.textOnLight
+                                              .withOpacity(0.6),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                            // Бейджи медиа внизу карточки (если есть)
+                            if (mediaCounts.values.any((count) => count > 0))
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
-                                child: _buildNoteIndicators(note),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    MediaBadgeGroup(
+                                      imagesCount: mediaCounts['images'] ?? 0,
+                                      audioCount: mediaCounts['audio'] ?? 0,
+                                      voiceCount: mediaCounts['voice'] ?? 0,
+                                      filesCount: mediaCounts['files'] ?? 0,
+                                      badgeSize: AppMediaDimens.badgeSmallSize,
+                                      spacing: 4.0,
+                                      onBadgeTap: (type) {
+                                        // Тактильная обратная связь при нажатии
+                                        HapticFeedback.lightImpact();
+                                        _viewNoteDetails(note);
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ),
                           ],
                         ),
@@ -528,65 +700,169 @@ class _NotesScreenState extends State<NotesScreen>
                   ),
                 ),
               ),
+
+            // Превью изображения (если есть)
+            if (firstImagePath != null)
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: Container(
+                  width: AppMediaDimens.thumbnailSize,
+                  height: AppMediaDimens.thumbnailSize,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(
+                        AppMediaDimens.thumbnailBorderRadius),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                        AppMediaDimens.thumbnailBorderRadius),
+                    child: FutureBuilder<ImageProvider?>(
+                      future: _imageCacheHelper.getThumbnail(
+                        firstImagePath,
+                        width: AppMediaDimens.thumbnailSize.toInt() * 2,
+                        height: AppMediaDimens.thumbnailSize.toInt() * 2,
+                      ),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Container(
+                            color: Colors.grey.withOpacity(0.2),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.0,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (snapshot.hasData && snapshot.data != null) {
+                          return Image(
+                            image: snapshot.data!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey.withOpacity(0.2),
+                                child: const Icon(Icons.broken_image,
+                                    size: 20, color: Colors.grey),
+                              );
+                            },
+                          );
+                        }
+
+                        // Запасной вариант, если не удалось загрузить
+                        try {
+                          final file = File(firstImagePath);
+                          if (file.existsSync()) {
+                            return Image.file(
+                              file,
+                              fit: BoxFit.cover,
+                              errorBuilder: (ctx, err, stack) => Container(
+                                color: Colors.grey.withOpacity(0.2),
+                                child: const Icon(Icons.broken_image,
+                                    size: 20, color: Colors.grey),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          // Игнорируем ошибки файловой системы
+                        }
+
+                        return Container(
+                          color: Colors.grey.withOpacity(0.2),
+                          child: const Icon(Icons.photo,
+                              size: 20, color: Colors.grey),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-// Улучшенное создание превью из Markdown-текста
-  String _createPreviewFromMarkdown(String markdown, int maxLength) {
-    if (markdown.isEmpty) {
-      return '';
-    }
+  // Новый метод для улучшенных индикаторов медиа
+  Widget _buildEnhancedNoteIndicators(Note note) {
+    // Получаем статистику медиа (количество каждого типа)
+    final mediaCounts = _getMediaCounts(note);
 
-    // Предварительная проверка наличия разметки для оптимизации производительности
-    bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
-        _boldRegex.hasMatch(markdown) ||
-        _italicRegex.hasMatch(markdown) ||
-        _linksRegex.hasMatch(markdown) ||
-        _codeRegex.hasMatch(markdown);
+    return Row(
+      children: [
+        // Убираем визуализацию аудио или модифицируем ее без счетчика
+        if (mediaCounts['voice']! > 0 || mediaCounts['audio']! > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Icon(
+                Icons.mic,
+                size: 18,
+                color: Colors.deepPurple,
+              ),
+            ),
+          ),
 
-    if (!hasMarkdown) {
-      // Если разметки нет, просто обрезаем текст,
-      // но сначала удаляем ссылки на голосовые заметки
-      String cleanText = markdown.replaceAll(_voiceRegex, '');
-      return cleanText.length > maxLength
-          ? '${cleanText.substring(0, maxLength)}...'
-          : cleanText;
-    }
+        // Бейджи для других типов медиа
+        if (mediaCounts['images']! > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Icon(
+                Icons.photo,
+                size: 18,
+                color: Colors.teal,
+              ),
+            ),
+          ),
 
-    // Последовательно удаляем разметку
-    String text = markdown;
+        if (mediaCounts['files']! > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Icon(
+                Icons.attach_file,
+                size: 18,
+                color: Colors.blue,
+              ),
+            ),
+          ),
 
-    // Удаляем голосовые заметки полностью
-    text = text.replaceAll(_voiceRegex, '');
+        const Spacer(),
 
-    // Заменяем ссылки их текстовым представлением
-    text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
-
-    // Удаляем заголовки
-    text = text.replaceAll(_headingsRegex, '');
-
-    // Удаляем разметку жирного и курсивного текста
-    text = text.replaceAll(_boldRegex, '');
-    text = text.replaceAll(_italicRegex, '');
-
-    // Удаляем разметку кода
-    text = text.replaceAllMapped(_codeRegex, (match) {
-      final code = match.group(0) ?? '';
-      return code.length > 2 ? code.substring(1, code.length - 1) : '';
-    });
-
-    // Обрезаем по максимальной длине
-    if (text.length > maxLength) {
-      text = '${text.substring(0, maxLength)}...';
-    }
-
-    return text;
+        // Теги тем
+        if (note.themeIds.isNotEmpty) _buildThemeIndicators(note.themeIds),
+      ],
+    );
   }
 
-  // Обновленный метод построения элемента списка
+  // Обновленный метод построения элемента списка с трехколоночной структурой
   Widget _buildNoteListItem(Note note, NotesProvider notesProvider) {
     // Получаем цвета с кэшированием для улучшения производительности
     final statusColor = _getNoteStatusColor(note);
@@ -594,6 +870,9 @@ class _NotesScreenState extends State<NotesScreen>
     // Создаем анимацию для заметки
     final Animation<double> animation =
         _itemAnimations[note.id] ?? const AlwaysStoppedAnimation(1.0);
+
+    // Получаем статистику медиа
+    final mediaCounts = _getMediaCounts(note);
 
     return AnimatedBuilder(
       animation: animation,
@@ -626,40 +905,42 @@ class _NotesScreenState extends State<NotesScreen>
               onTap: () => _viewNoteDetails(note),
               onLongPress: () => _showNoteOptions(note),
               borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-              child: Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(AppDimens.mediumPadding),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Верхняя часть с датами и меню
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // Левая часть: аватар и дата создания в одном ряду
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                // Дата и дедлайн теперь в одной строке
-                                Row(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Адаптивный размер в зависимости от ширины экрана
+                  final bool isWideScreen = constraints.maxWidth > 400;
+
+                  return Stack(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(AppDimens.mediumPadding),
+                        child: IntrinsicHeight(
+                          // Добавлено для исправления размера
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // ЛЕВАЯ КОЛОНКА (20%) - Метаданные
+                              SizedBox(
+                                width: constraints.maxWidth * 0.2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min, // Исправлено
                                   children: [
-                                    // Дата
+                                    // Дата создания
                                     Text(
                                       DateFormat('d MMM yyyy')
                                           .format(note.createdAt),
                                       style: AppTextStyles.bodySmallLight,
                                     ),
 
-                                    // Дедлайн справа от даты
+                                    const SizedBox(height: 4),
+
+                                    // Статус и дедлайн
                                     if (note.hasDeadline &&
                                         note.deadlineDate != null)
                                       Container(
-                                        margin: const EdgeInsets.only(
-                                            left: 8), // Отступ слева от даты
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
+                                          horizontal: 6,
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
@@ -678,128 +959,154 @@ class _NotesScreenState extends State<NotesScreen>
                                               size: 12,
                                               color: AppColors.textOnLight,
                                             ),
-                                            const SizedBox(width: 4),
+                                            const SizedBox(width: 2),
                                             Text(
                                               note.isCompleted
-                                                  ? 'Выполнено'
-                                                  : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
+                                                  ? 'Готово'
+                                                  : DateFormat('d MMM').format(
+                                                      note.deadlineDate!),
                                               style: AppTextStyles.deadlineText,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ],
                                         ),
                                       ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
 
-                            const SizedBox(width: 8),
+                              const SizedBox(width: 8),
 
-                            // Кнопка меню
-                            InkWell(
-                              onTap: () => _showNoteOptions(note),
-                              child: const Padding(
-                                padding: EdgeInsets.all(4.0),
-                                child: Icon(
-                                  Icons.more_vert,
-                                  size: 18,
-                                  color: AppColors.textOnLight,
+                              // ЦЕНТРАЛЬНАЯ КОЛОНКА (60%) - Контент
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min, // Исправлено
+                                  children: [
+                                    // Заголовок заметки (берем первую строку)
+                                    Text(
+                                      _getFirstLine(note.content),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textOnLight,
+                                      ),
+                                      maxLines: isWideScreen ? 2 : 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+
+                                    const SizedBox(height: 4),
+
+                                    // Содержимое заметки с ограниченной высотой вместо ShaderMask
+                                    Container(
+                                      constraints: BoxConstraints(
+                                        maxHeight: isWideScreen ? 80 : 60,
+                                      ),
+                                      child: Text(
+                                        _getContentWithoutFirstLine(
+                                            note.content),
+                                        maxLines: isWideScreen ? 4 : 3,
+                                        overflow: TextOverflow.fade,
+                                        style: AppTextStyles.bodyMediumLight,
+                                      ),
+                                    ),
+
+                                    // Индикатор продолжения текста
+                                    if (note.content.length > 100)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              height: 1,
+                                              width: 40,
+                                              color: AppColors.textOnLight
+                                                  .withOpacity(0.3),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'ещё',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontStyle: FontStyle.italic,
+                                                color: AppColors.textOnLight
+                                                    .withOpacity(0.6),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
 
-                        // Убираем лишнее пространство и сразу переходим к контенту
-                        const SizedBox(height: 4),
+                              const SizedBox(width: 8),
 
-                        // Заголовок заметки (берем первую строку)
-                        Text(
-                          _getFirstLine(note.content),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textOnLight,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                              // ПРАВАЯ КОЛОНКА (20%) - Индикаторы и теги
+                              SizedBox(
+                                width: constraints.maxWidth * 0.2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min, // Исправлено
+                                  children: [
+                                    // Кнопка меню
+                                    Material(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(15),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(15),
+                                        onTap: () => _showNoteOptions(note),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4.0),
+                                          child: Icon(
+                                            Icons.more_vert,
+                                            size: 20,
+                                            color: AppColors.textOnLight
+                                                .withOpacity(0.7),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
 
-                        const SizedBox(height: 2),
+                                    const SizedBox(height: 8),
 
-                        // Содержимое заметки
-                        Text(
-                          _getContentWithoutFirstLine(note.content),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodyMediumLight,
-                        ),
+                                    // Медиа бейджи
+                                    if (mediaCounts.values
+                                        .any((count) => count > 0))
+                                      MediaBadgeGroup(
+                                        imagesCount: mediaCounts['images'] ?? 0,
+                                        audioCount: mediaCounts['audio'] ?? 0,
+                                        voiceCount: mediaCounts['voice'] ?? 0,
+                                        filesCount: mediaCounts['files'] ?? 0,
+                                        badgeSize:
+                                            AppMediaDimens.badgeSmallSize,
+                                        spacing: 4.0,
+                                        onBadgeTap: (type) {
+                                          HapticFeedback.lightImpact();
+                                          _viewNoteDetails(note);
+                                        },
+                                      ),
 
-                        // Индикаторы
-                        if (note.mediaUrls.isNotEmpty ||
-                            note.themeIds.isNotEmpty ||
-                            _hasVoiceNotes(note.content))
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Row(
-                              children: [
-                                // Индикаторы медиа
-                                if (_hasVoiceNotes(note.content) ||
-                                    note.hasVoiceNotes ||
-                                    note.hasAudio)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: Icon(Icons.mic,
-                                        size: 16, color: Colors.purple),
-                                  ),
-                                if (note.hasImages)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 8),
-                                    child: Icon(Icons.photo,
-                                        size: 16, color: AppColors.textOnLight),
-                                  ),
-                                if (note.hasFiles)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 8),
-                                    child: Icon(Icons.attach_file,
-                                        size: 16, color: AppColors.textOnLight),
-                                  ),
+                                    const SizedBox(
+                                        height: 8), // Заменяем Spacer
 
-                                const Spacer(),
-
-                                // Теги тем
-                                if (note.themeIds.isNotEmpty)
-                                  _buildThemeTags(note.themeIds),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  // Индикатор избранного
-                  if (note.isFavorite)
-                    const Positioned(
-                      top: 0,
-                      right: 0,
-                      child: Material(
-                        color: Colors.amber,
-                        borderRadius: BorderRadius.only(
-                          topRight: Radius.circular(AppDimens.cardBorderRadius),
-                          bottomLeft:
-                              Radius.circular(AppDimens.cardBorderRadius - 4),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(4.0),
-                          child: Icon(
-                            Icons.star,
-                            color: Colors.white,
-                            size: 16,
+                                    // Теги тем
+                                    if (note.themeIds.isNotEmpty &&
+                                        isWideScreen)
+                                      _buildThemeTags(note.themeIds),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ),
-                ],
+
+                      // Остальные позиционированные элементы остаются без изменений
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -808,52 +1115,145 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Вспомогательные методы для извлечения заголовка и содержимого
-  String _getFirstLine(String content) {
-    // Сначала удаляем голосовые метки
-    String cleanContent = content.replaceAll(_voiceRegex, '');
+  // Метод для отображения тегов тем в режиме списка с кэшированием
+  Widget _buildThemeTags(List<String> themeIds) {
+    // Используем кэш для тегов
+    final cacheKey = 'tags_${themeIds.join('_')}';
 
-    final firstLineEnd = cleanContent.indexOf('\n');
-    if (firstLineEnd == -1) return cleanContent;
-    return cleanContent
-        .substring(0, firstLineEnd)
-        .trim()
-        .replaceAll(RegExp(r'^#+\s+'), '');
-  }
+    if (_themeTagsCache.containsKey(cacheKey)) {
+      return Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: _themeTagsCache[cacheKey]!,
+      );
+    }
 
-  String _getContentWithoutFirstLine(String content) {
-    // Сначала удаляем голосовые метки
-    String cleanContent = content.replaceAll(_voiceRegex, '');
+    // Ограничимся отображением максимум 2 тем для компактности
+    final displayIds = themeIds.take(2).toList();
+    final widgets = <Widget>[];
 
-    final firstLineEnd = cleanContent.indexOf('\n');
-    if (firstLineEnd == -1) return '';
-    return cleanContent.substring(firstLineEnd + 1).trim();
-  }
+    // Создаем тег для каждой темы
+    for (final id in displayIds) {
+      final themeColor = _getThemeColor(id);
+      final themeName = _getThemeName(id);
 
-  // Построение индикаторов медиа
-  Widget _buildNoteIndicators(Note note) {
-    return Row(
-      children: [
-        if (_hasVoiceNotes(note.content) || note.hasVoiceNotes || note.hasAudio)
-          const Padding(
-            padding: EdgeInsets.only(right: 4),
-            child: Icon(Icons.mic, size: 14, color: Colors.purple),
+      widgets.add(
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 2,
           ),
-        if (note.hasImages)
-          const Padding(
-            padding: EdgeInsets.only(right: 4),
-            child: Icon(Icons.photo, size: 14, color: AppColors.textOnLight),
+          decoration: BoxDecoration(
+            color: themeColor.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: themeColor.withOpacity(0.5),
+              width: 0.5,
+            ),
           ),
-        if (note.hasFiles)
-          const Padding(
-            padding: EdgeInsets.only(right: 4),
-            child:
-                Icon(Icons.attach_file, size: 14, color: AppColors.textOnLight),
+          child: Text(
+            themeName,
+            style: TextStyle(
+              fontSize: 10,
+              color: themeColor,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        const Spacer(),
-        if (note.themeIds.isNotEmpty) _buildThemeIndicators(note.themeIds),
-      ],
+        ),
+      );
+    }
+
+    // Показываем "+X" если есть дополнительные темы
+    if (themeIds.length > 2) {
+      widgets.add(
+        Text(
+          '+${themeIds.length - 2}',
+          style: TextStyle(
+            fontSize: 10,
+            color: AppColors.textOnLight.withOpacity(0.6),
+          ),
+        ),
+      );
+    }
+
+    // Сохраняем в кэш
+    _themeTagsCache[cacheKey] = widgets;
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: widgets,
     );
+  }
+
+  // Метод для отображения индикаторов тем с кэшированием
+  Widget _buildThemeIndicators(List<String> themeIds) {
+    // Генерируем ключ для кэша
+    final cacheKey = themeIds.join('_');
+
+    // Проверяем кэш
+    if (_themeTagsCache.containsKey(cacheKey)) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: _themeTagsCache[cacheKey]!,
+      );
+    }
+
+    // Если нет в кэше, создаем индикаторы
+    final indicators = <Widget>[];
+
+    // Ограничиваем количество отображаемых индикаторов
+    final displayCount = math.min(themeIds.length, 3);
+
+    // Обработка каждой темы
+    for (var i = 0; i < displayCount; i++) {
+      if (i >= themeIds.length) break;
+
+      final themeId = themeIds[i];
+      final themeColor = _getThemeColor(themeId);
+
+      indicators.add(
+        Container(
+          width: 10,
+          height: 10,
+          margin: const EdgeInsets.only(left: 4),
+          decoration: BoxDecoration(
+            color: themeColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+      );
+    }
+
+    // Добавляем индикатор "+X" если есть еще темы
+    if (themeIds.length > 3) {
+      indicators.add(
+        Container(
+          margin: const EdgeInsets.only(left: 4),
+          child: Text(
+            '+${themeIds.length - 3}',
+            style: AppTextStyles.bodySmall.copyWith(
+              fontSize: 10,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Сохраняем в кэш
+    _themeTagsCache[cacheKey] = indicators;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: indicators,
+    );
+  }
+
+  // Получение имени темы по ID с использованием кэша
+  String _getThemeName(String themeId) {
+    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
+    final theme = themesProvider.getThemeById(themeId);
+    return theme?.name ?? 'Без темы';
   }
 
   // Виджет Dismissible с улучшенной обработкой ошибок и анимацией
@@ -904,6 +1304,9 @@ class _NotesScreenState extends State<NotesScreen>
 
             // Продолжаем только если виджет еще в дереве
             if (!mounted) return false;
+
+            // Тактильная обратная связь
+            HapticFeedback.lightImpact();
 
             // Получаем обновленную заметку
             final updatedNote = notesProvider.notes.firstWhere(
@@ -996,11 +1399,36 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Метод построения меню действий с заметкой
+  // Вспомогательные методы для извлечения заголовка и содержимого
+  String _getFirstLine(String content) {
+    // Сначала удаляем голосовые метки
+    String cleanContent = content.replaceAll(_voiceRegex, '');
+
+    final firstLineEnd = cleanContent.indexOf('\n');
+    if (firstLineEnd == -1) return cleanContent;
+    return cleanContent
+        .substring(0, firstLineEnd)
+        .trim()
+        .replaceAll(RegExp(r'^#+\s+'), '');
+  }
+
+  String _getContentWithoutFirstLine(String content) {
+    // Сначала удаляем голосовые метки
+    String cleanContent = content.replaceAll(_voiceRegex, '');
+
+    final firstLineEnd = cleanContent.indexOf('\n');
+    if (firstLineEnd == -1) return '';
+    return cleanContent.substring(firstLineEnd + 1).trim();
+  }
+
+  // Метод построения меню действий с заметкой с анимациями
   void _showNoteOptions(Note note) {
     if (!mounted) return;
 
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+    // Тактильная обратная связь
+    HapticFeedback.mediumImpact();
 
     showModalBottomSheet(
       context: context,
@@ -1032,14 +1460,14 @@ class _NotesScreenState extends State<NotesScreen>
               ),
               const Divider(height: 1),
 
-              // Действия
-              ListTile(
-                leading:
-                    const Icon(Icons.edit, color: AppColors.accentSecondary),
-                title: const Text('Редактировать'),
+              // Действия с анимациями и тактильной обратной связью
+              _buildAnimatedActionTile(
+                icon: Icons.edit,
+                color: AppColors.accentSecondary,
+                text: 'Редактировать',
                 onTap: () {
-                  Navigator.pop(context); // Закрываем меню
-                  // Вместо _viewNoteDetails напрямую открываем экран с параметром isEditMode: true
+                  HapticFeedback.lightImpact();
+                  Navigator.pop(context);
                   Navigator.push(
                     context,
                     PageRouteBuilder(
@@ -1071,20 +1499,18 @@ class _NotesScreenState extends State<NotesScreen>
                   });
                 },
               ),
+
               if (note.hasDeadline && !note.isCompleted)
-                ListTile(
-                  leading: const Icon(Icons.check_circle,
-                      color: AppColors.completed),
-                  title: const Text('Отметить как выполненное'),
+                _buildAnimatedActionTile(
+                  icon: Icons.check_circle,
+                  color: AppColors.completed,
+                  text: 'Отметить как выполненное',
                   onTap: () async {
+                    HapticFeedback.mediumImpact();
                     Navigator.pop(context);
                     try {
                       await notesProvider.completeNote(note.id);
-
-                      // Инвалидируем кэш для этой заметки
                       _invalidateNoteCache(note.id);
-
-                      // Обновляем UI и показываем подтверждение
                       if (mounted) {
                         setState(() {});
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1101,12 +1527,14 @@ class _NotesScreenState extends State<NotesScreen>
                     }
                   },
                 ),
+
               if (note.hasDeadline)
-                ListTile(
-                  leading: const Icon(Icons.update,
-                      color: AppColors.accentSecondary),
-                  title: const Text('Продлить дедлайн'),
+                _buildAnimatedActionTile(
+                  icon: Icons.update,
+                  color: AppColors.accentSecondary,
+                  text: 'Продлить дедлайн',
                   onTap: () async {
+                    HapticFeedback.lightImpact();
                     Navigator.pop(context);
 
                     final initialDate =
@@ -1150,15 +1578,14 @@ class _NotesScreenState extends State<NotesScreen>
                   },
                 ),
 
-              ListTile(
-                leading: Icon(
-                  note.isFavorite ? Icons.star : Icons.star_border,
-                  color: Colors.amber,
-                ),
-                title: Text(note.isFavorite
+              _buildAnimatedActionTile(
+                icon: note.isFavorite ? Icons.star_border : Icons.star,
+                color: Colors.amber,
+                text: note.isFavorite
                     ? 'Удалить из избранного'
-                    : 'Добавить в избранное'),
+                    : 'Добавить в избранное',
                 onTap: () async {
+                  HapticFeedback.lightImpact();
                   Navigator.pop(context);
 
                   try {
@@ -1185,11 +1612,14 @@ class _NotesScreenState extends State<NotesScreen>
                   }
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title:
-                    const Text('Удалить', style: TextStyle(color: Colors.red)),
+
+              _buildAnimatedActionTile(
+                icon: Icons.delete,
+                color: Colors.red,
+                text: 'Удалить',
+                textColor: Colors.red,
                 onTap: () {
+                  HapticFeedback.heavyImpact();
                   Navigator.pop(context);
                   _showDeleteConfirmation(note);
                 },
@@ -1201,7 +1631,32 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-    // Улучшенный метод сортировки заметок
+  // Анимированный элемент действия для меню
+  Widget _buildAnimatedActionTile({
+    required IconData icon,
+    required Color color,
+    required String text,
+    Color? textColor,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: ListTile(
+          leading: Icon(icon, color: color),
+          title: Text(
+            text,
+            style: TextStyle(
+              color: textColor ?? AppColors.textOnLight,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Улучшенный метод сортировки заметок
   void _sortNotes(List<Note> notes, NoteSortMode sortMode) {
     switch (sortMode) {
       case NoteSortMode.dateDesc:
@@ -1257,6 +1712,58 @@ class _NotesScreenState extends State<NotesScreen>
         .trim();
   }
 
+  // Улучшенное создание превью из Markdown-текста
+  String _createPreviewFromMarkdown(String markdown, int maxLength) {
+    if (markdown.isEmpty) {
+      return '';
+    }
+
+    // Предварительная проверка наличия разметки для оптимизации производительности
+    bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
+        _boldRegex.hasMatch(markdown) ||
+        _italicRegex.hasMatch(markdown) ||
+        _linksRegex.hasMatch(markdown) ||
+        _codeRegex.hasMatch(markdown);
+
+    if (!hasMarkdown) {
+      // Если разметки нет, просто обрезаем текст,
+      // но сначала удаляем ссылки на голосовые заметки
+      String cleanText = markdown.replaceAll(_voiceRegex, '');
+      return cleanText.length > maxLength
+          ? '${cleanText.substring(0, maxLength)}...'
+          : cleanText;
+    }
+
+    // Последовательно удаляем разметку
+    String text = markdown;
+
+    // Удаляем голосовые заметки полностью
+    text = text.replaceAll(_voiceRegex, '');
+
+    // Заменяем ссылки их текстовым представлением
+    text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
+
+    // Удаляем заголовки
+    text = text.replaceAll(_headingsRegex, '');
+
+    // Удаляем разметку жирного и курсивного текста
+    text = text.replaceAll(_boldRegex, '');
+    text = text.replaceAll(_italicRegex, '');
+
+    // Удаляем разметку кода
+    text = text.replaceAllMapped(_codeRegex, (match) {
+      final code = match.group(0) ?? '';
+      return code.length > 2 ? code.substring(1, code.length - 1) : '';
+    });
+
+    // Обрезаем по максимальной длине
+    if (text.length > maxLength) {
+      text = '${text.substring(0, maxLength)}...';
+    }
+
+    return text;
+  }
+
   // Улучшенное состояние "нет заметок"
   Widget _buildEmptyState() {
     return Center(
@@ -1278,6 +1785,7 @@ class _NotesScreenState extends State<NotesScreen>
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () {
+              HapticFeedback.mediumImpact();
               NotesScreen.showAddNoteDialog(context);
             },
             icon: const Icon(Icons.add),
@@ -1294,149 +1802,11 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Метод отображения индикаторов тем с кэшированием
-  Widget _buildThemeIndicators(List<String> themeIds) {
-    // Генерируем ключ для кэша
-    final cacheKey = themeIds.join('_');
-
-    // Проверяем кэш
-    if (_themeTagsCache.containsKey(cacheKey)) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: _themeTagsCache[cacheKey]!,
-      );
-    }
-
-    // Если нет в кэше, создаем индикаторы
-    final indicators = <Widget>[];
-
-    // Ограничиваем количество отображаемых индикаторов
-    final displayCount = math.min(themeIds.length, 3);
-
-    // Обработка каждой темы
-    for (var i = 0; i < displayCount; i++) {
-      if (i >= themeIds.length) break;
-
-      final themeId = themeIds[i];
-      final themeColor = _getThemeColor(themeId);
-
-      indicators.add(
-        Container(
-          width: 10,
-          height: 10,
-          margin: const EdgeInsets.only(left: 4),
-          decoration: BoxDecoration(
-            color: themeColor,
-            shape: BoxShape.circle,
-          ),
-        ),
-      );
-    }
-
-    // Добавляем индикатор "+X" если есть еще темы
-    if (themeIds.length > 3) {
-      indicators.add(
-        Container(
-          margin: const EdgeInsets.only(left: 4),
-          child: Text(
-            '+${themeIds.length - 3}',
-            style: AppTextStyles.bodySmall.copyWith(
-              fontSize: 10,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Сохраняем в кэш
-    _themeTagsCache[cacheKey] = indicators;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: indicators,
-    );
-  }
-
-  // Метод для отображения тегов тем в режиме списка с кэшированием
-  Widget _buildThemeTags(List<String> themeIds) {
-    // Используем кэш для тегов
-    final cacheKey = 'tags_${themeIds.join('_')}';
-
-    if (_themeTagsCache.containsKey(cacheKey)) {
-      return Wrap(
-        spacing: 6,
-        runSpacing: 4,
-        children: _themeTagsCache[cacheKey]!,
-      );
-    }
-
-    // Ограничимся отображением максимум 2 тем для компактности
-    final displayIds = themeIds.take(2).toList();
-    final widgets = <Widget>[];
-
-    // Создаем тег для каждой темы
-    for (final id in displayIds) {
-      final themeColor = _getThemeColor(id);
-      final themeName = _getThemeName(id);
-
-      widgets.add(
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 2,
-          ),
-          decoration: BoxDecoration(
-            color: themeColor.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: themeColor.withOpacity(0.5),
-              width: 0.5,
-            ),
-          ),
-          child: Text(
-            themeName,
-            style: TextStyle(
-              fontSize: 10,
-              color: themeColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Показываем "+X" если есть дополнительные темы
-    if (themeIds.length > 2) {
-      widgets.add(
-        Text(
-          '+${themeIds.length - 2}',
-          style: TextStyle(
-            fontSize: 10,
-            color: AppColors.textOnLight.withOpacity(0.6),
-          ),
-        ),
-      );
-    }
-
-    // Сохраняем в кэш
-    _themeTagsCache[cacheKey] = widgets;
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      children: widgets,
-    );
-  }
-
-  // Получение имени темы по ID с использованием кэша
-  String _getThemeName(String themeId) {
-    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
-    final theme = themesProvider.getThemeById(themeId);
-    return theme?.name ?? 'Без темы';
-  }
-
   // Открытие экрана детальной информации о заметке
   void _viewNoteDetails(Note note) {
+    // Добавляем тактильную обратную связь
+    HapticFeedback.lightImpact();
+
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -1471,6 +1841,9 @@ class _NotesScreenState extends State<NotesScreen>
   // Улучшенный диалог подтверждения удаления с анализом важности заметки
   Future<bool> _showDeleteConfirmation(Note note) async {
     if (!mounted) return false;
+
+    // Тактильная обратная связь
+    HapticFeedback.heavyImpact();
 
     // Проверка, содержит ли заметка важный контент
     final isImportant = note.hasDeadline ||

@@ -69,6 +69,28 @@ class AppColors {
       Color(0xFFCCEEAA); // Светло-зеленый фон для дедлайнов
   static const deadlineBgGray =
       Color(0xFFD8D8D8); // Серый фон для выполненных задач
+
+  // Новые цвета для медиа и бейджей
+  static const mediaBadges = {
+    'image': Color(0xFF009688), // Teal для изображений
+    'audio': Color(0xFF9C27B0), // Purple для аудио
+    'voice': Color(0xFF673AB7), // Deep Purple для голосовых заметок
+    'file': Color(0xFF2196F3), // Blue для файлов
+  };
+
+  // Градиенты для эффектов анимации
+  static const gradients = {
+    'fadeBottom': [Colors.black, Colors.transparent],
+    'fadeBottomStops': [0.7, 1.0],
+    'highlight': [Color(0x33FFFFFF), Color(0x00FFFFFF)],
+    'highlightStops': [0.0, 1.0],
+  };
+
+  // Фоны для карточек с улучшенной контрастностью
+  static const cardElevatedBackground =
+      Color.fromARGB(255, 208, 207, 189); // Более светлый фон для карточек
+  static const cardHighlightBorder =
+      Color.fromARGB(255, 215, 255, 162); // Подсветка для выбранных карточек
 }
 
 class AppTextStyles {
@@ -235,6 +257,23 @@ class AppDimens {
   static const double calendarDotSize = 6.0;
 }
 
+class AppMediaDimens {
+  // Размеры для превью медиа
+  static const double badgeSize = 24.0;
+  static const double badgeSmallSize = 20.0;
+  static const double badgeIconSize = 16.0;
+  static const double badgeCountSize = 8.0;
+
+  // Размеры для миниатюр
+  static const double thumbnailSize = 40.0;
+  static const double thumbnailBorderRadius = 4.0;
+
+  // Размеры для аудио визуализации
+  static const double audioWaveWidth = 40.0;
+  static const double audioWaveHeight = 20.0;
+  static const int audioWaveSegments = 12;
+}
+
 // Класс для анимаций
 class AppAnimations {
   // Длительность анимаций
@@ -246,6 +285,52 @@ class AppAnimations {
   static const Curve defaultCurve = Curves.easeInOut;
   static const Curve bounceCurve = Curves.elasticOut;
   static const Curve sharpCurve = Curves.easeInOutQuint;
+
+  // Новые анимации для интерактивных элементов
+  static const Duration feedbackDuration = Duration(milliseconds: 100);
+  static const Duration highlightDuration = Duration(milliseconds: 200);
+  static const Duration expandDuration = Duration(milliseconds: 250);
+
+  // Кривые для более плавных анимаций
+  static const Curve popCurve = Curves.easeOutBack;
+  static const Curve highlightCurve = Curves.easeOutQuad;
+  static const Curve expandCurve = Curves.easeInOutCubic;
+
+  // Коэффициенты масштабирования
+  static const double pressedScale = 0.95;
+  static const double hoverScale = 1.05;
+  static const double normalScale = 1.0;
+}
+
+class AppEffects {
+  // Тактильная обратная связь
+  static const int lightFeedback = 10;
+  static const int mediumFeedback = 20;
+  static const int heavyFeedback = 30;
+
+  // Стили подсветки элементов
+  static BoxDecoration cardHighlight(Color color) {
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
+      border: Border.all(
+        color: color.withOpacity(0.7),
+        width: 2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: color.withOpacity(0.3),
+          blurRadius: 8,
+          spreadRadius: 1,
+        ),
+      ],
+    );
+  }
+
+  // Градиент для затухания текста
+  static const List<double> fadeOutStops = [0.7, 1.0];
+  static const List<Color> fadeOutColors = [Colors.black, Colors.transparent];
+  static const Alignment fadeOutBegin = Alignment.topCenter;
+  static const Alignment fadeOutEnd = Alignment.bottomCenter;
 }
 
 // Класс для теней
