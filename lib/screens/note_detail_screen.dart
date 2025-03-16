@@ -497,33 +497,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           if (_mediaFiles.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Прикрепленные файлы:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _mediaFiles.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      return MediaAttachmentWidget(
-                        mediaPath: _mediaFiles[index],
-                        onRemove: () {}, // В режиме просмотра кнопка не видна
-                        isEditing: false,
-                      );
-                    },
-                  ),
-                ],
-              ),
             ),
         ],
       ),
@@ -535,51 +508,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Заголовок и кнопка добавления медиафайлов
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Прикрепленные файлы:',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.add_photo_alternate),
-              onPressed: () => _pickMedia(context),
-              tooltip: 'Добавить медиафайл',
-            ),
-          ],
-        ),
+        // Используем MediaGrid для отображения изображений сеткой 2xN
+        if (_mediaFiles.isNotEmpty)
+          MediaGrid(
+            imagePaths: _mediaFiles,
+            onRemove: _removeMedia,
+            isEditing: _isEditMode,
+          ),
+
         const SizedBox(height: 8),
 
-        // Список прикрепленных медиафайлов
-        if (_mediaFiles.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(8.0),
-            child: Text(
-              'Нет прикрепленных файлов',
-              style: TextStyle(
-                fontStyle: FontStyle.italic,
-                color: Colors.grey,
-              ),
-            ),
-          )
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _mediaFiles.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              return MediaAttachmentWidget(
-                mediaPath: _mediaFiles[index],
-                onRemove: () => _removeMedia(index),
-                isEditing: _isEditMode,
-              );
-            },
+        // Используем FilesList для отображения остальных файлов
+        if (_mediaFiles.isNotEmpty)
+          FilesList(
+            filePaths: _mediaFiles,
+            onRemove: _removeMedia,
+            isEditing: _isEditMode,
           ),
       ],
     );
