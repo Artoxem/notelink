@@ -600,17 +600,17 @@ class _ThemesScreenState extends State<ThemesScreen> {
         note.hasAudio ||
         note.hasFiles ||
         note.hasVoiceNotes ||
-        note.content.contains('![voice]');
+        RegExp(r'!\[voice\]\(voice:[^)]+\)').hasMatch(note.content);
   }
 
-  // Создание иконки медиа для заметки
+// Создание иконки медиа для заметки
   Widget _buildMediaIcon(Note note) {
     // Приоритет иконок: изображение > голос > файл
     if (note.hasImages) {
       return const Icon(Icons.image, size: 16, color: AppColors.accentPrimary);
     } else if (note.hasAudio ||
         note.hasVoiceNotes ||
-        note.content.contains('![voice]')) {
+        RegExp(r'!\[voice\]\(voice:[^)]+\)').hasMatch(note.content)) {
       return const Icon(Icons.mic, size: 16, color: Colors.purple);
     } else if (note.hasFiles) {
       return const Icon(Icons.attach_file, size: 16, color: Colors.blue);

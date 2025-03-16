@@ -346,42 +346,50 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
 
   // Извлечение заголовка из контента заметки
   String _getNoteTitleFromContent(String content) {
+    // Удаляем разметку голосовых заметок
+    String cleanContent =
+        content.replaceAll(RegExp(r'!\[voice\]\(voice:[^)]+\)'), '');
+
     // Ищем заголовок Markdown (# Заголовок)
     final headerMatch =
-        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(content);
+        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(cleanContent);
     if (headerMatch != null && headerMatch.group(1) != null) {
       return headerMatch.group(1)!;
     }
 
     // Если нет заголовка, берем первую строку
-    final firstLineEnd = content.indexOf('\n');
+    final firstLineEnd = cleanContent.indexOf('\n');
     if (firstLineEnd > 0) {
-      return content.substring(0, firstLineEnd).trim();
+      return cleanContent.substring(0, firstLineEnd).trim();
     }
 
     // Если нет переноса строки, берем весь текст
-    return content.trim();
+    return cleanContent.trim();
   }
 
-  // Извлечение предпросмотра из контента заметки
+// Извлечение предпросмотра из контента заметки
   String _getNotePreviewFromContent(String content) {
+    // Удаляем разметку голосовых заметок
+    String cleanContent =
+        content.replaceAll(RegExp(r'!\[voice\]\(voice:[^)]+\)'), '');
+
     // Ищем текст после заголовка или после первой строки
     final headerMatch =
-        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(content);
+        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(cleanContent);
 
     if (headerMatch != null) {
       // Если нашли заголовок, берем текст после него
       final headerEnd = headerMatch.end;
-      if (headerEnd < content.length) {
-        final previewText = content.substring(headerEnd).trim();
+      if (headerEnd < cleanContent.length) {
+        final previewText = cleanContent.substring(headerEnd).trim();
         return previewText.isEmpty ? 'Нет дополнительного текста' : previewText;
       }
     }
 
     // Если нет заголовка, ищем текст после первой строки
-    final firstLineEnd = content.indexOf('\n');
-    if (firstLineEnd > 0 && firstLineEnd < content.length - 1) {
-      return content.substring(firstLineEnd + 1).trim();
+    final firstLineEnd = cleanContent.indexOf('\n');
+    if (firstLineEnd > 0 && firstLineEnd < cleanContent.length - 1) {
+      return cleanContent.substring(firstLineEnd + 1).trim();
     }
 
     // Если нет дополнительного текста

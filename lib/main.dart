@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'; // Добавляем импорт
 import 'providers/app_provider.dart';
 import 'providers/notes_provider.dart';
 import 'providers/themes_provider.dart';
@@ -63,6 +64,18 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             title: 'NoteLink',
             debugShowCheckedModeBanner: false,
+            // Добавляем настройки локализации
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('ru', 'RU'), // Russian
+              Locale('en', 'US'), // English
+            ],
+            locale: const Locale(
+                'ru', 'RU'), // Установка русской локализации по умолчанию
             theme: ThemeData(
               primaryColor: AppColors.primary,
               scaffoldBackgroundColor: AppColors.primary,

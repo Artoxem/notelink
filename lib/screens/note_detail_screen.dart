@@ -711,6 +711,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                     DateTime.now().add(const Duration(days: 1)),
                 firstDate: DateTime.now(),
                 lastDate: DateTime.now().add(const Duration(days: 365)),
+                locale: const Locale('ru',
+                    'RU'), // Русская локализация использует понедельник как первый день
               );
               if (selectedDate != null) {
                 setState(() {
@@ -736,6 +738,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               initialDate: _linkedDate ?? widget.initialDate ?? DateTime.now(),
               firstDate: DateTime(2020),
               lastDate: DateTime(2030),
+              locale: const Locale('ru',
+                  'RU'), // Русская локализация использует понедельник как первый день
             );
             if (selectedDate != null) {
               setState(() {

@@ -838,6 +838,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
+  // счетчики под календарем
   Widget _buildMonthStats() {
     final notesProvider = Provider.of<NotesProvider>(context);
     final notes = notesProvider.notes;
@@ -848,116 +849,143 @@ class _CalendarScreenState extends State<CalendarScreen>
           note.createdAt.month == _focusedDay.month;
     }).toList();
 
-    // Считаем количество избранных и задач с дедлайнами
-    final favoriteNotes =
-        currentMonthNotes.where((note) => note.isFavorite).toList();
+    // Считаем количество задач с дедлайнами
     final tasksNotes =
         currentMonthNotes.where((note) => note.hasDeadline).toList();
-    final notesWithoutThemes =
-        currentMonthNotes.where((note) => note.themeIds.isEmpty).toList();
 
-    // Группируем заметки по темам для отображения в легенде
-    Map<String, int> themeNotesCount = {};
-    for (final note in currentMonthNotes) {
-      if (note.themeIds.isNotEmpty) {
-        final themeId = note.themeIds.first;
-        themeNotesCount[themeId] = (themeNotesCount[themeId] ?? 0) + 1;
-      }
-    }
-
-    return Column(
-      children: [
-        // Информационные блоки
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Row(
-            children: [
-              // Все заметки месяца
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    // TODO: Переход на экран всех заметок текущего месяца
-                  },
-                  child: Column(
-                    children: [
-                      Text(
-                        currentMonthNotes.length.toString(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.accentSecondary,
-                        ),
-                      ),
-                      const Text(
-                        'Заметки',
-                        style: TextStyle(fontSize: 12),
-                      ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Все заметки месяца - стильная карточка
+          Expanded(
+            child: Card(
+              elevation: 3,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.accentSecondary.withOpacity(0.8),
+                      AppColors.accentSecondary.withOpacity(0.5),
                     ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.note_alt,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          currentMonthNotes.length.toString(),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'in this month',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-
-              // Избранные заметки месяца
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const FavoriteScreen(),
-                      ),
-                    );
-                  },
-                  child: Column(
-                    children: [
-                      Text(
-                        favoriteNotes.length.toString(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber,
-                        ),
-                      ),
-                      const Text(
-                        'Избранные',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Задачи с дедлайном
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    // TODO: Переход на экран задач с дедлайном
-                  },
-                  child: Column(
-                    children: [
-                      Text(
-                        tasksNotes.length.toString(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFAADD66),
-                        ),
-                      ),
-                      const Text(
-                        'Задачи',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
 
-        // Разделитель
-        const Divider(height: 1),
-      ],
+          SizedBox(width: 12),
+
+          // Задачи с дедлайном - стильная карточка
+          Expanded(
+            child: Card(
+              elevation: 3,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color.fromARGB(255, 121, 158, 73).withOpacity(0.8),
+                      Color.fromARGB(255, 121, 158, 73).withOpacity(0.5),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.timer,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tasksNotes.length.toString(),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'Deadlines',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
