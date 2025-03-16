@@ -55,7 +55,7 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Ошибка при загрузке заметок темы: $e');
+      debugPrint('Ошибка при загрузке заметок темы: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -83,7 +83,7 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
       MaterialPageRoute(
         builder: (context) => ThemeDetailScreen(
           theme: widget.theme,
-          isEditMode: true,
+          // Удаляем параметр isEditMode: true
         ),
       ),
     ).then((_) {
@@ -125,12 +125,21 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                   availableActions: const [
                     NoteListAction.edit,
                     NoteListAction.favorite,
-                    NoteListAction.delete
+                    NoteListAction.delete,
+                    NoteListAction.unlinkFromTheme // Добавляем эту опцию
                   ],
                   onNoteDeleted: (note) async {
                     final notesProvider =
                         Provider.of<NotesProvider>(context, listen: false);
                     await notesProvider.deleteNote(note.id);
+                    _loadNotes();
+                  },
+                  onNoteUnlinked: (note) async {
+                    // Добавляем обработчик отвязки заметки от темы
+                    final themesProvider =
+                        Provider.of<ThemesProvider>(context, listen: false);
+                    await themesProvider.unlinkNoteFromTheme(
+                        widget.theme.id, note.id);
                     _loadNotes();
                   },
                   onNoteFavoriteToggled: (note) {
@@ -142,6 +151,13 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                           Provider.of<NotesProvider>(context, listen: false);
                       notesProvider
                           .deleteNote(note.id)
+                          .then((_) => _loadNotes());
+                    } else if (action == NoteListAction.unlinkFromTheme) {
+                      // Добавляем обработку отвязки заметки от темы
+                      final themesProvider =
+                          Provider.of<ThemesProvider>(context, listen: false);
+                      themesProvider
+                          .unlinkNoteFromTheme(widget.theme.id, note.id)
                           .then((_) => _loadNotes());
                     } else {
                       _loadNotes();

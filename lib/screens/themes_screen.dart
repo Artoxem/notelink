@@ -426,6 +426,7 @@ class _ThemesScreenState extends State<ThemesScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
+                      // Удаляем параметр isEditMode: true
                       builder: (context) => ThemeDetailScreen(theme: theme),
                     ),
                   ).then((_) {

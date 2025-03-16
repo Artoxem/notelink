@@ -10,16 +10,15 @@ import '../widgets/note_list.dart';
 
 class ThemeDetailScreen extends StatefulWidget {
   final NoteTheme? theme; // Null если создаем новую тему
-  final bool
-      isEditMode; // Добавляем параметр для прямого перехода в режим редактирования
 
-  const ThemeDetailScreen({super.key, this.theme, this.isEditMode = false});
+  const ThemeDetailScreen({super.key, this.theme});
 
   @override
   State<ThemeDetailScreen> createState() => _ThemeDetailScreenState();
 }
 
-class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
+class _ThemeDetailScreenState extends State<ThemeDetailScreen>
+    with TickerProviderStateMixin {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
 
@@ -29,7 +28,6 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   List<Note> _themeNotes = [];
   bool _isEditing = false;
   bool _isLoading = false;
-  bool _isEditMode = false;
 
   @override
   void initState() {
@@ -48,12 +46,6 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
 
       _selectedNoteIds = List.from(widget.theme!.noteIds);
       _isEditing = true;
-
-      // Используем переданный параметр для определения режима редактирования
-      _isEditMode = widget.isEditMode;
-    } else {
-      // Если создаем новую тему, сразу включаем режим редактирования
-      _isEditMode = true;
     }
 
     _loadNotes();
@@ -102,51 +94,26 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
     super.dispose();
   }
 
-  void _toggleEditMode() {
-    setState(() {
-      _isEditMode = !_isEditMode;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing
-            ? (_isEditMode ? 'Редактирование темы' : widget.theme!.name)
-            : 'Новая тема'),
+        title: Text(_isEditing ? 'Редактирование темы' : 'Новая тема'),
         actions: [
-          if (_isEditing && !_isEditMode)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: _toggleEditMode,
-              tooltip: 'Редактировать тему',
-            ),
-          if (_isEditing && _isEditMode)
+          if (_isEditing)
             IconButton(
               icon: const Icon(Icons.delete),
               onPressed: _showDeleteConfirmation,
             ),
-          if (_isEditMode)
-            IconButton(
-              icon: const Icon(Icons.check),
-              onPressed: _saveTheme,
-            ),
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: _saveTheme,
+          ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _isEditMode
-              ? _buildEditForm()
-              : _buildThemeView(),
-      floatingActionButton: _isEditing && !_isEditMode
-          ? FloatingActionButton(
-              heroTag: "createNoteInTheme",
-              backgroundColor: AppColors.accentSecondary,
-              onPressed: _createNoteInTheme,
-              child: const Icon(Icons.add, color: Colors.white),
-            )
-          : null,
+          : _buildEditForm(),
     );
   }
 
@@ -377,128 +344,6 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           );
   }
 
-  // Просмотр темы (без редактирования)
-  Widget _buildThemeView() {
-    if (!_isEditing) {
-      return _buildEditForm(); // Если создаем новую тему, всегда показываем форму редактирования
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Заголовок и описание темы
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: _selectedColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.theme!.name,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (widget.theme!.description != null &&
-                        widget.theme!.description!.isNotEmpty)
-                      Text(
-                        widget.theme!.description!,
-                        style: TextStyle(
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const Divider(height: 32),
-
-          // Заметки в теме
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Заметки в теме (${_themeNotes.length}):',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          Expanded(
-            child: _themeNotes.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.note_outlined,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'В этой теме пока нет заметок',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Создайте заметку и добавьте её в эту тему',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : NoteListWidget(
-                    notes: _themeNotes,
-                    emptyMessage: 'В этой теме пока нет заметок',
-                    showThemeBadges: false,
-                    isInThemeView: false,
-                    themeId: widget.theme!.id,
-                    swipeDirection: SwipeDirection.both,
-                    availableActions: const [
-                      NoteListAction.edit,
-                      NoteListAction.favorite,
-                      NoteListAction.unlinkFromTheme,
-                    ],
-                    onNoteUnlinked: (note) {
-                      _removeNoteFromTheme(note.id);
-                      _loadNotes();
-                    },
-                    onNoteFavoriteToggled: (note) {
-                      _loadNotes();
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // Извлечение заголовка из контента заметки
   String _getNoteTitleFromContent(String content) {
     // Ищем заголовок Markdown (# Заголовок)
@@ -566,12 +411,8 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
       );
 
       await themesProvider.updateTheme(updatedTheme);
-
       if (mounted) {
-        setState(() {
-          _isEditMode =
-              false; // Переключаемся в режим просмотра после сохранения
-        });
+        Navigator.pop(context);
       }
     } else {
       // Создание новой темы
@@ -731,22 +572,5 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
       // Перезагружаем заметки темы
       _loadNotes();
     }
-  }
-
-  // Метод для создания заметки в текущей теме
-  void _createNoteInTheme() {
-    if (widget.theme == null) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(
-          initialThemeIds: [widget.theme!.id], // Автоматическая привязка к теме
-        ),
-      ),
-    ).then((_) {
-      // Обновляем данные после создания заметки
-      _loadNotes();
-    });
   }
 }

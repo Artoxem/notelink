@@ -749,7 +749,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
-// Настройки тем (правая колонка)
+  // Настройки тем (правая колонка)
   Widget _buildThemeSettings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -763,82 +763,72 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         ),
         const SizedBox(height: AppDimens.smallPadding),
 
-        // Виджет выбора тем
-        Container(
-          constraints: BoxConstraints(
-            // Минимальная высота, чтобы блок не был слишком маленьким
-            minHeight: 150,
-            // Максимальная высота, после которой появляется скролл
-            maxHeight: 220,
-          ),
-          child: SingleChildScrollView(
-            child: _buildThemeSelectionChips(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Отображение чипов с выбранными темами
-  Widget _buildThemeSelectionChips() {
-    return Consumer<ThemesProvider>(
-      builder: (context, themesProvider, _) {
-        if (themesProvider.themes.isEmpty) {
-          return const Text(
-            'Нет доступных тем. Создайте темы в разделе Темы.',
-            style: TextStyle(
-              fontSize: 14,
-              fontStyle: FontStyle.italic,
-              color: Colors.grey,
-            ),
-          );
-        }
-
-        return Wrap(
-          spacing: 8.0,
-          runSpacing: 8.0,
-          children: themesProvider.themes.map((theme) {
-            final isSelected = _selectedThemeIds.contains(theme.id);
-
-            // Парсим цвет из строки
-            Color themeColor;
-            try {
-              themeColor = Color(int.parse(theme.color));
-            } catch (e) {
-              themeColor = Colors.blue; // Дефолтный цвет в случае ошибки
+        // Вместо вызова метода, возвращающего список, используем Consumer напрямую
+        Consumer<ThemesProvider>(
+          builder: (context, themesProvider, _) {
+            if (themesProvider.themes.isEmpty) {
+              return const Text(
+                'Нет доступных тем. Создайте темы в разделе Темы.',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey,
+                ),
+              );
             }
 
-            return FilterChip(
-              label: Text(
-                theme.name,
-                style: TextStyle(
-                  color:
-                      isSelected ? Colors.white : Colors.white.withOpacity(0.9),
-                  fontSize: 13, // Чуть меньший размер для компактности
-                ),
-              ),
-              selected: isSelected,
-              checkmarkColor: Colors.white,
-              selectedColor: themeColor.withOpacity(0.7),
-              backgroundColor: themeColor.withOpacity(0.3),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    if (!_selectedThemeIds.contains(theme.id)) {
-                      _selectedThemeIds.add(theme.id);
-                      _isSettingsChanged = true; // Отмечаем изменение настроек
-                    }
-                  } else {
-                    _selectedThemeIds.remove(theme.id);
-                    _isSettingsChanged = true; // Отмечаем изменение настроек
-                  }
-                });
-              },
+            // Возвращаем Wrap с чипами тем
+            return Wrap(
+              spacing: 8.0,
+              runSpacing: 8.0,
+              children: themesProvider.themes.map((theme) {
+                final isSelected = _selectedThemeIds.contains(theme.id);
+
+                // Парсим цвет из строки
+                Color themeColor;
+                try {
+                  themeColor = Color(int.parse(theme.color));
+                } catch (e) {
+                  themeColor = Colors.blue; // Дефолтный цвет в случае ошибки
+                }
+
+                return FilterChip(
+                  label: Text(
+                    theme.name,
+                    style: TextStyle(
+                      color: isSelected
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.9),
+                      fontSize: 13, // Чуть меньший размер для компактности
+                    ),
+                  ),
+                  selected: isSelected,
+                  checkmarkColor: Colors.white,
+                  selectedColor: themeColor.withOpacity(0.7),
+                  backgroundColor: themeColor.withOpacity(0.3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        if (!_selectedThemeIds.contains(theme.id)) {
+                          _selectedThemeIds.add(theme.id);
+                          _isSettingsChanged =
+                              true; // Отмечаем изменение настроек
+                        }
+                      } else {
+                        _selectedThemeIds.remove(theme.id);
+                        _isSettingsChanged =
+                            true; // Отмечаем изменение настроек
+                      }
+                    });
+                  },
+                );
+              }).toList(),
             );
-          }).toList(),
-        );
-      },
+          },
+        ),
+      ],
     );
   }
 

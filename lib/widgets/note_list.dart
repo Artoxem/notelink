@@ -190,22 +190,20 @@ class _NoteListWidgetState extends State<NoteListWidget>
         confirmDismiss: (direction) async {
           if (direction == DismissDirection.endToStart) {
             // Свайп влево
-            if (widget.isInThemeView) {
-              // Удаление заметки
+            if (widget.isInThemeView && widget.themeId != null) {
+              // Отвязка от темы, если мы находимся внутри темы
+              final result = await _showUnlinkConfirmationDialog(note);
+              if (result && widget.onNoteUnlinked != null) {
+                widget.onNoteUnlinked!(note);
+              }
+              return result;
+            } else {
+              // Удаление заметки в других случаях
               final result = await _showDeleteConfirmationDialog(note);
               if (result && widget.onNoteDeleted != null) {
                 widget.onNoteDeleted!(note);
               }
               return result;
-            } else {
-              // Отвязка от темы
-              if (widget.themeId != null) {
-                final result = await _showUnlinkConfirmationDialog(note);
-                if (result && widget.onNoteUnlinked != null) {
-                  widget.onNoteUnlinked!(note);
-                }
-                return result;
-              }
             }
           } else if (direction == DismissDirection.startToEnd) {
             // Свайп вправо - добавление/удаление из избранного
@@ -683,8 +681,8 @@ class _NoteListWidgetState extends State<NoteListWidget>
             // Опция отвязки от темы
             if (widget.availableActions
                     .contains(NoteListAction.unlinkFromTheme) &&
-                widget.themeId != null &&
-                !widget.isInThemeView)
+                widget.themeId !=
+                    null) // Убираем проверку !widget.isInThemeView
               ListTile(
                 leading: const Icon(Icons.link_off, color: Colors.blue),
                 title: const Text('Отвязать от темы'),
