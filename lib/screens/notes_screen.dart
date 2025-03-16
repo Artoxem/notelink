@@ -356,6 +356,9 @@ class _NotesScreenState extends State<NotesScreen>
     final Animation<double> animation =
         _itemAnimations[note.id] ?? const AlwaysStoppedAnimation(1.0);
 
+    // Получаем отформатированный текст превью
+    final String previewText = _createPreviewFromMarkdown(note.content, 120);
+
     return AnimatedBuilder(
       animation: animation,
       builder: (context, child) {
@@ -465,8 +468,11 @@ class _NotesScreenState extends State<NotesScreen>
                                   borderRadius: BorderRadius.circular(15),
                                   child: const Padding(
                                     padding: EdgeInsets.all(4.0),
-                                    child: Icon(AppIcons.more,
-                                        size: 18, color: AppColors.textOnLight),
+                                    child: Icon(
+                                      Icons.more_vert,
+                                      size: 18,
+                                      color: AppColors.textOnLight,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -474,10 +480,10 @@ class _NotesScreenState extends State<NotesScreen>
 
                             const SizedBox(height: 8),
 
-                            // Содержимое заметки
+                            // Содержимое заметки (с правильным форматированием)
                             Expanded(
                               child: Text(
-                                _createPreviewFromMarkdown(note.content, 120),
+                                previewText,
                                 maxLines: 5,
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.bodySmallLight,
@@ -526,6 +532,58 @@ class _NotesScreenState extends State<NotesScreen>
         ),
       ),
     );
+  }
+
+// Улучшенное создание превью из Markdown-текста
+  String _createPreviewFromMarkdown(String markdown, int maxLength) {
+    if (markdown.isEmpty) {
+      return '';
+    }
+
+    // Предварительная проверка наличия разметки для оптимизации производительности
+    bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
+        _boldRegex.hasMatch(markdown) ||
+        _italicRegex.hasMatch(markdown) ||
+        _linksRegex.hasMatch(markdown) ||
+        _codeRegex.hasMatch(markdown);
+
+    if (!hasMarkdown) {
+      // Если разметки нет, просто обрезаем текст,
+      // но сначала удаляем ссылки на голосовые заметки
+      String cleanText = markdown.replaceAll(_voiceRegex, '');
+      return cleanText.length > maxLength
+          ? '${cleanText.substring(0, maxLength)}...'
+          : cleanText;
+    }
+
+    // Последовательно удаляем разметку
+    String text = markdown;
+
+    // Удаляем голосовые заметки полностью
+    text = text.replaceAll(_voiceRegex, '');
+
+    // Заменяем ссылки их текстовым представлением
+    text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
+
+    // Удаляем заголовки
+    text = text.replaceAll(_headingsRegex, '');
+
+    // Удаляем разметку жирного и курсивного текста
+    text = text.replaceAll(_boldRegex, '');
+    text = text.replaceAll(_italicRegex, '');
+
+    // Удаляем разметку кода
+    text = text.replaceAllMapped(_codeRegex, (match) {
+      final code = match.group(0) ?? '';
+      return code.length > 2 ? code.substring(1, code.length - 1) : '';
+    });
+
+    // Обрезаем по максимальной длине
+    if (text.length > maxLength) {
+      text = '${text.substring(0, maxLength)}...';
+    }
+
+    return text;
   }
 
   // Обновленный метод построения элемента списка
@@ -1143,59 +1201,7 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Улучшенное создание превью из Markdown-текста
-  String _createPreviewFromMarkdown(String markdown, int maxLength) {
-    if (markdown.isEmpty) {
-      return '';
-    }
-
-    // Предварительная проверка наличия разметки для оптимизации производительности
-    bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
-        _boldRegex.hasMatch(markdown) ||
-        _italicRegex.hasMatch(markdown) ||
-        _linksRegex.hasMatch(markdown) ||
-        _codeRegex.hasMatch(markdown);
-
-    if (!hasMarkdown) {
-      // Если разметки нет, просто обрезаем текст,
-      // но сначала удаляем ссылки на голосовые заметки
-      String cleanText = markdown.replaceAll(_voiceRegex, '');
-      return cleanText.length > maxLength
-          ? '${cleanText.substring(0, maxLength)}...'
-          : cleanText;
-    }
-
-    // Последовательно удаляем разметку
-    String text = markdown;
-
-    // Удаляем голосовые заметки полностью
-    text = text.replaceAll(_voiceRegex, '');
-
-    // Заменяем ссылки их текстовым представлением
-    text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
-
-    // Удаляем заголовки
-    text = text.replaceAll(_headingsRegex, '');
-
-    // Удаляем разметку жирного и курсивного текста
-    text = text.replaceAll(_boldRegex, '');
-    text = text.replaceAll(_italicRegex, '');
-
-    // Удаляем разметку кода
-    text = text.replaceAllMapped(_codeRegex, (match) {
-      final code = match.group(0) ?? '';
-      return code.length > 2 ? code.substring(1, code.length - 1) : '';
-    });
-
-    // Обрезаем по максимальной длине
-    if (text.length > maxLength) {
-      text = '${text.substring(0, maxLength)}...';
-    }
-
-    return text;
-  }
-
-  // Улучшенный метод сортировки заметок
+    // Улучшенный метод сортировки заметок
   void _sortNotes(List<Note> notes, NoteSortMode sortMode) {
     switch (sortMode) {
       case NoteSortMode.dateDesc:

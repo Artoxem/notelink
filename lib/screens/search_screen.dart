@@ -47,6 +47,260 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
+// Добавление метода для обработки Markdown в класс _SearchScreenState
+// Скопируем регулярные выражения и метод из notes_screen.dart
+
+// Регулярные выражения для обработки Markdown
+  final RegExp _headingsRegex = RegExp(r'#{1,6}\s+');
+  final RegExp _boldRegex = RegExp(r'\*\*|__');
+  final RegExp _italicRegex = RegExp(r'\*|_(?!\*)');
+  final RegExp _linksRegex = RegExp(r'\[([^\]]+)\]\([^)]+\)');
+  final RegExp _codeRegex = RegExp(r'`[^`]+`');
+  final RegExp _voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
+
+// Улучшенное создание превью из Markdown-текста
+  String _createPreviewFromMarkdown(String markdown, int maxLength) {
+    if (markdown.isEmpty) {
+      return '';
+    }
+
+    // Предварительная проверка наличия разметки для оптимизации производительности
+    bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
+        _boldRegex.hasMatch(markdown) ||
+        _italicRegex.hasMatch(markdown) ||
+        _linksRegex.hasMatch(markdown) ||
+        _codeRegex.hasMatch(markdown);
+
+    if (!hasMarkdown) {
+      // Если разметки нет, просто обрезаем текст,
+      // но сначала удаляем ссылки на голосовые заметки
+      String cleanText = markdown.replaceAll(_voiceRegex, '');
+      return cleanText.length > maxLength
+          ? '${cleanText.substring(0, maxLength)}...'
+          : cleanText;
+    }
+
+    // Последовательно удаляем разметку
+    String text = markdown;
+
+    // Удаляем голосовые заметки полностью
+    text = text.replaceAll(_voiceRegex, '');
+
+    // Заменяем ссылки их текстовым представлением
+    text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
+
+    // Удаляем заголовки
+    text = text.replaceAll(_headingsRegex, '');
+
+    // Удаляем разметку жирного и курсивного текста
+    text = text.replaceAll(_boldRegex, '');
+    text = text.replaceAll(_italicRegex, '');
+
+    // Удаляем разметку кода
+    text = text.replaceAllMapped(_codeRegex, (match) {
+      final code = match.group(0) ?? '';
+      return code.length > 2 ? code.substring(1, code.length - 1) : '';
+    });
+
+    // Обрезаем по максимальной длине
+    if (text.length > maxLength) {
+      text = '${text.substring(0, maxLength)}...';
+    }
+
+    return text;
+  }
+
+// Обновлённый метод построения для результатов поиска
+  Widget _buildSearchResultCard(Note note) {
+    // Определяем цвет индикатора в зависимости от статуса и темы
+    Color indicatorColor;
+    if (note.isCompleted) {
+      indicatorColor = AppColors.completed;
+    } else if (note.hasDeadline && note.deadlineDate != null) {
+      final now = DateTime.now();
+      final daysUntilDeadline = note.deadlineDate!.difference(now).inDays;
+
+      if (daysUntilDeadline < 0) {
+        indicatorColor = AppColors.deadlineUrgent; // Просрочено
+      } else if (daysUntilDeadline <= 2) {
+        indicatorColor = AppColors.deadlineUrgent; // Срочно
+      } else if (daysUntilDeadline <= 7) {
+        indicatorColor = AppColors.deadlineNear; // Скоро
+      } else {
+        indicatorColor = AppColors.deadlineFar; // Не срочно
+      }
+    } else if (note.themeIds.isNotEmpty) {
+      // Используем цвет первой темы заметки
+      final themesProvider =
+          Provider.of<ThemesProvider>(context, listen: false);
+      final themeId = note.themeIds.first;
+      final theme = themesProvider.themes.firstWhere(
+        (t) => t.id == themeId,
+        orElse: () => NoteTheme(
+          id: '',
+          name: 'Без темы',
+          color: AppColors.themeColors[0].value.toString(),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          noteIds: [],
+        ),
+      );
+      try {
+        indicatorColor = Color(int.parse(theme.color));
+      } catch (e) {
+        indicatorColor = AppColors.themeColors[0];
+      }
+    } else {
+      indicatorColor = AppColors.secondary; // Обычный цвет
+    }
+
+    // Преобразуем контент с учётом markdown форматирования
+    final String formattedContent =
+        _createPreviewFromMarkdown(note.content, 250);
+
+    // Ищем совпадения для подсветки
+    final List<TextSpan> highlightedContent = _highlightOccurrences(
+      formattedContent,
+      _searchQuery,
+    );
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppDimens.mediumPadding),
+      elevation: AppDimens.cardElevation,
+      color: AppColors.cardBackground, // White Asparagus
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(note: note),
+            ),
+          ).then((_) {
+            // Обновляем результаты поиска после возврата с экрана редактирования
+            if (_isSearching) {
+              _performSearch();
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
+        child: Row(
+          children: [
+            // Цветной индикатор слева
+            Container(
+              width: 6,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                color: indicatorColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(AppDimens.cardBorderRadius),
+                  bottomLeft: Radius.circular(AppDimens.cardBorderRadius),
+                ),
+              ),
+            ),
+            // Основное содержимое
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(AppDimens.mediumPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Информация о дате
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          note.createdAt.toString().substring(0, 10),
+                          style: AppTextStyles.bodySmallLight,
+                        ),
+                        if (note.hasDeadline && note.deadlineDate != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: note.isCompleted
+                                  ? AppColors.deadlineBgGray
+                                  : AppColors.deadlineBgGreen,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Дедлайн: ${note.deadlineDate.toString().substring(0, 10)}',
+                              style: AppTextStyles.deadlineText,
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: AppDimens.smallPadding),
+
+                    // Подсвеченное содержимое
+                    RichText(
+                      text: TextSpan(
+                        children: highlightedContent,
+                      ),
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+
+                    const SizedBox(height: AppDimens.smallPadding),
+
+                    // Индикаторы медиаконтента, тегов и т.д.
+                    if (note.mediaUrls.isNotEmpty || note.themeIds.isNotEmpty)
+                      Row(
+                        children: [
+                          if (note.hasImages)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: Icon(Icons.photo,
+                                  size: 16, color: AppColors.textOnLight),
+                            ),
+                          if (note.hasAudio)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: Icon(Icons.mic,
+                                  size: 16, color: AppColors.textOnLight),
+                            ),
+                          if (note.hasFiles)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: Icon(Icons.attach_file,
+                                  size: 16, color: AppColors.textOnLight),
+                            ),
+                          if (note.themeIds.isNotEmpty)
+                            Expanded(
+                              child: FutureBuilder(
+                                future: _getThemeNames(note.themeIds),
+                                builder: (context, snapshot) {
+                                  if (!snapshot.hasData) {
+                                    return const SizedBox();
+                                  }
+
+                                  List<String> themeNames = snapshot.data!;
+                                  return Text(
+                                    'Темы: ${themeNames.join(", ")}',
+                                    style: AppTextStyles.bodySmallLight,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _performSearch() {
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
     final query = _searchQuery.toLowerCase();
@@ -204,192 +458,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSearchResultCard(Note note) {
-    // Определяем цвет индикатора в зависимости от статуса и темы
-    Color indicatorColor;
-    if (note.isCompleted) {
-      indicatorColor = AppColors.completed;
-    } else if (note.hasDeadline && note.deadlineDate != null) {
-      final now = DateTime.now();
-      final daysUntilDeadline = note.deadlineDate!.difference(now).inDays;
-
-      if (daysUntilDeadline < 0) {
-        indicatorColor = AppColors.deadlineUrgent; // Просрочено
-      } else if (daysUntilDeadline <= 2) {
-        indicatorColor = AppColors.deadlineUrgent; // Срочно
-      } else if (daysUntilDeadline <= 7) {
-        indicatorColor = AppColors.deadlineNear; // Скоро
-      } else {
-        indicatorColor = AppColors.deadlineFar; // Не срочно
-      }
-    } else if (note.themeIds.isNotEmpty) {
-      // Используем цвет первой темы заметки
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
-      final themeId = note.themeIds.first;
-      final theme = themesProvider.themes.firstWhere(
-        (t) => t.id == themeId,
-        orElse: () => NoteTheme(
-          id: '',
-          name: 'Без темы',
-          color: AppColors.themeColors[0].value.toString(),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          noteIds: [],
-        ),
-      );
-      try {
-        indicatorColor = Color(int.parse(theme.color));
-      } catch (e) {
-        indicatorColor = AppColors.themeColors[0];
-      }
-    } else {
-      indicatorColor = AppColors.secondary; // Обычный цвет
-    }
-
-    // Ищем совпадения для подсветки
-    final List<TextSpan> highlightedContent = _highlightOccurrences(
-      note.content,
-      _searchQuery,
-    );
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppDimens.mediumPadding),
-      elevation: AppDimens.cardElevation,
-      color: AppColors.cardBackground, // White Asparagus
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-      ),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(note: note),
-            ),
-          ).then((_) {
-            // Обновляем результаты поиска после возврата с экрана редактирования
-            if (_isSearching) {
-              _performSearch();
-            }
-          });
-        },
-        borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-        child: Row(
-          children: [
-            // Цветной индикатор слева
-            Container(
-              width: 6,
-              height: double.infinity,
-              decoration: BoxDecoration(
-                color: indicatorColor,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(AppDimens.cardBorderRadius),
-                  bottomLeft: Radius.circular(AppDimens.cardBorderRadius),
-                ),
-              ),
-            ),
-            // Основное содержимое
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(AppDimens.mediumPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Информация о дате
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          note.createdAt.toString().substring(0, 10),
-                          style: AppTextStyles.bodySmallLight,
-                        ),
-                        if (note.hasDeadline && note.deadlineDate != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: note.isCompleted
-                                  ? AppColors.deadlineBgGray
-                                  : AppColors.deadlineBgGreen,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'Дедлайн: ${note.deadlineDate.toString().substring(0, 10)}',
-                              style: AppTextStyles.deadlineText,
-                            ),
-                          ),
-                      ],
-                    ),
-
-                    const SizedBox(height: AppDimens.smallPadding),
-
-                    // Подсвеченное содержимое
-                    RichText(
-                      text: TextSpan(
-                        children: highlightedContent,
-                      ),
-                      maxLines: 5,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-
-                    const SizedBox(height: AppDimens.smallPadding),
-
-                    // Индикаторы медиаконтента, тегов и т.д.
-                    if (note.mediaUrls.isNotEmpty || note.themeIds.isNotEmpty)
-                      Row(
-                        children: [
-                          if (note.hasImages)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.photo,
-                                  size: 16, color: AppColors.textOnLight),
-                            ),
-                          if (note.hasAudio)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.mic,
-                                  size: 16, color: AppColors.textOnLight),
-                            ),
-                          if (note.hasFiles)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.attach_file,
-                                  size: 16, color: AppColors.textOnLight),
-                            ),
-                          if (note.themeIds.isNotEmpty)
-                            Expanded(
-                              child: FutureBuilder(
-                                future: _getThemeNames(note.themeIds),
-                                builder: (context, snapshot) {
-                                  if (!snapshot.hasData) {
-                                    return const SizedBox();
-                                  }
-
-                                  List<String> themeNames = snapshot.data!;
-                                  return Text(
-                                    'Темы: ${themeNames.join(", ")}',
-                                    style: AppTextStyles.bodySmallLight,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -44,15 +44,10 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   bool _isLoading = false;
   late TabController _tabController;
   int _selectedTabIndex = 0;
-  bool _showFormattingToolbar = true;
 
   // Контроллер анимации для режима фокусировки
   late AnimationController _focusModeController;
   late Animation<double> _focusModeAnimation;
-
-  // Контроллер анимации для панели форматирования
-  late AnimationController _toolbarController;
-  late Animation<double> _toolbarAnimation;
 
   @override
   void initState() {
@@ -68,17 +63,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
     _focusModeAnimation = CurvedAnimation(
       parent: _focusModeController,
-      curve: Curves.easeInOut,
-    );
-
-    // Инициализация контроллера для панели форматирования
-    _toolbarController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-
-    _toolbarAnimation = CurvedAnimation(
-      parent: _toolbarController,
       curve: Curves.easeInOut,
     );
 
@@ -102,7 +86,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     _focusNode.removeListener(_handleFocusChange);
     _tabController.dispose();
     _focusModeController.dispose();
-    _toolbarController.dispose();
     super.dispose();
   }
 
@@ -307,18 +290,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     }
   }
 
-  // Переключение отображения панели форматирования
-  void _toggleFormattingToolbar() {
-    setState(() {
-      _showFormattingToolbar = !_showFormattingToolbar;
-      if (_showFormattingToolbar) {
-        _toolbarController.forward();
-      } else {
-        _toolbarController.reverse();
-      }
-    });
-  }
-
   // Методы для копирования и вырезания текста
   void _cutSelectedText() {
     final selection = widget.controller.selection;
@@ -426,73 +397,94 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                               padding: const EdgeInsets.all(8.0),
                               child: Row(
                                 children: [
-                                  // Кнопка для прикрепления изображений
+                                  // Кнопка для прикрепления изображений с улучшенным стилем
                                   Material(
                                     color: Colors.transparent,
-                                    child: Tooltip(
-                                      message: 'Добавить изображение',
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: () {
-                                          _showImagePickerOptions(context);
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Icon(
-                                            Icons.add_photo_alternate_outlined,
-                                            color: AppColors.textOnDark,
-                                            size: 22,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(8),
+                                      onTap: () {
+                                        _showImagePickerOptions(context);
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.accentSecondary
+                                              .withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: AppColors.accentSecondary
+                                                .withOpacity(0.3),
+                                            width: 1,
                                           ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons
+                                                  .add_photo_alternate_outlined,
+                                              color: AppColors.textOnDark,
+                                              size: 24,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Фото',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: AppColors.textOnDark,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
                                   ),
 
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 12),
 
-                                  // Кнопка для прикрепления файла
+                                  // Кнопка для прикрепления файла с улучшенным стилем
                                   Material(
                                     color: Colors.transparent,
-                                    child: Tooltip(
-                                      message: 'Добавить файл',
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: () {
-                                          _pickFile();
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Icon(
-                                            Icons.attachment_outlined,
-                                            color: AppColors.textOnDark,
-                                            size: 22,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(8),
+                                      onTap: () {
+                                        _pickFile();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.accentSecondary
+                                              .withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: AppColors.accentSecondary
+                                                .withOpacity(0.3),
+                                            width: 1,
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(width: 8),
-
-                                  // Кнопка для форматирования текста
-                                  Material(
-                                    color: Colors.transparent,
-                                    child: Tooltip(
-                                      message: _showFormattingToolbar
-                                          ? 'Скрыть форматирование'
-                                          : 'Показать форматирование',
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: _toggleFormattingToolbar,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Icon(
-                                            _showFormattingToolbar
-                                                ? Icons.text_format
-                                                : Icons.text_format_outlined,
-                                            color: AppColors.textOnDark,
-                                            size: 22,
-                                          ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.attachment_outlined,
+                                              color: AppColors.textOnDark,
+                                              size: 24,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Файл',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: AppColors.textOnDark,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -503,7 +495,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
                                   // Кнопка голосовой записи
                                   VoiceRecordButton(
-                                    size: 40,
+                                    size: 44, // Немного увеличиваем размер
                                     onRecordComplete: (audioPath) {
                                       _insertVoiceNote(audioPath);
                                     },
@@ -519,7 +511,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                   Container(
                     height: widget.height ?? 300,
                     constraints: BoxConstraints(
-                      minHeight: 100,
+                      minHeight: 150,
                       maxHeight: widget.height ?? 500,
                     ),
                     child: markdownEnabled
@@ -541,19 +533,13 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                 ],
               ),
 
-              // Панель форматирования, которая появляется снизу редактора
-              if (!_isPreviewMode && markdownEnabled && _showFormattingToolbar)
+              // Панель форматирования, которая всегда видна снизу редактора
+              if (!_isPreviewMode && markdownEnabled)
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 1),
-                      end: Offset.zero,
-                    ).animate(_toolbarAnimation),
-                    child: _buildBottomFormattingToolbar(),
-                  ),
+                  child: _buildBottomFormattingToolbar(),
                 ),
             ],
           ),
@@ -564,8 +550,10 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
   // Построение редактора
   Widget _buildEditor() {
-    return Padding(
+    return Container(
       padding: const EdgeInsets.all(16.0),
+      // Добавляем отступ снизу для панели форматирования
+      margin: const EdgeInsets.only(bottom: 50.0),
       child: TextField(
         controller: widget.controller,
         focusNode: _focusNode,
@@ -606,7 +594,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     );
   }
 
-  // Обновленная панель форматирования, выезжающая снизу
+  // Обновленная панель форматирования, всегда видимая внизу
   Widget _buildBottomFormattingToolbar() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),

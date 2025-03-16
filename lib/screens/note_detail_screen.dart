@@ -531,87 +531,99 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
   // Построение режима редактирования с добавлением медиафайлов
   Widget _buildEditMode() {
-    return SingleChildScrollView(
+    return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(AppDimens.mediumPadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Редактор Markdown
-          Container(
-            constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height * 0.4,
-              maxHeight: MediaQuery.of(context).size.height * 0.6,
-            ),
-            child: MarkdownEditor(
-              controller: _contentController,
-              focusNode: _contentFocusNode,
-              placeholder: 'Начните вводить текст заметки...',
-              autofocus: false,
-            ),
-          ),
-
-          // Раздел с медиафайлами
-          const SizedBox(height: 16),
-          _buildMediaSection(),
-
-          // Нижняя панель с настройками заметки в двух колонках
-          Container(
-            margin: const EdgeInsets.only(top: AppDimens.mediumPadding),
-            padding: const EdgeInsets.all(AppDimens.mediumPadding),
-            decoration: BoxDecoration(
-              color: AppColors.cardBackground,
-              borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-              boxShadow: [AppShadows.small],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Заголовок панели
-                const Text(
-                  'Атрибуты:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(AppDimens.mediumPadding),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              // Редактор Markdown с фиксированной высотой
+              Container(
+                height: MediaQuery.of(context).size.height * 0.4,
+                constraints: BoxConstraints(
+                  minHeight: 200,
+                  maxHeight: MediaQuery.of(context).size.height * 0.5,
                 ),
-                const SizedBox(height: AppDimens.mediumPadding),
+                margin: const EdgeInsets.only(bottom: 16.0),
+                child: MarkdownEditor(
+                  controller: _contentController,
+                  focusNode: _contentFocusNode,
+                  placeholder: 'Начните вводить текст заметки...',
+                  autofocus: false,
+                  onMediaAdded: (mediaPath) {
+                    setState(() {
+                      _mediaFiles.add(mediaPath);
+                      _isSettingsChanged = true;
+                    });
+                  },
+                ),
+              ),
 
-                // Двухколоночная структура
-                Row(
+              // Раздел с медиафайлами
+              _buildMediaSection(),
+
+              // Нижняя панель с настройками заметки в двух колонках
+              Container(
+                margin: const EdgeInsets.only(top: AppDimens.mediumPadding),
+                padding: const EdgeInsets.all(AppDimens.mediumPadding),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius:
+                      BorderRadius.circular(AppDimens.cardBorderRadius),
+                  boxShadow: [AppShadows.small],
+                ),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Левая колонка - настройки дат и дедлайнов
-                    Expanded(
-                      flex: 6,
-                      child: _buildDateSettings(),
+                    // Заголовок панели
+                    const Text(
+                      'Атрибуты:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
+                    const SizedBox(height: AppDimens.mediumPadding),
 
-                    // Разделитель
-                    Container(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: AppDimens.mediumPadding),
-                      width: 1,
-                      height: 220, // Высота может быть адаптируемой
-                      color: AppColors.secondary.withOpacity(0.3),
-                    ),
+                    // Двухколоночная структура
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Левая колонка - настройки дат и дедлайнов
+                        Expanded(
+                          flex: 6,
+                          child: _buildDateSettings(),
+                        ),
 
-                    // Правая колонка - выбор тем
-                    Expanded(
-                      flex: 8,
-                      child: _buildThemeSettings(),
+                        // Разделитель
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: AppDimens.mediumPadding),
+                          width: 1,
+                          height: 220, // Высота может быть адаптируемой
+                          color: AppColors.secondary.withOpacity(0.3),
+                        ),
+
+                        // Правая колонка - выбор тем
+                        Expanded(
+                          flex: 8,
+                          child: _buildThemeSettings(),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
+              ),
 
-          // Добавляем дополнительное пространство внизу для клавиатуры
-          SizedBox(
-              height: MediaQuery.of(context).viewInsets.bottom > 0 ? 200 : 0),
-        ],
-      ),
+              // Добавляем дополнительное пространство внизу для клавиатуры
+              SizedBox(
+                  height:
+                      MediaQuery.of(context).viewInsets.bottom > 0 ? 200 : 0),
+            ]),
+          ),
+        ),
+      ],
     );
   }
 
