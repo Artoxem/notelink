@@ -1,5 +1,13 @@
 import 'dart:convert';
 
+// Перечисление для типов логотипов тем
+enum ThemeLogoType {
+  book, // круглая форма, внутри лого книги
+  shapes, // квадратная форма, внутри лого "треугольник, квадрат, круг"
+  feather, // треугольная форма, внутри лого "птичье перо"
+  scroll // пятиугольная форма, внутри лого "свиток"
+}
+
 class NoteTheme {
   final String id;
   String name;
@@ -8,6 +16,7 @@ class NoteTheme {
   DateTime createdAt;
   DateTime updatedAt;
   List<String> noteIds;
+  ThemeLogoType logoType; // Добавлено новое поле
 
   NoteTheme({
     required this.id,
@@ -17,6 +26,7 @@ class NoteTheme {
     required this.createdAt,
     required this.updatedAt,
     required this.noteIds,
+    this.logoType = ThemeLogoType.book, // По умолчанию книга
   });
 
   NoteTheme copyWith({
@@ -27,6 +37,7 @@ class NoteTheme {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<String>? noteIds,
+    ThemeLogoType? logoType,
   }) {
     return NoteTheme(
       id: id ?? this.id,
@@ -36,6 +47,7 @@ class NoteTheme {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       noteIds: noteIds ?? this.noteIds,
+      logoType: logoType ?? this.logoType,
     );
   }
 
@@ -48,6 +60,7 @@ class NoteTheme {
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
       'noteIds': noteIds,
+      'logoType': logoType.index, // Сохраняем индекс перечисления
     };
   }
 
@@ -60,6 +73,9 @@ class NoteTheme {
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt']),
       noteIds: List<String>.from(map['noteIds']),
+      logoType: map['logoType'] != null
+          ? ThemeLogoType.values[map['logoType']]
+          : ThemeLogoType.book, // Обработка случая, когда поле отсутствует
     );
   }
 

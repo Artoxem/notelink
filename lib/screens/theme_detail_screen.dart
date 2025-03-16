@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/theme.dart';
+import '../models/theme.dart'; // Здесь определено ThemeLogoType
 import '../models/note.dart';
 import '../providers/themes_provider.dart';
 import '../providers/notes_provider.dart';
@@ -28,6 +28,187 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
   List<Note> _themeNotes = [];
   bool _isEditing = false;
   bool _isLoading = false;
+  // Добавляем поле для типа логотипа
+  ThemeLogoType _selectedLogoType = ThemeLogoType.book;
+  bool _isSettingsChanged = false; // Для отслеживания изменений в настройках
+
+  // Метод построения UI для выбора типа логотипа
+  Widget _buildLogoTypeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Иконка темы:',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+
+        // Сетка с вариантами логотипов
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            // Вариант 1: Книга в круге
+            _buildLogoOption(
+              ThemeLogoType.book,
+              const Icon(Icons.book, color: Colors.white),
+              'Книга',
+              const CircleBorder(),
+            ),
+
+            // Вариант 2: Категория в квадрате
+            _buildLogoOption(
+              ThemeLogoType.shapes,
+              const Icon(Icons.category, color: Colors.white),
+              'Фигуры',
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+
+            // Вариант 3: Перо в треугольнике
+            _buildCustomLogoOption(
+              ThemeLogoType.feather,
+              const Icon(Icons.edit, color: Colors.white),
+              'Перо',
+              (color, child) => ClipPath(
+                clipper: TriangleClipper(),
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  color: color,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12.0),
+                      child: child,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Вариант 4: Свиток в пятиугольнике
+            _buildCustomLogoOption(
+              ThemeLogoType.scroll,
+              const Icon(Icons.description, color: Colors.white),
+              'Свиток',
+              (color, child) => ClipPath(
+                clipper: PentagonClipper(),
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  color: color,
+                  child: Center(child: child),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+// Вспомогательный метод для создания стандартных опций логотипа
+  Widget _buildLogoOption(
+    ThemeLogoType type,
+    Icon icon,
+    String label,
+    ShapeBorder shape,
+  ) {
+    final isSelected = _selectedLogoType == type;
+    final color = _selectedColor;
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              _selectedLogoType = type;
+              _isSettingsChanged = true;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isSelected ? color : Colors.transparent,
+                width: 3,
+              ),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Material(
+              shape: shape,
+              color: color,
+              elevation: isSelected ? 6 : 2,
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: Center(child: icon),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? _selectedColor : AppColors.textOnLight,
+          ),
+        ),
+      ],
+    );
+  }
+
+// Вспомогательный метод для создания кастомных опций логотипа
+  Widget _buildCustomLogoOption(
+    ThemeLogoType type,
+    Icon icon,
+    String label,
+    Widget Function(Color, Widget) shapeBuilder,
+  ) {
+    final isSelected = _selectedLogoType == type;
+    final color = _selectedColor;
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              _selectedLogoType = type;
+              _isSettingsChanged = true;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isSelected ? color : Colors.transparent,
+                width: 3,
+              ),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: shapeBuilder(
+              color,
+              icon,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? _selectedColor : AppColors.textOnLight,
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   void initState() {
@@ -46,6 +227,9 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
 
       _selectedNoteIds = List.from(widget.theme!.noteIds);
       _isEditing = true;
+
+      // Инициализируем тип логотипа из существующей темы
+      _selectedLogoType = widget.theme!.logoType;
     }
 
     _loadNotes();
@@ -162,6 +346,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
                   onTap: () {
                     setState(() {
                       _selectedColor = color;
+                      _isSettingsChanged = true;
                     });
                   },
                   child: Container(
@@ -187,6 +372,12 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
                 );
               }).toList(),
             ),
+
+            const SizedBox(height: 24),
+
+            // Выбор типа логотипа (новая секция)
+            _buildLogoTypeSelector(),
+
             const SizedBox(height: 24),
 
             // Заметки в теме
@@ -285,6 +476,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
                                 } else {
                                   _selectedNoteIds.remove(note.id);
                                 }
+                                _isSettingsChanged = true;
                               });
                             },
                           ),
@@ -416,6 +608,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
         description: description.isNotEmpty ? description : null,
         color: _selectedColor.value.toString(),
         noteIds: _selectedNoteIds,
+        logoType: _selectedLogoType, // Сохраняем выбранный тип логотипа
       );
 
       await themesProvider.updateTheme(updatedTheme);
@@ -423,12 +616,13 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
         Navigator.pop(context);
       }
     } else {
-      // Создание новой темы
+      // Создание новой темы с передачей типа логотипа
       await themesProvider.createTheme(
         name,
         description.isNotEmpty ? description : null,
         _selectedColor.value.toString(),
         _selectedNoteIds,
+        _selectedLogoType, // Передаем выбранный тип логотипа
       );
 
       if (mounted) {
@@ -581,4 +775,38 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
       _loadNotes();
     }
   }
+}
+
+// Клиппер для треугольной формы
+class TriangleClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.moveTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(TriangleClipper oldClipper) => false;
+}
+
+// Клиппер для пятиугольной формы
+class PentagonClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.moveTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height * 0.4);
+    path.lineTo(size.width * 0.8, size.height);
+    path.lineTo(size.width * 0.2, size.height);
+    path.lineTo(0, size.height * 0.4);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(PentagonClipper oldClipper) => false;
 }

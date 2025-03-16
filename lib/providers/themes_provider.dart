@@ -49,8 +49,11 @@ class ThemesProvider with ChangeNotifier {
   }
 
   // Создание новой темы
-  Future<NoteTheme?> createTheme(String name, String? description, String color,
-      List<String> noteIds) async {
+  Future<NoteTheme?> createTheme(
+      String name, String? description, String color, List<String> noteIds,
+      [ThemeLogoType logoType = ThemeLogoType
+          .book] // Добавлен опциональный параметр с дефолтным значением
+      ) async {
     _isLoading = true;
     notifyListeners();
 
@@ -63,6 +66,7 @@ class ThemesProvider with ChangeNotifier {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         noteIds: noteIds,
+        logoType: logoType, // Используем переданный тип логотипа
       );
 
       await _databaseService.insertTheme(theme);
