@@ -394,26 +394,26 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                           // Обновленная панель инструментов для работы с медиа
                           if (!_isPreviewMode)
                             Padding(
-                              padding: const EdgeInsets.all(8.0),
+                              padding: const EdgeInsets.all(6.0),
                               child: Row(
                                 children: [
-                                  // Кнопка для прикрепления изображений с улучшенным стилем
+                                  // Кнопка для прикрепления изображений
                                   Material(
                                     color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(6),
                                     child: InkWell(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(6),
                                       onTap: () {
                                         _showImagePickerOptions(context);
                                       },
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 8),
+                                            horizontal: 8, vertical: 6),
                                         decoration: BoxDecoration(
                                           color: AppColors.accentSecondary
                                               .withOpacity(0.1),
                                           borderRadius:
-                                              BorderRadius.circular(8),
+                                              BorderRadius.circular(6),
                                           border: Border.all(
                                             color: AppColors.accentSecondary
                                                 .withOpacity(0.3),
@@ -427,13 +427,13 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                                               Icons
                                                   .add_photo_alternate_outlined,
                                               color: AppColors.textOnDark,
-                                              size: 24,
+                                              size: 20,
                                             ),
-                                            const SizedBox(width: 6),
+                                            const SizedBox(width: 4),
                                             Text(
                                               'Фото',
                                               style: TextStyle(
-                                                fontSize: 14,
+                                                fontSize: 13,
                                                 color: AppColors.textOnDark,
                                               ),
                                             ),
@@ -443,25 +443,25 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                                     ),
                                   ),
 
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 8),
 
-                                  // Кнопка для прикрепления файла с улучшенным стилем
+                                  // Кнопка для прикрепления файла
                                   Material(
                                     color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(6),
                                     child: InkWell(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(6),
                                       onTap: () {
                                         _pickFile();
                                       },
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 8),
+                                            horizontal: 8, vertical: 6),
                                         decoration: BoxDecoration(
                                           color: AppColors.accentSecondary
                                               .withOpacity(0.1),
                                           borderRadius:
-                                              BorderRadius.circular(8),
+                                              BorderRadius.circular(6),
                                           border: Border.all(
                                             color: AppColors.accentSecondary
                                                 .withOpacity(0.3),
@@ -474,13 +474,13 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                                             Icon(
                                               Icons.attachment_outlined,
                                               color: AppColors.textOnDark,
-                                              size: 24,
+                                              size: 20,
                                             ),
-                                            const SizedBox(width: 6),
+                                            const SizedBox(width: 4),
                                             Text(
                                               'Файл',
                                               style: TextStyle(
-                                                fontSize: 14,
+                                                fontSize: 13,
                                                 color: AppColors.textOnDark,
                                               ),
                                             ),
@@ -495,7 +495,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
                                   // Кнопка голосовой записи
                                   VoiceRecordButton(
-                                    size: 44, // Немного увеличиваем размер
+                                    size: 36, // Уменьшен размер с 44
                                     onRecordComplete: (audioPath) {
                                       _insertVoiceNote(audioPath);
                                     },
@@ -553,7 +553,8 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     return Container(
       padding: const EdgeInsets.all(16.0),
       // Добавляем отступ снизу для панели форматирования
-      margin: const EdgeInsets.only(bottom: 50.0),
+      margin:
+          const EdgeInsets.only(bottom: 40.0), // Уменьшенный отступ с 50 до 40
       child: TextField(
         controller: widget.controller,
         focusNode: _focusNode,
@@ -597,7 +598,8 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   // Обновленная панель форматирования, всегда видимая внизу
   Widget _buildBottomFormattingToolbar() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(
+          vertical: 8.0, horizontal: 12.0), // Уменьшенные отступы
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: const BorderRadius.only(
@@ -619,7 +621,8 @@ class _MarkdownEditorState extends State<MarkdownEditor>
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisAlignment:
+              MainAxisAlignment.start, // Изменено с spaceAround на start
           children: [
             _buildToolbarButton(
               icon: Icons.format_bold,
@@ -633,12 +636,12 @@ class _MarkdownEditorState extends State<MarkdownEditor>
             ),
             _buildToolbarButton(
               icon: Icons.format_list_bulleted,
-              tooltip: 'Маркированный список',
+              tooltip: 'Список',
               onPressed: () => _insertMarkdown(MarkdownSyntax.bulletList),
             ),
             _buildToolbarButton(
               icon: Icons.format_list_numbered,
-              tooltip: 'Нумерованный список',
+              tooltip: 'Нумерованный',
               onPressed: () => _insertMarkdown(MarkdownSyntax.numberedList),
             ),
             _buildDivider(),
@@ -678,9 +681,9 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   // Разделитель для панели инструментов
   Widget _buildDivider() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 6), // Уменьшен с 8 до 6
       width: 1,
-      height: 24,
+      height: 20, // Уменьшен с 24 до 20
       color: AppColors.secondary.withOpacity(0.3),
     );
   }
@@ -695,15 +698,15 @@ class _MarkdownEditorState extends State<MarkdownEditor>
       message: tooltip,
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6), // Уменьшен радиус с 8 до 6
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6), // Уменьшен радиус с 8 до 6
           onTap: onPressed,
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(6.0), // Уменьшены отступы с 8 до 6
             child: Icon(
               icon,
-              size: 22,
+              size: 20, // Уменьшен размер иконок с 22 до 20
               color: AppColors.textOnDark,
             ),
           ),
@@ -875,13 +878,14 @@ class _MarkdownEditorState extends State<MarkdownEditor>
         );
       }
 
-      // Добавляем виджет голосового сообщения
+      // Добавляем виджет голосового сообщения в компактном виде
       final voiceNoteId = match.group(1);
       if (voiceNoteId != null) {
         contentWidgets.add(
           VoiceNotePlayer(
             audioPath: voiceNoteId,
             maxWidth: 280,
+            compact: true, // Используем компактный режим
           ),
         );
       }

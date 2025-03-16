@@ -406,80 +406,77 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         Provider.of<AppProvider>(context).enableMarkdownFormatting;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppDimens.mediumPadding),
+      padding: const EdgeInsets.all(16.0), // Уменьшен с AppDimens.mediumPadding
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Информация о дате
+          // Информация о дате - компактно в одну строку
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(
-                Icons.calendar_today,
-                size: 16,
-                color: AppColors.textOnDark.withOpacity(0.7),
+              // Дата создания
+              Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today,
+                    size: 14, // Уменьшен размер с 16 до 14
+                    color: AppColors.textOnDark.withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 4), // Уменьшен отступ
+                  Text(
+                    'Создано: ${DateFormat('dd.MM.yyyy').format(widget.note?.createdAt ?? DateTime.now())}',
+                    style: TextStyle(
+                      fontSize: 12, // Уменьшен с 14 до 12
+                      color: AppColors.textOnDark.withOpacity(0.7),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Создано: ${DateFormat('d MMMM yyyy, HH:mm').format(widget.note?.createdAt ?? DateTime.now())}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textOnDark.withOpacity(0.7),
+
+              // Информация о дедлайне рядом с датой создания
+              if (_hasDeadline && _deadlineDate != null)
+                Row(
+                  children: [
+                    Icon(
+                      widget.note?.isCompleted ?? false
+                          ? Icons.check_circle
+                          : Icons.timer,
+                      size: 14, // Уменьшен с 16 до 14
+                      color: _getDeadlineColor(),
+                    ),
+                    const SizedBox(width: 4), // Уменьшен отступ
+                    Text(
+                      'Дедлайн: ${DateFormat('dd.MM.yyyy').format(_deadlineDate!)}',
+                      style: TextStyle(
+                        fontSize: 12, // Уменьшен с 14 до 12
+                        color: _getDeadlineColor(),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
             ],
           ),
 
-          // Информация о дедлайне, если есть
-          if (_hasDeadline && _deadlineDate != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Row(
-                children: [
-                  Icon(
-                    widget.note?.isCompleted ?? false
-                        ? Icons.check_circle
-                        : Icons.timer,
-                    size: 16,
-                    color: _getDeadlineColor(),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Дедлайн: ${DateFormat('d MMMM yyyy').format(_deadlineDate!)}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: _getDeadlineColor(),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (widget.note?.isCompleted ?? false)
-                    const Text(
-                      ' (Выполнено)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.completed,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-          // Теги/темы, если есть
+          // Теги/темы, если есть - компактно в одну строку
           if (_selectedThemeIds.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 16.0),
+              padding:
+                  const EdgeInsets.only(top: 8.0), // Уменьшен с 16.0 до 8.0
               child: _buildThemeTags(),
             ),
 
           // Разделитель
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16.0),
-            child: Divider(),
+            padding:
+                EdgeInsets.symmetric(vertical: 8.0), // Уменьшено с 16.0 до 8.0
+            child: Divider(height: 1),
           ),
 
           // Содержимое заметки с поддержкой Markdown и голосовых сообщений
           if (enableMarkdown)
             Container(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(12.0), // Уменьшено с 16.0 до 12.0
               decoration: BoxDecoration(
                 color: AppColors.textBackground,
                 borderRadius:
@@ -496,35 +493,38 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           // Отображение медиафайлов в режиме просмотра
           if (_mediaFiles.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 24.0),
+              padding:
+                  const EdgeInsets.only(top: 16.0), // Уменьшено с 24.0 до 16.0
+              child: _buildMediaSection(),
             ),
         ],
       ),
     );
   }
 
-  // Создаем виджет для раздела медиафайлов
+  // Оптимизированный метод построения медиа-секции
   Widget _buildMediaSection() {
+    // Если нет медиафайлов, не добавляем пустое пространство
+    if (_mediaFiles.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Используем MediaGrid для отображения изображений сеткой 2xN
-        if (_mediaFiles.isNotEmpty)
-          MediaGrid(
-            imagePaths: _mediaFiles,
-            onRemove: _removeMedia,
-            isEditing: _isEditMode,
-          ),
+        MediaGrid(
+          imagePaths: _mediaFiles,
+          onRemove: _removeMedia,
+          isEditing: _isEditMode,
+        ),
 
-        const SizedBox(height: 8),
+        const SizedBox(height: 4), // Уменьшен отступ с 8 до 4
 
         // Используем FilesList для отображения остальных файлов
-        if (_mediaFiles.isNotEmpty)
-          FilesList(
-            filePaths: _mediaFiles,
-            onRemove: _removeMedia,
-            isEditing: _isEditMode,
-          ),
+        FilesList(
+          filePaths: _mediaFiles,
+          onRemove: _removeMedia,
+          isEditing: _isEditMode,
+        ),
       ],
     );
   }
@@ -535,17 +535,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.all(AppDimens.mediumPadding),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppDimens.mediumPadding,
+              vertical: 8), // Уменьшены вертикальные отступы
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-              // Редактор Markdown с фиксированной высотой
+              // Редактор Markdown с оптимизированной высотой
               Container(
-                height: MediaQuery.of(context).size.height * 0.4,
+                height: MediaQuery.of(context).size.height *
+                    0.35, // Уменьшена высота редактора с 0.4 до 0.35
                 constraints: BoxConstraints(
-                  minHeight: 200,
-                  maxHeight: MediaQuery.of(context).size.height * 0.5,
+                  minHeight: 150,
+                  maxHeight: MediaQuery.of(context).size.height *
+                      0.4, // Уменьшена максимальная высота с 0.5 до 0.4
                 ),
-                margin: const EdgeInsets.only(bottom: 16.0),
+                margin: const EdgeInsets.only(
+                    bottom: 8.0), // Уменьшен отступ с 16 до 8
                 child: MarkdownEditor(
                   controller: _contentController,
                   focusNode: _contentFocusNode,
@@ -560,13 +565,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                 ),
               ),
 
-              // Раздел с медиафайлами
+              // Раздел с медиафайлами с оптимизированными отступами
               _buildMediaSection(),
 
-              // Нижняя панель с настройками заметки в двух колонках
+              // Нижняя панель с настройками заметки в компактном виде
               Container(
-                margin: const EdgeInsets.only(top: AppDimens.mediumPadding),
-                padding: const EdgeInsets.all(AppDimens.mediumPadding),
+                margin: const EdgeInsets.only(
+                    top: 8), // Уменьшен отступ с AppDimens.mediumPadding до 8
+                padding: const EdgeInsets.all(
+                    12), // Уменьшен отступ с AppDimens.mediumPadding до 12
                 decoration: BoxDecoration(
                   color: AppColors.cardBackground,
                   borderRadius:
@@ -581,12 +588,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                       'Атрибуты:',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: 14, // Уменьшен размер шрифта с 16 до 14
                       ),
                     ),
-                    const SizedBox(height: AppDimens.mediumPadding),
+                    const SizedBox(
+                        height:
+                            8), // Уменьшен отступ с AppDimens.mediumPadding до 8
 
-                    // Двухколоночная структура
+                    // Двухколоночная структура с уменьшенными отступами
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -599,9 +608,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                         // Разделитель
                         Container(
                           margin: const EdgeInsets.symmetric(
-                              horizontal: AppDimens.mediumPadding),
+                              horizontal:
+                                  8), // Уменьшен отступ с AppDimens.mediumPadding до 8
                           width: 1,
-                          height: 220, // Высота может быть адаптируемой
+                          height: 180, // Уменьшена высота с 220 до 180
                           color: AppColors.secondary.withOpacity(0.3),
                         ),
 
@@ -616,10 +626,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                 ),
               ),
 
-              // Добавляем дополнительное пространство внизу для клавиатуры
+              // Уменьшенный отступ для клавиатуры
               SizedBox(
-                  height:
-                      MediaQuery.of(context).viewInsets.bottom > 0 ? 200 : 0),
+                  height: MediaQuery.of(context).viewInsets.bottom > 0
+                      ? 120
+                      : 0), // Уменьшен с 200 до 120
             ]),
           ),
         ),
@@ -627,23 +638,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
-// Настройки даты и дедлайна (левая колонка)
+// Оптимизированные настройки даты и дедлайна (левая колонка)
   Widget _buildDateSettings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Настройка дедлайна
+        // Настройка дедлайна с уменьшенными размерами
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text(
             'Deadline',
-            style: TextStyle(fontSize: 14),
+            style: TextStyle(fontSize: 13), // Уменьшение с 14 до 13
           ),
+          dense: true, // Делает виджет компактнее
           value: _hasDeadline,
           onChanged: (value) {
             setState(() {
               _hasDeadline = value;
-              _isSettingsChanged = true; // Отмечаем изменение настроек
+              _isSettingsChanged = true;
               if (_hasDeadline && _deadlineDate == null) {
                 _deadlineDate = DateTime.now().add(const Duration(days: 1));
               }
@@ -651,15 +663,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           },
         ),
 
-        // Выбор даты для дедлайна
+        // Выбор даты для дедлайна (компактнее)
         if (_hasDeadline)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Deadline'),
-            subtitle: Text(_deadlineDate != null
-                ? DateFormat('yyyy-MM-dd').format(_deadlineDate!)
-                : 'Выберите дату'),
-            leading: const Icon(Icons.calendar_today),
+            dense: true, // Компактный размер
+            title: const Text('Deadline', style: TextStyle(fontSize: 13)),
+            subtitle: Text(
+                _deadlineDate != null
+                    ? DateFormat('yyyy-MM-dd').format(_deadlineDate!)
+                    : 'Выберите дату',
+                style: TextStyle(fontSize: 12)), // Уменьшен шрифт
+            leading: const Icon(Icons.calendar_today,
+                size: 20), // Уменьшен размер иконки
             onTap: () async {
               final selectedDate = await showDatePicker(
                 context: context,
@@ -667,40 +683,42 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                     DateTime.now().add(const Duration(days: 1)),
                 firstDate: DateTime.now(),
                 lastDate: DateTime.now().add(const Duration(days: 365)),
-                locale: const Locale('ru',
-                    'RU'), // Русская локализация использует понедельник как первый день
+                locale: const Locale('ru', 'RU'),
               );
               if (selectedDate != null) {
                 setState(() {
                   _deadlineDate = selectedDate;
-                  _isSettingsChanged = true; // Отмечаем изменение настроек
+                  _isSettingsChanged = true;
                 });
               }
             },
           ),
 
-        // Настройка связанной даты
-        const SizedBox(height: AppDimens.smallPadding),
+        // Настройка связанной даты (компактнее)
+        const SizedBox(
+            height: 4), // Уменьшен отступ с AppDimens.smallPadding до 4
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Создано'),
-          subtitle: Text(_linkedDate != null
-              ? DateFormat('yyyy-MM-dd').format(_linkedDate!)
-              : 'Выберите дату'),
-          leading: const Icon(Icons.link),
+          dense: true, // Компактный размер
+          title: const Text('Создано', style: TextStyle(fontSize: 13)),
+          subtitle: Text(
+              _linkedDate != null
+                  ? DateFormat('yyyy-MM-dd').format(_linkedDate!)
+                  : 'Выберите дату',
+              style: TextStyle(fontSize: 12)), // Уменьшен шрифт
+          leading: const Icon(Icons.link, size: 20), // Уменьшен размер иконки
           onTap: () async {
             final selectedDate = await showDatePicker(
               context: context,
               initialDate: _linkedDate ?? widget.initialDate ?? DateTime.now(),
               firstDate: DateTime(2020),
               lastDate: DateTime(2030),
-              locale: const Locale('ru',
-                  'RU'), // Русская локализация использует понедельник как первый день
+              locale: const Locale('ru', 'RU'),
             );
             if (selectedDate != null) {
               setState(() {
                 _linkedDate = selectedDate;
-                _isSettingsChanged = true; // Отмечаем изменение настроек
+                _isSettingsChanged = true;
               });
             }
           },
@@ -709,7 +727,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
-  // Настройки тем (правая колонка)
+  // Оптимизированные настройки тем (правая колонка)
   Widget _buildThemeSettings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -718,29 +736,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           'Темы:',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 14,
+            fontSize: 13, // Уменьшение с 14 до 13
           ),
         ),
-        const SizedBox(height: AppDimens.smallPadding),
+        const SizedBox(
+            height: 4), // Уменьшен отступ с AppDimens.smallPadding до 4
 
-        // Вместо вызова метода, возвращающего список, используем Consumer напрямую
         Consumer<ThemesProvider>(
           builder: (context, themesProvider, _) {
             if (themesProvider.themes.isEmpty) {
               return const Text(
                 'Нет доступных тем. Создайте темы в разделе Темы.',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12, // Уменьшение с 14 до 12
                   fontStyle: FontStyle.italic,
                   color: Colors.grey,
                 ),
               );
             }
 
-            // Возвращаем Wrap с чипами тем
+            // Возвращаем Wrap с чипами тем (компактнее)
             return Wrap(
-              spacing: 8.0,
-              runSpacing: 8.0,
+              spacing: 6.0, // Уменьшен с 8.0 до 6.0
+              runSpacing: 6.0, // Уменьшен с 8.0 до 6.0
               children: themesProvider.themes.map((theme) {
                 final isSelected = _selectedThemeIds.contains(theme.id);
 
@@ -749,7 +767,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                 try {
                   themeColor = Color(int.parse(theme.color));
                 } catch (e) {
-                  themeColor = Colors.blue; // Дефолтный цвет в случае ошибки
+                  themeColor = Colors.blue;
                 }
 
                 return FilterChip(
@@ -759,27 +777,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                       color: isSelected
                           ? Colors.white
                           : Colors.white.withOpacity(0.9),
-                      fontSize: 13, // Чуть меньший размер для компактности
+                      fontSize: 12, // Уменьшен с 13 до 12
                     ),
                   ),
                   selected: isSelected,
                   checkmarkColor: Colors.white,
                   selectedColor: themeColor.withOpacity(0.7),
                   backgroundColor: themeColor.withOpacity(0.3),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  visualDensity:
+                      VisualDensity.compact, // Компактный размер чипа
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 2, vertical: 0), // Уменьшены отступы
                   onSelected: (selected) {
                     setState(() {
                       if (selected) {
                         if (!_selectedThemeIds.contains(theme.id)) {
                           _selectedThemeIds.add(theme.id);
-                          _isSettingsChanged =
-                              true; // Отмечаем изменение настроек
+                          _isSettingsChanged = true;
                         }
                       } else {
                         _selectedThemeIds.remove(theme.id);
-                        _isSettingsChanged =
-                            true; // Отмечаем изменение настроек
+                        _isSettingsChanged = true;
                       }
                     });
                   },
@@ -1040,13 +1058,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         );
       }
 
-      // Добавляем виджет голосового сообщения
+      // Добавляем виджет голосового сообщения (компактный)
       final voiceNoteId = match.group(1);
       if (voiceNoteId != null) {
         contentWidgets.add(
           VoiceNotePlayer(
             audioPath: voiceNoteId,
             maxWidth: 280,
+            compact: true, // Используем компактный режим
           ),
         );
       }

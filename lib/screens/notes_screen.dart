@@ -890,10 +890,21 @@ class _NotesScreenState extends State<NotesScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Цветной индикатор слева
-                      Container(
-                        width: 6,
-                        color: indicatorColor,
+                      // Цветной индикатор слева карточки вида "список"
+                      Expanded(
+                        flex: 0, // Не забирает лишнее пространство
+                        child: Container(
+                          width: 6.0,
+                          decoration: BoxDecoration(
+                            color: indicatorColor,
+                            borderRadius: const BorderRadius.only(
+                              topLeft:
+                                  Radius.circular(AppDimens.cardBorderRadius),
+                              bottomLeft:
+                                  Radius.circular(AppDimens.cardBorderRadius),
+                            ),
+                          ),
+                        ),
                       ),
                       // Основное содержимое
                       Expanded(

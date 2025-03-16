@@ -1,4 +1,3 @@
-// lib/widgets/media_attachment_widget.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
@@ -42,7 +41,7 @@ class MediaAttachmentWidget extends StatelessWidget {
   Widget _buildErrorWidget() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(6), // Уменьшен отступ с 8 до 6
       decoration: BoxDecoration(
         color: Colors.red.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
@@ -50,17 +49,20 @@ class MediaAttachmentWidget extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: Colors.red, size: 24),
-          const SizedBox(width: 8),
+          const Icon(Icons.error_outline,
+              color: Colors.red, size: 20), // Уменьшен размер с 24 до 20
+          const SizedBox(width: 6), // Уменьшен отступ с 8 до 6
           const Expanded(
             child: Text(
               'Файл не найден',
-              style: TextStyle(color: Colors.red),
+              style: TextStyle(
+                  color: Colors.red, fontSize: 12), // Уменьшен размер шрифта
             ),
           ),
           if (isEditing)
             IconButton(
-              icon: const Icon(Icons.close, size: 20, color: Colors.red),
+              icon: const Icon(Icons.close,
+                  size: 16, color: Colors.red), // Уменьшен размер с 20 до 16
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               onPressed: onRemove,
@@ -77,10 +79,6 @@ class MediaAttachmentWidget extends StatelessWidget {
       child: Stack(
         children: [
           Container(
-            constraints: const BoxConstraints(
-              maxHeight: 200,
-              maxWidth: double.infinity,
-            ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               boxShadow: [
@@ -93,18 +91,21 @@ class MediaAttachmentWidget extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                file,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    height: 100,
-                    color: Colors.grey[300],
-                    alignment: Alignment.center,
-                    child: const Text('Ошибка загрузки'),
-                  );
-                },
+              child: AspectRatio(
+                aspectRatio: 1.0, // Всегда квадратное соотношение сторон
+                child: Image.file(
+                  file,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[300],
+                      alignment: Alignment.center,
+                      child: const Text('Ошибка загрузки',
+                          style: TextStyle(fontSize: 12)),
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -118,8 +119,10 @@ class MediaAttachmentWidget extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 16),
-                  padding: const EdgeInsets.all(4),
+                  icon: const Icon(Icons.close,
+                      color: Colors.white,
+                      size: 14), // Уменьшен размер с 16 до 14
+                  padding: const EdgeInsets.all(2), // Уменьшен отступ с 4 до 2
                   constraints: const BoxConstraints(),
                   onPressed: () => _confirmDelete(context),
                 ),
@@ -172,49 +175,51 @@ class MediaAttachmentWidget extends StatelessWidget {
       onTap: () => _showFilePreview(context, fileName, extension),
       onLongPress: () => _showFileOptions(context),
       child: Card(
-        elevation: 2,
+        elevation: 1, // Уменьшена тень
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
         ),
+        margin: EdgeInsets.zero, // Убраны внешние отступы
         child: Padding(
-          padding: const EdgeInsets.all(12.0),
+          padding: const EdgeInsets.all(8.0), // Уменьшены отступы с 12 до 8
           child: Row(
             children: [
               // Иконка файла с фоном
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(6), // Уменьшены отступы с 10 до 6
                 decoration: BoxDecoration(
                   color: iconColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Icon(
                   fileIcon,
                   color: iconColor,
-                  size: 28,
+                  size: 20, // Уменьшен размер с 28 до 20
                 ),
               ),
 
-              const SizedBox(width: 16),
+              const SizedBox(width: 8), // Уменьшен отступ с 16 до 8
 
               // Информация о файле
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      fileName.length > 30
-                          ? '${fileName.substring(0, 27)}...'
+                      fileName.length > 20
+                          ? '${fileName.substring(0, 17)}...' // Ещё более компактное имя файла
                           : fileName,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontSize: 12, // Уменьшен шрифт с 14 до 12
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2), // Уменьшен отступ с 4 до 2
                     Text(
                       extension.toUpperCase().substring(1),
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 10, // Уменьшен шрифт с 12 до 10
                         color: AppColors.textOnLight.withOpacity(0.7),
                       ),
                     ),
@@ -225,7 +230,8 @@ class MediaAttachmentWidget extends StatelessWidget {
               // Кнопка удаления (если в режиме редактирования)
               if (isEditing)
                 IconButton(
-                  icon: const Icon(Icons.close, size: 20),
+                  icon: const Icon(Icons.close,
+                      size: 16), // Уменьшен размер с 20 до 16
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _confirmDelete(context),
@@ -265,7 +271,7 @@ class MediaAttachmentWidget extends StatelessWidget {
     );
   }
 
-  // Метод для показа предпросмотра файла
+  // Метод для показа предпросмотра файла - упрощенный для компактности
   void _showFilePreview(
       BuildContext context, String fileName, String extension) {
     final MediaService mediaService = MediaService();
@@ -273,14 +279,17 @@ class MediaAttachmentWidget extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(fileName),
+        title: Text(fileName,
+            style: const TextStyle(fontSize: 16)), // Уменьшен размер шрифта
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Тип файла: ${extension.toUpperCase().substring(1)}'),
+            Text('Тип файла: ${extension.toUpperCase().substring(1)}',
+                style: const TextStyle(fontSize: 14)), // Уменьшен размер шрифта
             const SizedBox(height: 8),
-            const Text('Предпросмотр недоступен для этого типа файла.'),
+            const Text('Предпросмотр недоступен для этого типа файла.',
+                style: TextStyle(fontSize: 14)), // Уменьшен размер шрифта
           ],
         ),
         actions: [
@@ -293,7 +302,7 @@ class MediaAttachmentWidget extends StatelessWidget {
     );
   }
 
-  // Метод для показа опций файла
+  // Метод для показа опций файла - упрощенный для компактности
   void _showFileOptions(BuildContext context) {
     final MediaService mediaService = MediaService();
     final fileName = mediaService.getFileNameFromPath(mediaPath);
@@ -308,56 +317,48 @@ class MediaAttachmentWidget extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               child: Text(
                 fileName,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 14, // Уменьшен шрифт с 16 до 14
                   fontWeight: FontWeight.bold,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Divider(),
+            const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.open_in_new),
-              title: const Text('Открыть'),
+              leading: const Icon(Icons.open_in_new,
+                  size: 20), // Уменьшен размер иконки
+              title: const Text('Открыть',
+                  style: TextStyle(fontSize: 14)), // Уменьшен шрифт
+              dense: true, // Компактный вид
               onTap: () {
                 Navigator.pop(context);
                 // TODO: Реализовать открытие файла
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: const Text('Скачать'),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Реализовать скачивание файла
-              },
-            ),
             if (isEditing)
               ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Переименовать'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // TODO: Реализовать переименование файла
-                },
-              ),
-            if (isEditing)
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title:
-                    const Text('Удалить', style: TextStyle(color: Colors.red)),
+                leading: const Icon(Icons.delete,
+                    color: Colors.red, size: 20), // Уменьшен размер иконки
+                title: const Text('Удалить',
+                    style: TextStyle(
+                        color: Colors.red, fontSize: 14)), // Уменьшен шрифт
+                dense: true, // Компактный вид
                 onTap: () {
                   Navigator.pop(context);
                   _confirmDelete(context);
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.close),
-              title: const Text('Отмена'),
+              leading:
+                  const Icon(Icons.close, size: 20), // Уменьшен размер иконки
+              title: const Text('Отмена',
+                  style: TextStyle(fontSize: 14)), // Уменьшен шрифт
+              dense: true, // Компактный вид
               onTap: () => Navigator.pop(context),
             ),
           ],
@@ -366,13 +367,15 @@ class MediaAttachmentWidget extends StatelessWidget {
     );
   }
 
-  // Метод для подтверждения удаления
+  // Метод для подтверждения удаления - упрощенный для компактности
   void _confirmDelete(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Удалить файл'),
-        content: const Text('Вы уверены, что хотите удалить этот файл?'),
+        title: const Text('Удалить файл',
+            style: TextStyle(fontSize: 16)), // Уменьшен шрифт
+        content: const Text('Вы уверены, что хотите удалить этот файл?',
+            style: TextStyle(fontSize: 14)), // Уменьшен шрифт
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -391,7 +394,7 @@ class MediaAttachmentWidget extends StatelessWidget {
   }
 }
 
-// Виджет для отображения сетки изображений
+// Виджет для отображения сетки изображений - улучшенная версия для квадратного отображения
 class MediaGrid extends StatelessWidget {
   final List<String> imagePaths;
   final Function(int index) onRemove;
@@ -416,14 +419,15 @@ class MediaGrid extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    // Используем GridView с фиксированным количеством плиток в ряду
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+        crossAxisCount: 2, // Всегда 2 изображения в ряду
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
-        childAspectRatio: 1.0,
+        childAspectRatio: 1.0, // Точно квадратные ячейки
       ),
       itemCount: images.length,
       itemBuilder: (context, index) {
@@ -437,7 +441,7 @@ class MediaGrid extends StatelessWidget {
   }
 }
 
-// Виджет для отображения списка файлов (не изображений)
+// Виджет для отображения списка файлов (не изображений) - компактная версия
 class FilesList extends StatelessWidget {
   final List<String> filePaths;
   final Function(int index) onRemove;
@@ -466,12 +470,16 @@ class FilesList extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: files.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: 4), // Уменьшен отступ с 8 до 4
       itemBuilder: (context, index) {
-        return MediaAttachmentWidget(
-          mediaPath: files[index],
-          onRemove: () => onRemove(filePaths.indexOf(files[index])),
-          isEditing: isEditing,
+        return SizedBox(
+          height: 50, // Фиксированная компактная высота
+          child: MediaAttachmentWidget(
+            mediaPath: files[index],
+            onRemove: () => onRemove(filePaths.indexOf(files[index])),
+            isEditing: isEditing,
+          ),
         );
       },
     );
