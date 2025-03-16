@@ -1,3 +1,4 @@
+// lib/widgets/voice_record_button.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/voice_note_recorder.dart';
@@ -100,7 +101,7 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Идет запись голосового сообщения..."),
-          backgroundColor: Colors.red,
+          backgroundColor: Colors.deepPurple,
           duration: Duration(seconds: 60), // Длительный срок
         ),
       );
@@ -182,24 +183,29 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
               ? 1.0 + (_currentAmplitude * 0.3)
               : 1.0 + (_pulseController.value * 0.1);
 
-          return Transform.scale(
-            scale: scale,
-            child: Container(
-              width: widget.size,
-              height: widget.size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isRecording ? Colors.red : AppColors.accentPrimary,
-                boxShadow: _isRecording
-                    ? [
-                        BoxShadow(
-                          color: Colors.red.withOpacity(0.3),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        )
-                      ]
-                    : null,
+          return Container(
+            width: widget.size,
+            height: widget.size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color:
+                  _isRecording ? Colors.deepPurple : AppColors.accentSecondary,
+              boxShadow: [
+                BoxShadow(
+                  color: _isRecording
+                      ? Colors.deepPurple.withOpacity(0.4)
+                      : AppColors.accentSecondary.withOpacity(0.3),
+                  blurRadius: _isRecording ? 12 : 8,
+                  spreadRadius: _isRecording ? 2 : 0,
+                ),
+              ],
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1.5,
               ),
+            ),
+            child: Transform.scale(
+              scale: scale,
               child: Icon(
                 _isRecording ? Icons.mic : Icons.mic_none,
                 color: Colors.white,

@@ -1,5 +1,3 @@
-// lib/widgets/markdown_editor.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -46,12 +44,15 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   bool _isLoading = false;
   late TabController _tabController;
   int _selectedTabIndex = 0;
-  bool _showFormattingToolbar =
-      true; // По умолчанию отображаем панель форматирования
+  bool _showFormattingToolbar = true;
 
   // Контроллер анимации для режима фокусировки
   late AnimationController _focusModeController;
   late Animation<double> _focusModeAnimation;
+
+  // Контроллер анимации для панели форматирования
+  late AnimationController _toolbarController;
+  late Animation<double> _toolbarAnimation;
 
   @override
   void initState() {
@@ -67,6 +68,17 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
     _focusModeAnimation = CurvedAnimation(
       parent: _focusModeController,
+      curve: Curves.easeInOut,
+    );
+
+    // Инициализация контроллера для панели форматирования
+    _toolbarController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+
+    _toolbarAnimation = CurvedAnimation(
+      parent: _toolbarController,
       curve: Curves.easeInOut,
     );
 
@@ -90,6 +102,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     _focusNode.removeListener(_handleFocusChange);
     _tabController.dispose();
     _focusModeController.dispose();
+    _toolbarController.dispose();
     super.dispose();
   }
 
@@ -106,7 +119,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
             children: <Widget>[
               ListTile(
                 leading: const Icon(Icons.camera_alt,
-                    color: AppColors.accentPrimary),
+                    color: AppColors.accentSecondary),
                 title: const Text('Сделать фото'),
                 onTap: () async {
                   // Закрываем модальное окно перед началом операции
@@ -125,7 +138,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library,
-                    color: AppColors.accentPrimary),
+                    color: AppColors.accentSecondary),
                 title: const Text('Выбрать из галереи'),
                 onTap: () async {
                   // Закрываем модальное окно перед началом операции
@@ -298,6 +311,11 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   void _toggleFormattingToolbar() {
     setState(() {
       _showFormattingToolbar = !_showFormattingToolbar;
+      if (_showFormattingToolbar) {
+        _toolbarController.forward();
+      } else {
+        _toolbarController.reverse();
+      }
     });
   }
 
@@ -402,39 +420,82 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                               Tab(text: 'Предпросмотр'),
                             ],
                           ),
-                          // Панель инструментов для работы с медиа
+                          // Обновленная панель инструментов для работы с медиа
                           if (!_isPreviewMode)
                             Padding(
                               padding: const EdgeInsets.all(8.0),
                               child: Row(
                                 children: [
-                                  // Кнопка для прикрепления изображения
-                                  IconButton(
-                                    icon: const Icon(Icons.image),
-                                    tooltip: 'Прикрепить изображение',
-                                    onPressed: () {
-                                      _showImagePickerOptions(context);
-                                    },
+                                  // Кнопка для прикрепления изображений
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: Tooltip(
+                                      message: 'Добавить изображение',
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(8),
+                                        onTap: () {
+                                          _showImagePickerOptions(context);
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            color: AppColors.textOnDark,
+                                            size: 22,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
+
+                                  const SizedBox(width: 8),
 
                                   // Кнопка для прикрепления файла
-                                  IconButton(
-                                    icon: const Icon(Icons.attach_file),
-                                    tooltip: 'Прикрепить файл',
-                                    onPressed: () {
-                                      _pickFile();
-                                    },
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: Tooltip(
+                                      message: 'Добавить файл',
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(8),
+                                        onTap: () {
+                                          _pickFile();
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Icon(
+                                            Icons.attachment_outlined,
+                                            color: AppColors.textOnDark,
+                                            size: 22,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
 
-                                  // Кнопка меню форматирования (теперь переключает панель форматирования)
-                                  IconButton(
-                                    icon: Icon(_showFormattingToolbar
-                                        ? Icons.keyboard_arrow_down
-                                        : Icons.keyboard_arrow_up),
-                                    tooltip: _showFormattingToolbar
-                                        ? 'Скрыть панель форматирования'
-                                        : 'Показать панель форматирования',
-                                    onPressed: _toggleFormattingToolbar,
+                                  const SizedBox(width: 8),
+
+                                  // Кнопка для форматирования текста
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: Tooltip(
+                                      message: _showFormattingToolbar
+                                          ? 'Скрыть форматирование'
+                                          : 'Показать форматирование',
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(8),
+                                        onTap: _toggleFormattingToolbar,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Icon(
+                                            _showFormattingToolbar
+                                                ? Icons.text_format
+                                                : Icons.text_format_outlined,
+                                            color: AppColors.textOnDark,
+                                            size: 22,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
 
                                   // Расширитель для создания пространства между группами кнопок
@@ -442,6 +503,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
                                   // Кнопка голосовой записи
                                   VoiceRecordButton(
+                                    size: 40,
                                     onRecordComplete: (audioPath) {
                                       _insertVoiceNote(audioPath);
                                     },
@@ -479,13 +541,19 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                 ],
               ),
 
-              // Панель форматирования, которая всегда отображается внизу экрана
+              // Панель форматирования, которая появляется снизу редактора
               if (!_isPreviewMode && markdownEnabled && _showFormattingToolbar)
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: _buildBottomFormattingToolbar(),
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 1),
+                      end: Offset.zero,
+                    ).animate(_toolbarAnimation),
+                    child: _buildBottomFormattingToolbar(),
+                  ),
                 ),
             ],
           ),
@@ -538,77 +606,94 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     );
   }
 
-  // Новая панель форматирования в нижней части экрана
+  // Обновленная панель форматирования, выезжающая снизу
   Widget _buildBottomFormattingToolbar() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(12),
-          topRight: Radius.circular(12),
+          bottomLeft: Radius.circular(AppDimens.buttonBorderRadius),
+          bottomRight: Radius.circular(AppDimens.buttonBorderRadius),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
+        border: Border.all(
+          color: AppColors.secondary.withOpacity(0.2),
+          width: 0.5,
+        ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildToolbarButton(
-            icon: Icons.format_bold,
-            tooltip: 'Жирный',
-            onPressed: () => _insertMarkdown(MarkdownSyntax.bold),
-          ),
-          _buildToolbarButton(
-            icon: Icons.format_italic,
-            tooltip: 'Курсив',
-            onPressed: () => _insertMarkdown(MarkdownSyntax.italic),
-          ),
-          _buildToolbarButton(
-            icon: Icons.format_list_bulleted,
-            tooltip: 'Маркированный список',
-            onPressed: () => _insertMarkdown(MarkdownSyntax.bulletList),
-          ),
-          _buildToolbarButton(
-            icon: Icons.format_list_numbered,
-            tooltip: 'Нумерованный список',
-            onPressed: () => _insertMarkdown(MarkdownSyntax.numberedList),
-          ),
-          Container(
-              width: 1,
-              height: 24,
-              color: AppColors.secondary.withOpacity(0.3)),
-          _buildToolbarButton(
-            icon: Icons.format_quote,
-            tooltip: 'Цитата',
-            onPressed: () => _insertMarkdown(MarkdownSyntax.quote),
-          ),
-          _buildToolbarButton(
-            icon: Icons.code,
-            tooltip: 'Код',
-            onPressed: () => _insertMarkdown(MarkdownSyntax.inlineCode),
-          ),
-          Container(
-              width: 1,
-              height: 24,
-              color: AppColors.secondary.withOpacity(0.3)),
-          _buildToolbarButton(
-            icon: Icons.content_cut,
-            tooltip: 'Вырезать',
-            onPressed: _cutSelectedText,
-          ),
-          _buildToolbarButton(
-            icon: Icons.content_copy,
-            tooltip: 'Копировать',
-            onPressed: _copySelectedText,
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildToolbarButton(
+              icon: Icons.format_bold,
+              tooltip: 'Жирный',
+              onPressed: () => _insertMarkdown(MarkdownSyntax.bold),
+            ),
+            _buildToolbarButton(
+              icon: Icons.format_italic,
+              tooltip: 'Курсив',
+              onPressed: () => _insertMarkdown(MarkdownSyntax.italic),
+            ),
+            _buildToolbarButton(
+              icon: Icons.format_list_bulleted,
+              tooltip: 'Маркированный список',
+              onPressed: () => _insertMarkdown(MarkdownSyntax.bulletList),
+            ),
+            _buildToolbarButton(
+              icon: Icons.format_list_numbered,
+              tooltip: 'Нумерованный список',
+              onPressed: () => _insertMarkdown(MarkdownSyntax.numberedList),
+            ),
+            _buildDivider(),
+            _buildToolbarButton(
+              icon: Icons.format_quote,
+              tooltip: 'Цитата',
+              onPressed: () => _insertMarkdown(MarkdownSyntax.quote),
+            ),
+            _buildToolbarButton(
+              icon: Icons.code,
+              tooltip: 'Код',
+              onPressed: () => _insertMarkdown(MarkdownSyntax.inlineCode),
+            ),
+            _buildDivider(),
+            _buildToolbarButton(
+              icon: Icons.title,
+              tooltip: 'Заголовок',
+              onPressed: () => _insertMarkdown(MarkdownSyntax.heading2),
+            ),
+            _buildDivider(),
+            _buildToolbarButton(
+              icon: Icons.content_cut,
+              tooltip: 'Вырезать',
+              onPressed: _cutSelectedText,
+            ),
+            _buildToolbarButton(
+              icon: Icons.content_copy,
+              tooltip: 'Копировать',
+              onPressed: _copySelectedText,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  // Разделитель для панели инструментов
+  Widget _buildDivider() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      width: 1,
+      height: 24,
+      color: AppColors.secondary.withOpacity(0.3),
     );
   }
 
@@ -620,15 +705,19 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   }) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Icon(
-            icon,
-            size: 20,
-            color: AppColors.textOnLight,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Icon(
+              icon,
+              size: 22,
+              color: AppColors.textOnDark,
+            ),
           ),
         ),
       ),
