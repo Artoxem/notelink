@@ -11,7 +11,7 @@ import '../utils/constants.dart';
 import '../utils/note_status_utils.dart';
 import 'note_detail_screen.dart';
 import 'dart:math' as math;
-import 'favorite_screen.dart';
+import '../widgets/note_list.dart';
 
 // Класс для рисования треугольника
 class TrianglePainter extends CustomPainter {
@@ -475,6 +475,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       body: Stack(
         children: [
           CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // Заголовок месяца
               SliverToBoxAdapter(
@@ -495,68 +496,91 @@ class _CalendarScreenState extends State<CalendarScreen>
                 child: _buildMonthStats(),
               ),
 
-              // Список заметок для выбранной даты
-              Consumer<NotesProvider>(
-                builder: (context, notesProvider, _) {
-                  if (notesProvider.isLoading) {
-                    return const SliverFillRemaining(
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  } else if (_selectedEvents.isEmpty) {
-                    return SliverFillRemaining(
-                      child: _buildEmptyDateView(),
-                    );
-                  } else {
-                    return SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          if (index == 0) {
-                            // Заголовок "Заметки на выбранный день"
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 12),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+              // Заметки для выбранной даты
+              SliverToBoxAdapter(
+                child: Consumer<NotesProvider>(
+                  builder: (context, notesProvider, _) {
+                    if (notesProvider.isLoading) {
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    } else if (_selectedEvents.isEmpty) {
+                      return _buildEmptyDateView();
+                    } else {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Заголовок с количеством заметок
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accentSecondary
+                                        .withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${_selectedEvents.length}',
                                     style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.accentSecondary
-                                          .withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${_selectedEvents.length}',
-                                      style: const TextStyle(
-                                        color: AppColors.accentSecondary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      color: AppColors.accentSecondary,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ],
-                              ),
-                            );
-                          }
+                                ),
+                              ],
+                            ),
+                          ),
 
-                          // Карточки заметок с улучшенным внешним видом
-                          final note = _selectedEvents[index - 1];
-                          return _buildNoteCard(note);
-                        },
-                        childCount: _selectedEvents.isEmpty
-                            ? 0
-                            : _selectedEvents.length + 1,
-                      ),
-                    );
-                  }
-                },
+                          // Список заметок через NoteListWidget
+                          Container(
+                            height: MediaQuery.of(context).size.height * 0.5,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: NoteListWidget(
+                              notes: _selectedEvents,
+                              emptyMessage: 'Нет заметок на выбранный день',
+                              showThemeBadges: true,
+                              useCachedAnimation: false,
+                              onNoteTap: (note) => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      NoteDetailScreen(note: note),
+                                ),
+                              ).then((_) => _loadData()),
+                              onNoteDeleted: (note) async {
+                                await notesProvider.deleteNote(note.id);
+                                _loadData();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Заметка удалена')),
+                                  );
+                                }
+                              },
+                              onNoteFavoriteToggled: (note) async {
+                                await notesProvider.toggleFavorite(note.id);
+                                _loadData();
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                  },
+                ),
               ),
             ],
           ),

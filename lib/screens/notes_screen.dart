@@ -647,17 +647,18 @@ class _NotesScreenState extends State<NotesScreen>
 
             // Индикатор избранного
             if (note.isFavorite)
-              const Positioned(
+              Positioned(
                 top: 0,
-                right: 0,
+                left: 0,
                 child: Material(
                   color: Colors.amber,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(AppDimens.cardBorderRadius),
-                    bottomLeft: Radius.circular(AppDimens.cardBorderRadius - 4),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(AppDimens.cardBorderRadius),
+                    bottomRight:
+                        Radius.circular(AppDimens.cardBorderRadius - 1),
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.all(4.0),
+                  child: const Padding(
+                    padding: EdgeInsets.all(3.0),
                     child: Icon(
                       Icons.star,
                       color: Colors.white,
