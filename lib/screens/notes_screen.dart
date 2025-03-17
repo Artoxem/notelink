@@ -1208,22 +1208,69 @@ class _NotesScreenState extends State<NotesScreen>
       background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20.0),
-        color: Colors.amber,
-        child: const Icon(
-          Icons.star,
-          color: Colors.white,
+        color: Colors.transparent,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.fabBackground.withOpacity(0.8),
+                AppColors.fabBackground.withOpacity(0.6)
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.horizontal(left: Radius.circular(22)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(
+                Icons.star,
+                color: Colors.orange,
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
+
       // Фон для свайпа влево (удаление)
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20.0),
-        color: Colors.red,
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
+        color: Colors.transparent,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.fabBackground.withOpacity(0.6),
+                AppColors.fabBackground.withOpacity(0.8),
+              ],
+              begin: Alignment.centerRight,
+              end: Alignment.centerLeft,
+            ),
+            borderRadius: BorderRadius.horizontal(right: Radius.circular(22)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Spacer(),
+              Icon(
+                Icons.delete,
+                color: Colors.red,
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
+
       // Подтверждение действия при свайпе с улучшенной обработкой ошибок
       confirmDismiss: (direction) async {
         if (!mounted) return false;

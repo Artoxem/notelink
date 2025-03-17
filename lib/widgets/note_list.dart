@@ -173,20 +173,40 @@ class _NoteListWidgetState extends State<NoteListWidget>
         key: Key('note_${note.id}'),
         direction: dismissDirection,
 
-        // Фон при свайпе вправо (избранное)
-        background: widget.swipeDirection != SwipeDirection.left
-            ? Container(
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.only(left: 20.0),
-                color: Colors.amber,
-                child: Icon(
-                  note.isFavorite ? Icons.star_border : Icons.star,
-                  color: Colors.white,
-                ),
-              )
-            : null,
-
         // Обработка свайпов
+        // Фон для свайпа вправо (избранное)
+        background: Container(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.only(left: 20.0),
+          color: Colors.transparent,
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.fabBackground.withOpacity(0.8),
+                  AppColors.fabBackground.withOpacity(0.6)
+                ],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.horizontal(left: Radius.circular(22)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: const [
+                Icon(
+                  Icons.star,
+                  color: Colors.orange,
+                  size: 22,
+                ),
+              ],
+            ),
+          ),
+        ),
+
         confirmDismiss: (direction) async {
           if (direction == DismissDirection.endToStart) {
             // Свайп влево

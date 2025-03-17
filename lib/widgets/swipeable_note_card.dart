@@ -46,31 +46,70 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
         key: Key('note-${widget.note.id}'),
         direction: DismissDirection.horizontal,
 
-        // Фон для свайпа вправо (избранное) - с тем же радиусом скругления
+        // Фон для свайпа вправо (избранное)
         background: Container(
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.only(left: 20.0),
-          decoration: const BoxDecoration(
-            color: Colors.amber,
-            borderRadius: borderRadius,
-          ),
-          child: const Icon(
-            Icons.star,
-            color: Colors.white,
+          color: Colors.transparent,
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.fabBackground.withOpacity(0.8),
+                  AppColors.fabBackground.withOpacity(0.6)
+                ],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.horizontal(left: Radius.circular(22)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: const [
+                Icon(
+                  Icons.star,
+                  color: Colors.orange,
+                  size: 22,
+                ),
+              ],
+            ),
           ),
         ),
 
-        // Фон для свайпа влево (удаление) - с тем же радиусом скругления
+        // Фон для свайпа влево (удаление)
         secondaryBackground: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20.0),
-          decoration: const BoxDecoration(
-            color: Colors.red,
-            borderRadius: borderRadius,
-          ),
-          child: const Icon(
-            Icons.delete,
-            color: Colors.white,
+          color: Colors.transparent,
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.fabBackground.withOpacity(0.6),
+                  AppColors.fabBackground.withOpacity(0.8),
+                ],
+                begin: Alignment.centerRight,
+                end: Alignment.centerLeft,
+              ),
+              borderRadius: BorderRadius.horizontal(right: Radius.circular(22)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: const [
+                Spacer(),
+                Icon(
+                  Icons.delete,
+                  color: Colors.red,
+                  size: 22,
+                ),
+              ],
+            ),
           ),
         ),
 
