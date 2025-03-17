@@ -132,7 +132,7 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                     final notesProvider =
                         Provider.of<NotesProvider>(context, listen: false);
                     await notesProvider.deleteNote(note.id);
-                    _loadNotes();
+                    // Удаляем вызов _loadNotes(), обновление произойдет локально
                   },
                   onNoteUnlinked: (note) async {
                     // Добавляем обработчик отвязки заметки от темы
@@ -140,28 +140,26 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                         Provider.of<ThemesProvider>(context, listen: false);
                     await themesProvider.unlinkNoteFromTheme(
                         widget.theme.id, note.id);
-                    _loadNotes();
+                    // Удаляем вызов _loadNotes(), обновление произойдет локально
                   },
                   onNoteFavoriteToggled: (note) {
-                    _loadNotes();
+                    // Не вызываем _loadNotes(), обновление происходит локально
                   },
                   onActionSelected: (note, action) {
+                    // Оптимизируем обработку действий
                     if (action == NoteListAction.delete) {
                       final notesProvider =
                           Provider.of<NotesProvider>(context, listen: false);
-                      notesProvider
-                          .deleteNote(note.id)
-                          .then((_) => _loadNotes());
+                      notesProvider.deleteNote(note.id);
+                      // Не вызываем _loadNotes()
                     } else if (action == NoteListAction.unlinkFromTheme) {
-                      // Добавляем обработку отвязки заметки от темы
                       final themesProvider =
                           Provider.of<ThemesProvider>(context, listen: false);
-                      themesProvider
-                          .unlinkNoteFromTheme(widget.theme.id, note.id)
-                          .then((_) => _loadNotes());
-                    } else {
-                      _loadNotes();
+                      themesProvider.unlinkNoteFromTheme(
+                          widget.theme.id, note.id);
+                      // Не вызываем _loadNotes()
                     }
+                    // Для других действий не вызываем полное обновление
                   },
                 ),
       floatingActionButton: FloatingActionButton(

@@ -10,8 +10,6 @@ import 'search_screen.dart';
 import 'note_detail_screen.dart';
 import 'favorite_screen.dart';
 import 'dart:math' as math;
-import '../models/note.dart';
-import '../providers/notes_provider.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});

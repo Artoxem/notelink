@@ -269,30 +269,6 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
     );
   }
 
-  // Определение цвета заметки на основе статуса
-  Color _getNoteStatusColor(Note note) {
-    if (note.isCompleted) {
-      return AppColors.completed;
-    }
-
-    if (!note.hasDeadline || note.deadlineDate == null) {
-      return AppColors.secondary; // Обычный цвет для заметок без дедлайна
-    }
-
-    final now = DateTime.now();
-    final daysUntilDeadline = note.deadlineDate!.difference(now).inDays;
-
-    if (daysUntilDeadline < 0) {
-      return AppColors.deadlineUrgent; // Просрочено
-    } else if (daysUntilDeadline <= 2) {
-      return AppColors.deadlineUrgent; // Срочно (красный)
-    } else if (daysUntilDeadline <= 7) {
-      return AppColors.deadlineNear; // Скоро (оранжевый)
-    } else {
-      return AppColors.deadlineFar; // Не срочно (желтый)
-    }
-  }
-
   void _viewNoteDetails(Note note) {
     Navigator.push(
       context,
