@@ -8,6 +8,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/theme.dart';
 import '../utils/constants.dart';
+import '../utils/note_status_utils.dart';
 import 'note_detail_screen.dart';
 import 'dart:math' as math;
 import '../widgets/note_list.dart';
@@ -1000,6 +1001,474 @@ class _CalendarScreenState extends State<CalendarScreen>
           ),
         ],
       ),
+    );
+  }
+
+  // Виджет для отображения "пустого" состояния выбранной даты
+  Widget _buildEmptyDateView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.event_note,
+            size: 80,
+            color: Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Нет заметок на ${DateFormat('d MMMM yyyy').format(_selectedDay)}',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Создайте заметку, чтобы она появилась здесь',
+            style: TextStyle(
+              fontSize: 14,
+              color: Color(0xFF213E60),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          // Кнопка "Создать заметку" удалена, т.к. дублирует функционал кнопки "+"
+        ],
+      ),
+    );
+  }
+
+  // Виджет карточки заметки для отображения в списке
+  Widget _buildNoteCard(Note note) {
+    // Определяем цвет индикатора через утилиту
+    final borderColor = NoteStatusUtils.getNoteStatusColor(note);
+
+    return Dismissible(
+      key: Key('calendar_note_${note.id}'),
+      direction: DismissDirection.horizontal,
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20.0),
+        color: Colors.amber,
+        child: const Icon(Icons.star, color: Colors.white),
+      ),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) {
+          // Свайп влево - удаление
+          final bool confirm = await showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    title: const Text('Удалить заметку'),
+                    content: const Text(
+                        'Вы уверены, что хотите удалить эту заметку?'),
+                    actions: <Widget>[
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Отмена'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Удалить',
+                            style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  );
+                },
+              ) ??
+              false;
+
+          if (confirm) {
+            final notesProvider =
+                Provider.of<NotesProvider>(context, listen: false);
+            await notesProvider.deleteNote(note.id);
+            _loadData();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Заметка удалена')),
+            );
+          }
+          return confirm;
+        } else if (direction == DismissDirection.startToEnd) {
+          // Получаем провайдер из контекста
+          final notesProvider =
+              Provider.of<NotesProvider>(context, listen: false);
+
+          // Свайп вправо - добавление/удаление из избранного
+          await notesProvider.toggleFavorite(note.id);
+
+          // Получаем обновленную заметку
+          final updatedNote = notesProvider.notes.firstWhere(
+            (n) => n.id == note.id,
+            orElse: () => note,
+          );
+
+          // Показываем сообщение
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(updatedNote.isFavorite
+                    ? 'Заметка добавлена в избранное'
+                    : 'Заметка удалена из избранного'),
+                duration: const Duration(seconds: 2),
+                backgroundColor: AppColors.accentSecondary,
+              ),
+            );
+          }
+
+          return false; // Не убираем карточку
+        }
+        return false;
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
+          side: BorderSide(color: borderColor, width: 2),
+        ),
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NoteDetailScreen(note: note),
+              ),
+            ).then((_) => _loadData());
+          },
+          onLongPress: () => _showNoteOptionsMenu(note),
+          borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppDimens.mediumPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Верхняя часть с датой и дедлайном
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          DateFormat('d MMM yyyy').format(note.createdAt),
+                          style: AppTextStyles.bodySmallLight,
+                        ),
+                        if (note.hasDeadline && note.deadlineDate != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color.fromRGBO(255, 255, 7, 0.35),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  note.isCompleted
+                                      ? Icons.check_circle
+                                      : Icons.timer,
+                                  size: 12,
+                                  color: AppColors.textOnLight,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  note.isCompleted
+                                      ? 'Выполнено'
+                                      : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
+                                  style: AppTextStyles.deadlineText,
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // Заголовок и содержимое
+                    Text(
+                      _getFirstLineFromContent(note.content),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textOnLight,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _getBodyFromContent(note.content),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyMediumLight,
+                    ),
+
+                    // Индикаторы медиа и тем
+                    if (note.mediaUrls.isNotEmpty || note.themeIds.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          children: [
+                            if (note.hasAudio)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Icon(Icons.mic,
+                                    size: 16, color: Colors.purple),
+                              ),
+                            if (note.hasImages)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: Icon(Icons.photo,
+                                    size: 16, color: AppColors.textOnLight),
+                              ),
+                            if (note.hasFiles)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: Icon(Icons.attach_file,
+                                    size: 16, color: AppColors.textOnLight),
+                              ),
+                            const Spacer(),
+                            if (note.themeIds.isNotEmpty)
+                              _buildThemeTags(note.themeIds),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (note.isFavorite)
+                const Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Material(
+                    color: Colors.amber,
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(AppDimens.cardBorderRadius),
+                      bottomLeft:
+                          Radius.circular(AppDimens.cardBorderRadius - 4),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(4.0),
+                      child: Icon(Icons.star, color: Colors.white, size: 16),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+// Добавить вспомогательные методы
+  String _getFirstLineFromContent(String content) {
+    final firstLineEnd = content.indexOf('\n');
+    if (firstLineEnd == -1) return content;
+    String firstLine = content.substring(0, firstLineEnd).trim();
+    return firstLine.replaceAll(RegExp(r'^#+\s+'), '');
+  }
+
+  String _getBodyFromContent(String content) {
+    final firstLineEnd = content.indexOf('\n');
+    if (firstLineEnd == -1) return '';
+    return content.substring(firstLineEnd + 1).trim();
+  }
+
+  Widget _buildThemeTags(List<String> themeIds) {
+    return Consumer<ThemesProvider>(
+      builder: (context, themesProvider, _) {
+        final displayIds = themeIds.take(2).toList();
+        return Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            ...displayIds.map((id) {
+              final theme = themesProvider.getThemeById(id);
+              if (theme == null) return const SizedBox.shrink();
+
+              Color themeColor;
+              try {
+                themeColor = Color(int.parse(theme.color));
+              } catch (e) {
+                themeColor = AppColors.themeColors[0];
+              }
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: themeColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: themeColor.withOpacity(0.5), width: 0.5),
+                ),
+                child: Text(
+                  theme.name,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: themeColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              );
+            }),
+            if (themeIds.length > 2)
+              Text(
+                '+${themeIds.length - 2}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: AppColors.textOnLight.withOpacity(0.6),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+// Добавить метод для показа опций заметки
+  void _showNoteOptionsMenu(Note note) {
+    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+    // Тактильная обратная связь
+    HapticFeedback.mediumImpact();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.cardBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Действия с заметкой',
+                        style: AppTextStyles.heading3),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading:
+                    const Icon(Icons.edit, color: AppColors.accentSecondary),
+                title: const Text('Редактировать'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          NoteDetailScreen(note: note, isEditMode: true),
+                    ),
+                  ).then((_) => _loadData());
+                },
+              ),
+              if (note.hasDeadline && !note.isCompleted)
+                ListTile(
+                  leading: const Icon(Icons.check_circle,
+                      color: AppColors.completed),
+                  title: const Text('Отметить как выполненное'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await notesProvider.completeNote(note.id);
+                    _loadData();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Задача отмечена как выполненная')),
+                      );
+                    }
+                  },
+                ),
+              ListTile(
+                leading: Icon(
+                  note.isFavorite ? Icons.star : Icons.star_border,
+                  color: Colors.amber,
+                ),
+                title: Text(note.isFavorite
+                    ? 'Удалить из избранного'
+                    : 'Добавить в избранное'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await notesProvider.toggleFavorite(note.id);
+                  _loadData();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(note.isFavorite
+                            ? 'Заметка добавлена в избранное'
+                            : 'Заметка удалена из избранного'),
+                      ),
+                    );
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title:
+                    const Text('Удалить', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final bool confirm = await showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: const Text('Удалить заметку'),
+                            content: const Text(
+                                'Вы уверены, что хотите удалить эту заметку?'),
+                            actions: <Widget>[
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                child: const Text('Отмена'),
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
+                                child: const Text('Удалить',
+                                    style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                          );
+                        },
+                      ) ??
+                      false;
+
+                  if (confirm) {
+                    await notesProvider.deleteNote(note.id);
+                    _loadData();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Заметка удалена')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
