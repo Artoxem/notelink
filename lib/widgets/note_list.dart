@@ -1,3 +1,5 @@
+// lib/widgets/note_list.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/note.dart';
@@ -8,6 +10,7 @@ import '../utils/note_status_utils.dart';
 import '../screens/note_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
+import 'dart:math' as math;
 
 enum NoteListAction {
   edit,
@@ -71,9 +74,21 @@ class _NoteListWidgetState extends State<NoteListWidget>
   // Кэш для оптимизации производительности
   final Map<String, Color> _noteColorCache = {};
 
+  // Контроллер прокрутки для сохранения позиции
+  final ScrollController _scrollController = ScrollController();
+
+  // Ключ для AnimatedList
+  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+
+  // Локальная копия списка заметок для управления анимациями
+  late List<Note> _localNotes;
+
   @override
   void initState() {
     super.initState();
+
+    // Инициализируем локальный список
+    _localNotes = List.from(widget.notes);
 
     if (widget.useCachedAnimation) {
       _animationController = AnimationController(
@@ -88,11 +103,54 @@ class _NoteListWidgetState extends State<NoteListWidget>
   }
 
   @override
+  void didUpdateWidget(NoteListWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Если список заметок изменился извне, обновляем локальный список
+    if (widget.notes != oldWidget.notes) {
+      // Находим добавленные и удаленные заметки
+      final Set<String> oldIds = oldWidget.notes.map((n) => n.id).toSet();
+      final Set<String> newIds = widget.notes.map((n) => n.id).toSet();
+
+      final Set<String> addedIds = newIds.difference(oldIds);
+      final Set<String> removedIds = oldIds.difference(newIds);
+
+      // Обрабатываем удаленные заметки
+      for (final removedId in removedIds) {
+        final index = _localNotes.indexWhere((n) => n.id == removedId);
+        if (index != -1) {
+          _removeNoteLocally(index);
+        }
+      }
+
+      // Обрабатываем добавленные заметки
+      for (final addedId in addedIds) {
+        final note = widget.notes.firstWhere((n) => n.id == addedId);
+        _localNotes.add(note);
+      }
+
+      // Обновляем существующие заметки
+      for (int i = 0; i < _localNotes.length; i++) {
+        final noteId = _localNotes[i].id;
+        final updatedNote = widget.notes.firstWhere(
+          (n) => n.id == noteId,
+          orElse: () => _localNotes[i],
+        );
+
+        if (updatedNote != _localNotes[i]) {
+          _localNotes[i] = updatedNote;
+        }
+      }
+    }
+  }
+
+  @override
   void dispose() {
     if (widget.useCachedAnimation) {
       _animationController.dispose();
     }
     _noteColorCache.clear();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -100,22 +158,90 @@ class _NoteListWidgetState extends State<NoteListWidget>
   void _initializeItemAnimations() {
     if (!widget.useCachedAnimation) return;
 
-    for (int i = 0; i < widget.notes.length; i++) {
-      final note = widget.notes[i];
+    for (int i = 0; i < _localNotes.length; i++) {
+      final note = _localNotes[i];
       _itemAnimations[note.id] = CurvedAnimation(
         parent: _animationController,
         curve: Interval(
-          i / widget.notes.length * 0.6, // Задержка в зависимости от позиции
-          i / widget.notes.length * 0.6 + 0.4, // Перекрытие для плавности
+          i / _localNotes.length * 0.6, // Задержка в зависимости от позиции
+          i / _localNotes.length * 0.6 + 0.4, // Перекрытие для плавности
           curve: Curves.easeOutQuint,
         ),
       );
     }
   }
 
+  // Метод для локального удаления заметки с анимацией
+  void _removeNoteLocally(int index) {
+    if (index < 0 || index >= _localNotes.length) return;
+
+    final note = _localNotes[index];
+
+    // Сохраняем текущую позицию прокрутки
+    final currentScrollPosition = _scrollController.position.pixels;
+
+    // Удаляем из локального списка
+    _localNotes.removeAt(index);
+
+    // Если используем AnimatedList, анимируем удаление
+    if (_listKey.currentState != null) {
+      _listKey.currentState!.removeItem(
+        index,
+        (context, animation) => _buildNoteItemWithAnimation(note, animation),
+        duration: AppAnimations.mediumDuration,
+      );
+    } else {
+      // Обновляем состояние, если AnimatedList не используется
+      setState(() {});
+    }
+
+    // Восстанавливаем позицию прокрутки после анимации
+    Future.delayed(AppAnimations.mediumDuration, () {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(math.min(
+            currentScrollPosition, _scrollController.position.maxScrollExtent));
+      }
+    });
+  }
+
+  // Метод для локального добавления заметки в избранное без полной перезагрузки
+  void _toggleFavoriteLocally(Note note) async {
+    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+    // Сохраняем текущую позицию прокрутки
+    final currentScrollPosition =
+        _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
+
+    // Тактильная обратная связь
+    HapticFeedback.lightImpact();
+
+    // Переключаем состояние избранного
+    await notesProvider.toggleFavorite(note.id);
+
+    // Обновляем локальное состояние без полной перезагрузки
+    setState(() {
+      final index = _localNotes.indexWhere((n) => n.id == note.id);
+      if (index != -1) {
+        _localNotes[index] = _localNotes[index].copyWith(
+          isFavorite: !_localNotes[index].isFavorite,
+        );
+      }
+    });
+
+    // Восстанавливаем позицию прокрутки
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(currentScrollPosition);
+    }
+
+    // Уведомляем родительский виджет
+    if (widget.onNoteFavoriteToggled != null) {
+      widget.onNoteFavoriteToggled!(note);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (widget.notes.isEmpty) {
+    if (_localNotes.isEmpty) {
       return Center(
         child: Text(
           widget.emptyMessage ?? 'Нет заметок для отображения',
@@ -128,38 +254,37 @@ class _NoteListWidgetState extends State<NoteListWidget>
       );
     }
 
-    return ListView.builder(
-      itemCount: widget.notes.length,
+    // Используем AnimatedList для анимации добавления/удаления
+    return AnimatedList(
+      key: _listKey,
+      controller: _scrollController,
+      initialItemCount: _localNotes.length,
       padding: const EdgeInsets.all(16),
-      itemBuilder: (context, index) {
-        final note = widget.notes[index];
-        return _buildNoteItem(note);
+      itemBuilder: (context, index, animation) {
+        final note = _localNotes[index];
+        return _buildNoteItemWithAnimation(note, animation);
       },
     );
   }
 
-  Widget _buildNoteItem(Note note) {
-    // Применяем анимацию, если включена
-    if (widget.useCachedAnimation && _itemAnimations.containsKey(note.id)) {
-      return AnimatedBuilder(
-        animation: _itemAnimations[note.id]!,
-        builder: (context, child) {
-          return Opacity(
-            opacity: _itemAnimations[note.id]!.value,
-            child: Transform.translate(
-              offset: Offset(0, 20 * (1 - _itemAnimations[note.id]!.value)),
-              child: child,
-            ),
-          );
-        },
-        child: _buildSwipeableNoteItem(note),
-      );
-    }
-
-    return _buildSwipeableNoteItem(note);
+  // Метод для построения элемента списка с анимацией
+  Widget _buildNoteItemWithAnimation(Note note, Animation<double> animation) {
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(1, 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutQuint,
+      )),
+      child: FadeTransition(
+        opacity: animation,
+        child: _buildNoteItem(note),
+      ),
+    );
   }
 
-  Widget _buildSwipeableNoteItem(Note note) {
+  Widget _buildNoteItem(Note note) {
     // Получаем цвет для заметки
     final Color noteColor = _getNoteStatusColor(note);
 
@@ -257,42 +382,24 @@ class _NoteListWidgetState extends State<NoteListWidget>
               } else {
                 // Удаление заметки в других случаях
                 final result = await _showDeleteConfirmationDialog(note);
-                if (result && widget.onNoteDeleted != null) {
-                  widget.onNoteDeleted!(note);
+                if (result) {
+                  // Находим индекс заметки в локальном списке
+                  final index = _localNotes.indexWhere((n) => n.id == note.id);
+                  if (index != -1) {
+                    // Локально удаляем заметку с анимацией
+                    _removeNoteLocally(index);
+
+                    // Вызываем обработчик удаления из родительского виджета
+                    if (widget.onNoteDeleted != null) {
+                      widget.onNoteDeleted!(note);
+                    }
+                  }
                 }
-                return result;
+                return false; // Не позволяем Dismissible обрабатывать удаление
               }
             } else if (direction == DismissDirection.startToEnd) {
               // Свайп вправо - добавление/удаление из избранного
-              final notesProvider =
-                  Provider.of<NotesProvider>(context, listen: false);
-              await notesProvider.toggleFavorite(note.id);
-
-              // Получаем обновленную заметку после переключения
-              final updatedNote = notesProvider.notes.firstWhere(
-                (n) => n.id == note.id,
-                orElse: () => note,
-              );
-
-              // Тактильная обратная связь
-              HapticFeedback.lightImpact();
-
-              if (widget.onNoteFavoriteToggled != null) {
-                widget.onNoteFavoriteToggled!(updatedNote);
-              }
-
-              // Показываем сообщение
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(updatedNote.isFavorite
-                        ? 'Заметка добавлена в избранное'
-                        : 'Заметка удалена из избранного'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-
+              _toggleFavoriteLocally(note);
               return false; // Не убираем карточку
             }
             return false;
@@ -310,50 +417,8 @@ class _NoteListWidgetState extends State<NoteListWidget>
           }
         },
 
-        // Действие после успешного свайпа
-        onDismissed: (direction) async {
-          if (direction == DismissDirection.endToStart) {
-            try {
-              // Сообщение об удалении
-              if (mounted && !widget.isInThemeView) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Заметка удалена'),
-                    action: SnackBarAction(
-                      label: 'Отмена',
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text(
-                                  'Функция восстановления будет доступна в будущем')),
-                        );
-                      },
-                    ),
-                  ),
-                );
-              }
-
-              // Вызываем соответствующее действие через колбэк
-              if (widget.onActionSelected != null) {
-                widget.onActionSelected!(
-                    note,
-                    widget.isInThemeView
-                        ? NoteListAction.unlinkFromTheme
-                        : NoteListAction.delete);
-              }
-            } catch (e) {
-              // Обработка ошибок
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Ошибка: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            }
-          }
-        },
+        // Действие после успешного свайпа - не используем, так как обрабатываем в confirmDismiss
+        onDismissed: (direction) {},
 
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
@@ -447,7 +512,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                             const SizedBox(width: 2),
                                             Text(
                                               note.isCompleted
-                                                  ? 'Готово'
+                                                  ? 'Выполнено'
                                                   : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
                                               style: TextStyle(
                                                 fontSize: 12,
@@ -592,7 +657,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
     );
   }
 
-  // Вспомогательные методы для форматирования и отображения содержимого заметок
+  // Вспомогательные методы форматирования и интерфейса сохраняем без изменений
   String _getFirstLine(String content) {
     final firstLineEnd = content.indexOf('\n');
     if (firstLineEnd == -1) return content;
@@ -856,33 +921,11 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 title: Text(note.isFavorite
                     ? 'Удалить из избранного'
                     : 'Добавить в избранное'),
-                onTap: () async {
+                onTap: () {
                   Navigator.pop(context);
-                  final notesProvider =
-                      Provider.of<NotesProvider>(context, listen: false);
-                  await notesProvider.toggleFavorite(note.id);
-
-                  // Получаем обновленную заметку
-                  final updatedNote = notesProvider.notes.firstWhere(
-                    (n) => n.id == note.id,
-                    orElse: () => note,
-                  );
-
-                  if (widget.onNoteFavoriteToggled != null) {
-                    widget.onNoteFavoriteToggled!(updatedNote);
-                  }
+                  _toggleFavoriteLocally(note);
                   if (widget.onActionSelected != null) {
                     widget.onActionSelected!(note, NoteListAction.favorite);
-                  }
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(updatedNote.isFavorite
-                            ? 'Заметка добавлена в избранное'
-                            : 'Заметка удалена из избранного'),
-                      ),
-                    );
                   }
                 },
               ),
@@ -897,9 +940,33 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 title: const Text('Отметить как выполненное'),
                 onTap: () async {
                   Navigator.pop(context);
+
+                  // Сохраняем текущую позицию прокрутки
+                  final currentScrollPosition = _scrollController.hasClients
+                      ? _scrollController.position.pixels
+                      : 0.0;
+
+                  // Отмечаем заметку как выполненную
                   final notesProvider =
                       Provider.of<NotesProvider>(context, listen: false);
                   await notesProvider.completeNote(note.id);
+
+                  // Обновляем локальное состояние
+                  setState(() {
+                    final index =
+                        _localNotes.indexWhere((n) => n.id == note.id);
+                    if (index != -1) {
+                      _localNotes[index] = _localNotes[index].copyWith(
+                        isCompleted: true,
+                      );
+                    }
+                  });
+
+                  // Восстанавливаем позицию прокрутки
+                  if (_scrollController.hasClients) {
+                    _scrollController.jumpTo(currentScrollPosition);
+                  }
+
                   if (widget.onActionSelected != null) {
                     widget.onActionSelected!(note, NoteListAction.complete);
                   }
@@ -917,12 +984,22 @@ class _NoteListWidgetState extends State<NoteListWidget>
                   Navigator.pop(context);
                   final shouldUnlink =
                       await _showUnlinkConfirmationDialog(note);
-                  if (shouldUnlink && widget.onNoteUnlinked != null) {
-                    widget.onNoteUnlinked!(note);
-                  }
-                  if (widget.onActionSelected != null && shouldUnlink) {
-                    widget.onActionSelected!(
-                        note, NoteListAction.unlinkFromTheme);
+                  if (shouldUnlink) {
+                    // Находим индекс заметки в локальном списке
+                    final index =
+                        _localNotes.indexWhere((n) => n.id == note.id);
+                    if (index != -1) {
+                      // Локально удаляем заметку с анимацией
+                      _removeNoteLocally(index);
+                    }
+
+                    if (widget.onNoteUnlinked != null) {
+                      widget.onNoteUnlinked!(note);
+                    }
+                    if (widget.onActionSelected != null) {
+                      widget.onActionSelected!(
+                          note, NoteListAction.unlinkFromTheme);
+                    }
                   }
                 },
               ),
@@ -937,11 +1014,21 @@ class _NoteListWidgetState extends State<NoteListWidget>
                   Navigator.pop(context);
                   final shouldDelete =
                       await _showDeleteConfirmationDialog(note);
-                  if (shouldDelete && widget.onNoteDeleted != null) {
-                    widget.onNoteDeleted!(note);
-                  }
-                  if (widget.onActionSelected != null && shouldDelete) {
-                    widget.onActionSelected!(note, NoteListAction.delete);
+                  if (shouldDelete) {
+                    // Находим индекс заметки в локальном списке
+                    final index =
+                        _localNotes.indexWhere((n) => n.id == note.id);
+                    if (index != -1) {
+                      // Локально удаляем заметку с анимацией
+                      _removeNoteLocally(index);
+
+                      if (widget.onNoteDeleted != null) {
+                        widget.onNoteDeleted!(note);
+                      }
+                      if (widget.onActionSelected != null) {
+                        widget.onActionSelected!(note, NoteListAction.delete);
+                      }
+                    }
                   }
                 },
               ),

@@ -118,10 +118,29 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
           if (direction == DismissDirection.endToStart) {
             // Свайп влево - удаление
             return await showDialog(
-                // Код удаления без изменений...
-                );
+                  context: context,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: const Text('Удалить заметку'),
+                      content: const Text(
+                          'Вы уверены, что хотите удалить эту заметку?'),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Отмена'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Удалить',
+                              style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    );
+                  },
+                ) ??
+                false;
           } else if (direction == DismissDirection.startToEnd) {
-            // Свайп вправо - добавление в избранное
+            // Свайп вправо - добавление/удаление из избранного
             if (widget.onFavorite != null) {
               final success = await widget.onFavorite!();
 

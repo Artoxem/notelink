@@ -17,6 +17,7 @@ import 'note_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../widgets/note_list.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -160,13 +161,6 @@ class _NotesScreenState extends State<NotesScreen>
     _mediaCountCache.clear();
   }
 
-  // Инвалидация кэша темы при изменении
-  void _invalidateThemeCache(String themeId) {
-    _themeColorCache.remove(themeId);
-    _themeTagsCache
-        .clear(); // Очищаем все теги, так как сложно отследить затронутые
-  }
-
   // Инвалидация кэшей, связанных с заметкой
   void _invalidateNoteCache(String noteId) {
     _noteColorCache.remove(noteId);
@@ -200,25 +194,6 @@ class _NotesScreenState extends State<NotesScreen>
     } catch (e) {
       return defaultColor;
     }
-  }
-
-  // Проверка наличия голосовых заметок
-  bool _hasVoiceNotes(String content) {
-    return _voiceRegex.hasMatch(content);
-  }
-
-  // Метод для получения пути к первому изображению заметки
-  String? _getFirstImagePath(Note note) {
-    if (note.mediaUrls.isEmpty) return null;
-
-    for (final mediaPath in note.mediaUrls) {
-      if (mediaPath.toLowerCase().endsWith('.jpg') ||
-          mediaPath.toLowerCase().endsWith('.jpeg') ||
-          mediaPath.toLowerCase().endsWith('.png')) {
-        return mediaPath;
-      }
-    }
-    return null;
   }
 
   // Асинхронная загрузка данных с параллельными запросами
@@ -350,48 +325,48 @@ class _NotesScreenState extends State<NotesScreen>
     // Используем кастомный ключ для сохранения состояния скролла
     final key = PageStorageKey<String>('notes_list_$viewMode');
 
-    // Определяем базовый виджет списка в зависимости от режима просмотра
-    Widget listWidget;
-
-    if (viewMode == NoteViewMode.card) {
-      listWidget = GridView.builder(
-        key: key,
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 220, // Максимальная ширина элемента
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 0.98, // Более квадратные карточки
-        ),
-        padding: const EdgeInsets.all(AppDimens.mediumPadding),
-        itemCount: notes.length,
-        cacheExtent: 1000,
-        addAutomaticKeepAlives: true,
-        itemBuilder: (context, index) {
-          final note = notes[index];
-          return RepaintBoundary(
-            key: ValueKey('note_card_${note.id}'),
-            child: _buildNoteCard(note, notesProvider),
+    // Используем тернарный оператор вместо if-else для гарантированной инициализации
+    final Widget listWidget = (viewMode == NoteViewMode.card)
+        ? GridView.builder(
+            key: key,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
+              crossAxisSpacing: 6,
+              mainAxisSpacing: 6,
+              childAspectRatio: 0.98,
+            ),
+            padding: const EdgeInsets.all(AppDimens.mediumPadding),
+            itemCount: notes.length,
+            cacheExtent: 1000,
+            addAutomaticKeepAlives: true,
+            itemBuilder: (context, index) {
+              final note = notes[index];
+              return RepaintBoundary(
+                key: ValueKey('note_card_${note.id}'),
+                child: _buildNoteCard(note, notesProvider),
+              );
+            },
+          )
+        : NoteListWidget(
+            key: key,
+            notes: notes,
+            emptyMessage: 'Нет заметок',
+            showThemeBadges: true,
+            useCachedAnimation: true,
+            swipeDirection: SwipeDirection.both,
+            showOptionsOnLongPress: true,
+            onNoteDeleted: (note) async {
+              await notesProvider.deleteNote(note.id);
+            },
+            onNoteFavoriteToggled: (note) async {
+              // Переключение избранного будет обработано локально
+            },
+            onNoteTap: (note) {
+              _viewNoteDetails(note);
+            },
           );
-        },
-      );
-    } else {
-      listWidget = ListView.builder(
-        key: key,
-        padding: const EdgeInsets.all(AppDimens.mediumPadding),
-        itemCount: notes.length,
-        cacheExtent: 1000,
-        addAutomaticKeepAlives: true,
-        itemBuilder: (context, index) {
-          final note = notes[index];
-          return RepaintBoundary(
-            key: ValueKey('note_list_${note.id}'),
-            child: _buildNoteListItem(note, notesProvider),
-          );
-        },
-      );
-    }
 
-    // Оборачиваем в RefreshIndicator для функции "pull-to-refresh"
+    // Оборачиваем в RefreshIndicator
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.accentSecondary,
@@ -670,524 +645,6 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Новый метод для улучшенных индикаторов медиа
-  Widget _buildEnhancedNoteIndicators(Note note) {
-    // Получаем статистику медиа (количество каждого типа)
-    final mediaCounts = _getMediaCounts(note);
-
-    return Row(
-      children: [
-        // Убираем визуализацию аудио или модифицируем ее без счетчика
-        if (mediaCounts['voice']! > 0 || mediaCounts['audio']! > 0)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.deepPurple.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Icon(
-                Icons.mic,
-                size: 18,
-                color: Colors.deepPurple,
-              ),
-            ),
-          ),
-
-        // Бейджи для других типов медиа
-        if (mediaCounts['images']! > 0)
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.teal.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Icon(
-                Icons.photo,
-                size: 18,
-                color: Colors.teal,
-              ),
-            ),
-          ),
-
-        if (mediaCounts['files']! > 0)
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Icon(
-                Icons.attach_file,
-                size: 18,
-                color: Colors.blue,
-              ),
-            ),
-          ),
-
-        const Spacer(),
-
-        // Теги тем
-        if (note.themeIds.isNotEmpty) _buildThemeIndicators(note.themeIds),
-      ],
-    );
-  }
-
-  // Обновленный метод построения элемента списка с трехколоночной структурой
-  Widget _buildNoteListItem(Note note, NotesProvider notesProvider) {
-    // Получаем цвета с кэшированием для улучшения производительности
-    final indicatorColor = _getNoteStatusColor(note);
-
-    // Получаем или создаем анимацию для заметки
-    final Animation<double> animation =
-        _itemAnimations[note.id] ?? const AlwaysStoppedAnimation(1.0);
-
-    // Получаем статистику медиа
-    final mediaCounts = _getMediaCounts(note);
-
-    // Получаем отформатированный текст превью
-    final String previewText = _createPreviewFromMarkdown(note.content, 150);
-
-    // Определяем, есть ли реальное содержимое
-    final bool hasContent = previewText.trim().isNotEmpty &&
-        previewText != _getFirstLine(note.content);
-
-    // Определяем, есть ли медиа или теги
-    final bool hasMedia = mediaCounts.values.any((count) => count > 0);
-    final bool hasTags = note.themeIds.isNotEmpty;
-
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(50 * (1 - animation.value), 0),
-          child: Opacity(
-            opacity: animation.value,
-            child: child,
-          ),
-        );
-      },
-      child: _buildDismissibleNote(
-        note: note,
-        notesProvider: notesProvider,
-        isListItem: true,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-          child: Stack(
-            children: [
-              // Основная карточка с цветной полосой
-              Card(
-                margin: EdgeInsets.zero,
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.cardBorderRadius),
-                ),
-                child: InkWell(
-                  onTap: () => _viewNoteDetails(note),
-                  onLongPress: () => _showNoteOptions(note),
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.cardBorderRadius),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.stretch, // Растягиваем элементы
-                      children: [
-                        // Цветная вертикальная полоса слева
-                        Container(
-                          width: 6.0,
-                          decoration: BoxDecoration(
-                            color: indicatorColor,
-                            borderRadius: const BorderRadius.only(
-                              topLeft:
-                                  Radius.circular(AppDimens.cardBorderRadius),
-                              bottomLeft:
-                                  Radius.circular(AppDimens.cardBorderRadius),
-                            ),
-                          ),
-                        ),
-                        // Основное содержимое
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Верхняя часть: дата создания и дедлайн в одну строку
-                                Row(
-                                  children: [
-                                    // Дата создания
-                                    Text(
-                                      DateFormat('d MMM yyyy')
-                                          .format(note.createdAt),
-                                      style:
-                                          AppTextStyles.bodySmallLight.copyWith(
-                                        fontSize: 13,
-                                      ),
-                                    ),
-
-                                    // Дедлайн сразу после даты создания
-                                    if (note.hasDeadline &&
-                                        note.deadlineDate != null) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color.fromRGBO(
-                                              255, 255, 7, 0.35),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              note.isCompleted
-                                                  ? Icons.check_circle
-                                                  : Icons.timer,
-                                              size: 12,
-                                              color: AppColors.textOnLight,
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              note.isCompleted
-                                                  ? 'Готово'
-                                                  : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
-                                              style: AppTextStyles.deadlineText,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-
-                                    const Spacer(),
-
-                                    // Кнопка меню
-                                    Material(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(15),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(15),
-                                        onTap: () => _showNoteOptions(note),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(2.0),
-                                          child: Icon(
-                                            Icons.more_vert,
-                                            size: 18,
-                                            color: AppColors.textOnLight
-                                                .withOpacity(0.7),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 6),
-
-                                // Заголовок заметки
-                                Text(
-                                  _getFirstLine(note.content),
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textOnLight,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-
-                                // Содержимое заметки с адаптивной высотой и градиентом
-                                if (hasContent) ...[
-                                  const SizedBox(height: 3),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minHeight: 0,
-                                      maxHeight: 60,
-                                    ),
-                                    child: ShaderMask(
-                                      shaderCallback: (Rect bounds) {
-                                        return LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                            Colors.black,
-                                            Colors.transparent
-                                          ],
-                                          stops: const [0.7, 1.0],
-                                        ).createShader(bounds);
-                                      },
-                                      blendMode: BlendMode.dstIn,
-                                      child: Text(
-                                        previewText,
-                                        style: AppTextStyles.bodySmallLight
-                                            .copyWith(
-                                          fontSize: 14,
-                                        ),
-                                        maxLines: 3,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-
-                                // Индикаторы медиа слева, тема справа
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    // Индикаторы медиа (слева)
-                                    if (hasMedia)
-                                      MediaBadgeGroup(
-                                        imagesCount: mediaCounts['images'] ?? 0,
-                                        audioCount: mediaCounts['audio'] ?? 0,
-                                        voiceCount: mediaCounts['voice'] ?? 0,
-                                        filesCount: mediaCounts['files'] ?? 0,
-                                        badgeSize: 20,
-                                        spacing: 4.0,
-                                        onBadgeTap: (type) {
-                                          HapticFeedback.lightImpact();
-                                          _viewNoteDetails(note);
-                                        },
-                                      ),
-
-                                    // Заполнитель пространства
-                                    const Spacer(),
-
-                                    // Индикатор темы (теперь всегда справа)
-                                    if (hasTags)
-                                      _buildFirstThemeTag(note.themeIds),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Индикатор избранного поверх основной карточки
-              if (note.isFavorite)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  child: Material(
-                    color: Colors.amber,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(AppDimens.cardBorderRadius),
-                      bottomRight:
-                          Radius.circular(AppDimens.cardBorderRadius - 3),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(1.8),
-                      child: Icon(
-                        Icons.star,
-                        color: Colors.white,
-                        size: 12,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-// Метод для отображения только первого тега темы с оранжевой окраской
-  Widget _buildFirstThemeTag(List<String> themeIds) {
-    return Consumer<ThemesProvider>(
-      builder: (context, themesProvider, _) {
-        if (themeIds.isEmpty) return const SizedBox();
-
-        // Берем только первую тему
-        final themeId = themeIds.first;
-        final theme = themesProvider.getThemeById(themeId);
-
-        if (theme == null) return const SizedBox();
-
-        // Определяем цвет темы
-        Color themeColor;
-        try {
-          themeColor = Color(int.parse(theme.color));
-        } catch (e) {
-          themeColor = Color(0xFFFF9800); // Оранжевый по умолчанию
-        }
-
-        return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 4,
-          ),
-          decoration: BoxDecoration(
-            color: themeColor,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            theme.name,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // Метод для отображения тегов тем в режиме списка с кэшированием
-  Widget _buildThemeTags(List<String> themeIds) {
-    // Используем кэш для тегов
-    final cacheKey = 'tags_${themeIds.join('_')}';
-
-    if (_themeTagsCache.containsKey(cacheKey)) {
-      return Wrap(
-        spacing: 6,
-        runSpacing: 4,
-        children: _themeTagsCache[cacheKey]!,
-      );
-    }
-
-    // Ограничимся отображением максимум 2 тем для компактности
-    final displayIds = themeIds.take(2).toList();
-    final widgets = <Widget>[];
-
-    // Создаем тег для каждой темы
-    for (final id in displayIds) {
-      final themeColor = _getThemeColor(id);
-      final themeName = _getThemeName(id);
-
-      widgets.add(
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 2,
-          ),
-          decoration: BoxDecoration(
-            color: themeColor.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: themeColor.withOpacity(0.5),
-              width: 0.5,
-            ),
-          ),
-          child: Text(
-            themeName,
-            style: TextStyle(
-              fontSize: 10,
-              color: themeColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Показываем "+X" если есть дополнительные темы
-    if (themeIds.length > 2) {
-      widgets.add(
-        Text(
-          '+${themeIds.length - 2}',
-          style: TextStyle(
-            fontSize: 10,
-            color: AppColors.textOnLight.withOpacity(0.6),
-          ),
-        ),
-      );
-    }
-
-    // Сохраняем в кэш
-    _themeTagsCache[cacheKey] = widgets;
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      children: widgets,
-    );
-  }
-
-  // Метод для отображения индикаторов тем с кэшированием
-  Widget _buildThemeIndicators(List<String> themeIds) {
-    // Генерируем ключ для кэша
-    final cacheKey = themeIds.join('_');
-
-    // Проверяем кэш
-    if (_themeTagsCache.containsKey(cacheKey)) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: _themeTagsCache[cacheKey]!,
-      );
-    }
-
-    // Если нет в кэше, создаем индикаторы
-    final indicators = <Widget>[];
-
-    // Ограничиваем количество отображаемых индикаторов
-    final displayCount = math.min(themeIds.length, 3);
-
-    // Обработка каждой темы
-    for (var i = 0; i < displayCount; i++) {
-      if (i >= themeIds.length) break;
-
-      final themeId = themeIds[i];
-      final themeColor = _getThemeColor(themeId);
-
-      indicators.add(
-        Container(
-          width: 10,
-          height: 10,
-          margin: const EdgeInsets.only(left: 4),
-          decoration: BoxDecoration(
-            color: themeColor,
-            shape: BoxShape.circle,
-          ),
-        ),
-      );
-    }
-
-    // Добавляем индикатор "+X" если есть еще темы
-    if (themeIds.length > 3) {
-      indicators.add(
-        Container(
-          margin: const EdgeInsets.only(left: 4),
-          child: Text(
-            '+${themeIds.length - 3}',
-            style: AppTextStyles.bodySmall.copyWith(
-              fontSize: 10,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Сохраняем в кэш
-    _themeTagsCache[cacheKey] = indicators;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: indicators,
-    );
-  }
-
-  // Получение имени темы по ID с использованием кэша
-  String _getThemeName(String themeId) {
-    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
-    final theme = themesProvider.getThemeById(themeId);
-    return theme?.name ?? 'Без темы';
-  }
-
   // Виджет Dismissible с улучшенной обработкой ошибок и анимацией
   Widget _buildDismissibleNote({
     required Note note,
@@ -1455,7 +912,6 @@ class _NotesScreenState extends State<NotesScreen>
 
                   try {
                     // Сохраняем исходное состояние для сравнения
-                    final wasFavorite = note.isFavorite;
 
                     await notesProvider.toggleFavorite(note.id);
 
@@ -1579,10 +1035,6 @@ class _NotesScreenState extends State<NotesScreen>
 
                   try {
                     await notesProvider.toggleFavorite(note.id);
-                    final updatedNote = notesProvider.notes.firstWhere(
-                      (n) => n.id == note.id,
-                      orElse: () => note,
-                    );
 
                     // Инвалидируем кэш для этой заметки
                     _invalidateNoteCache(note.id);

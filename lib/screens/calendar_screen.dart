@@ -1550,6 +1550,7 @@ class _SelectedDayNotesListState extends State<SelectedDayNotesList> {
   @override
   Widget build(BuildContext context) {
     if (widget.notes.isEmpty) {
+      // Оставляем существующую реализацию для пустого состояния
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1614,11 +1615,12 @@ class _SelectedDayNotesListState extends State<SelectedDayNotesList> {
           ),
         ),
 
-        // Список заметок через NoteListWidget
+        // Используем обновленный NoteListWidget
         Expanded(
           child: NoteListWidget(
-            key: PageStorageKey<String>('notes_for_${_selectedDay.toString()}'),
-            notes: _selectedEvents,
+            key: PageStorageKey<String>(
+                'notes_for_${widget.selectedDay.toString()}'),
+            notes: widget.notes,
             emptyMessage: 'Нет заметок на выбранный день',
             showThemeBadges: true,
             useCachedAnimation: false,
@@ -1627,58 +1629,21 @@ class _SelectedDayNotesListState extends State<SelectedDayNotesList> {
               MaterialPageRoute(
                 builder: (context) => NoteDetailScreen(note: note),
               ),
-            ).then((_) => _loadData()),
+            ),
+            // Убираем вызов полного обновления
             onNoteDeleted: (note) async {
-              await notesProvider.deleteNote(note.id);
-              _loadData();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Заметка удалена')),
-                );
-              }
-            },
-            onNoteFavoriteToggled: (note) async {
               final notesProvider =
                   Provider.of<NotesProvider>(context, listen: false);
-              await notesProvider.toggleFavorite(note.id);
-
-              // Получаем обновленную заметку после переключения
-              final updatedNote = notesProvider.notes.firstWhere(
-                (n) => n.id == note.id,
-                orElse: () => note,
-              );
-
-              _refreshNotes();
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(updatedNote.isFavorite
-                        ? 'Заметка добавлена в избранное'
-                        : 'Заметка удалена из избранного'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
+              await notesProvider.deleteNote(note.id);
+              // Не вызываем метод _refreshNotes(), так как обновление происходит локально
+            },
+            onNoteFavoriteToggled: (note) async {
+              // Обработка переключения избранного теперь происходит внутри NoteListWidget
+              // и не требует внешнего обновления
             },
           ),
         ),
       ],
     );
-  }
-
-  // Метод для обновления только списка заметок
-  void _refreshNotes() {
-    if (!mounted) return;
-
-    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-
-    // Принудительно загружаем новые данные
-    notesProvider.loadNotes().then((_) {
-      if (!mounted) return;
-      setState(() {
-        // Обновляем только состояние этого виджета
-      });
-    });
   }
 }
