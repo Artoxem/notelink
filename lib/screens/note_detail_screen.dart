@@ -330,11 +330,32 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
             // Меню действий
             PopupMenuButton<String>(
-              onSelected: (value) {
+              onSelected: (value) async {
                 switch (value) {
                   case 'delete':
                     if (_isEditing) {
                       _showDeleteConfirmation();
+                    }
+                    break;
+                  case 'favorite':
+                    final notesProvider =
+                        Provider.of<NotesProvider>(context, listen: false);
+                    await notesProvider.toggleFavorite(widget.note!.id);
+
+                    // Получаем обновленную заметку
+                    final updatedNote = notesProvider.notes.firstWhere(
+                      (n) => n.id == widget.note!.id,
+                      orElse: () => widget.note!,
+                    );
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(updatedNote.isFavorite
+                              ? 'Заметка добавлена в избранное'
+                              : 'Заметка удалена из избранного'),
+                        ),
+                      );
                     }
                     break;
                   case 'link':

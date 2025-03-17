@@ -264,24 +264,31 @@ class _NoteListWidgetState extends State<NoteListWidget>
               }
             } else if (direction == DismissDirection.startToEnd) {
               // Свайп вправо - добавление/удаление из избранного
+              final notesProvider =
+                  Provider.of<NotesProvider>(context, listen: false);
+              await notesProvider.toggleFavorite(note.id);
+
+              // Получаем обновленную заметку после переключения
+              final updatedNote = notesProvider.notes.firstWhere(
+                (n) => n.id == note.id,
+                orElse: () => note,
+              );
 
               // Тактильная обратная связь
               HapticFeedback.lightImpact();
 
-              // Вызываем колбэк для переключения избранного
               if (widget.onNoteFavoriteToggled != null) {
-                widget.onNoteFavoriteToggled!(note);
+                widget.onNoteFavoriteToggled!(updatedNote);
               }
 
               // Показываем сообщение
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(note.isFavorite
+                    content: Text(updatedNote.isFavorite
                         ? 'Заметка добавлена в избранное'
                         : 'Заметка удалена из избранного'),
                     duration: const Duration(seconds: 2),
-                    backgroundColor: AppColors.accentSecondary,
                   ),
                 );
               }
@@ -585,7 +592,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
     );
   }
 
-// Вспомогательные методы для форматирования и отображения содержимого заметок
+  // Вспомогательные методы для форматирования и отображения содержимого заметок
   String _getFirstLine(String content) {
     final firstLineEnd = content.indexOf('\n');
     if (firstLineEnd == -1) return content;
@@ -609,7 +616,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
         note.content.contains('![voice]');
   }
 
-// Метод для отображения индикаторов медиа
+  // Метод для отображения индикаторов медиа
   Widget _buildMediaIndicators(Note note) {
     List<Widget> indicators = [];
 
@@ -655,7 +662,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
     );
   }
 
-// Метод для отображения только первого тега темы
+  // Метод для отображения только первого тега темы
   Widget _buildFirstThemeTag(List<String> themeIds) {
     return Consumer<ThemesProvider>(
       builder: (context, themesProvider, _) {
@@ -756,95 +763,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
     }
   }
 
-  // Форматирование текста заметки для отображения
-  String _formatNoteContent(String content) {
-    // Удаляем разметку Markdown
-    String formattedContent = content
-        .replaceAll(RegExp(r'#{1,3}\s+'), '') // Заголовки
-        .replaceAll(RegExp(r'\*\*|\*|__'), '') // Жирный, курсив
-        .replaceAll(RegExp(r'\[.*?\]\(.*?\)'), '') // Ссылки
-        .replaceAll(
-            RegExp(r'!\[voice\]\(voice:[^)]+\)'), '') // Голосовые заметки
-        .trim();
-
-    return formattedContent;
-  }
-
-  // Построение тегов тем
-  Widget _buildThemeBadges(Note note) {
-    return Consumer<ThemesProvider>(
-      builder: (context, themesProvider, _) {
-        // Ограничиваем количество отображаемых тем
-        final limit = 2;
-        final relevantThemeIds = note.themeIds.take(limit).toList();
-
-        if (relevantThemeIds.isEmpty) return const SizedBox();
-
-        return Wrap(
-          spacing: 4,
-          children: [
-            ...relevantThemeIds.map((themeId) {
-              final theme = themesProvider.getThemeById(themeId);
-              if (theme == null) return const SizedBox();
-
-              Color themeColor;
-              try {
-                themeColor = Color(int.parse(theme.color));
-              } catch (e) {
-                themeColor = AppColors.secondary;
-              }
-
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: themeColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: themeColor.withOpacity(0.5),
-                    width: 0.5,
-                  ),
-                ),
-                child: Text(
-                  theme.name,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: themeColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              );
-            }),
-
-            // Индикатор дополнительных тем
-            if (note.themeIds.length > limit)
-              Text(
-                '+${note.themeIds.length - limit}',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textOnLight.withOpacity(0.6),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Открытие экрана деталей заметки
-  void _openNoteDetail(Note note) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(note: note),
-      ),
-    ).then((_) {
-      // Уведомляем о действии, если есть колбэк
-      if (widget.onActionSelected != null) {
-        widget.onActionSelected!(note, NoteListAction.custom);
-      }
-    });
-  }
-
   // Диалог подтверждения удаления заметки
   Future<bool> _showDeleteConfirmationDialog(Note note) async {
     return await showDialog<bool>(
@@ -943,11 +861,28 @@ class _NoteListWidgetState extends State<NoteListWidget>
                   final notesProvider =
                       Provider.of<NotesProvider>(context, listen: false);
                   await notesProvider.toggleFavorite(note.id);
+
+                  // Получаем обновленную заметку
+                  final updatedNote = notesProvider.notes.firstWhere(
+                    (n) => n.id == note.id,
+                    orElse: () => note,
+                  );
+
                   if (widget.onNoteFavoriteToggled != null) {
-                    widget.onNoteFavoriteToggled!(note);
+                    widget.onNoteFavoriteToggled!(updatedNote);
                   }
                   if (widget.onActionSelected != null) {
                     widget.onActionSelected!(note, NoteListAction.favorite);
+                  }
+
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(updatedNote.isFavorite
+                            ? 'Заметка добавлена в избранное'
+                            : 'Заметка удалена из избранного'),
+                      ),
+                    );
                   }
                 },
               ),
@@ -974,8 +909,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
             // Опция отвязки от темы
             if (widget.availableActions
                     .contains(NoteListAction.unlinkFromTheme) &&
-                widget.themeId !=
-                    null) // Убираем проверку !widget.isInThemeView
+                widget.themeId != null)
               ListTile(
                 leading: const Icon(Icons.link_off, color: Colors.blue),
                 title: const Text('Отвязать от темы'),
@@ -1015,5 +949,20 @@ class _NoteListWidgetState extends State<NoteListWidget>
         ),
       ),
     );
+  }
+
+  // Открытие экрана деталей заметки
+  void _openNoteDetail(Note note) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NoteDetailScreen(note: note),
+      ),
+    ).then((_) {
+      // Уведомляем о действии, если есть колбэк
+      if (widget.onActionSelected != null) {
+        widget.onActionSelected!(note, NoteListAction.custom);
+      }
+    });
   }
 }

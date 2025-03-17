@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 import '../providers/app_provider.dart';
 import '../utils/constants.dart';
 import 'notes_screen.dart';
@@ -241,5 +242,57 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   void _showAddThemeDialog() {
     ThemesScreen.showAddThemeDialog(context);
+  }
+
+  // Обработка добавления/удаления заметки в избранное
+  void _handleFavoriteToggle(Note note) async {
+    // Добавляем проверку mounted перед использованием контекста
+    if (!mounted) return;
+
+    try {
+      // Получаем провайдер заметок
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+      // Переключаем состояние избранного
+      await notesProvider.toggleFavorite(note.id);
+
+      // Получаем обновленную заметку после переключения
+      final updatedNote = notesProvider.notes.firstWhere(
+        (n) => n.id == note.id,
+        orElse: () => note,
+      );
+
+      // Тактильная обратная связь
+      HapticFeedback.lightImpact();
+
+      // Показываем правильное сообщение в зависимости от актуального состояния
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(updatedNote.isFavorite
+                ? 'Заметка добавлена в избранное'
+                : 'Заметка удалена из избранного'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Обновляем UI при необходимости
+      if (mounted) {
+        setState(() {
+          // Обновление состояния, если это влияет на текущий экран
+        });
+      }
+    } catch (e) {
+      // Обработка ошибок
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

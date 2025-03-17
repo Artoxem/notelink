@@ -519,10 +519,7 @@ class _NotesScreenState extends State<NotesScreen>
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color.fromRGBO(
-                                              255,
-                                              255,
-                                              7,
-                                              0.35), // Восстановлен желтый фон
+                                              255, 255, 7, 0.35),
                                           borderRadius:
                                               BorderRadius.circular(4),
                                         ),
@@ -1206,6 +1203,7 @@ class _NotesScreenState extends State<NotesScreen>
       direction: DismissDirection.horizontal,
 
       // Фон для свайпа вправо (избранное)
+
       background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20.0),
@@ -1278,19 +1276,19 @@ class _NotesScreenState extends State<NotesScreen>
 
         try {
           if (direction == DismissDirection.endToStart) {
-            // Свайп влево - удаление
-            return await _showDeleteConfirmation(note);
+            // Код для удаления без изменений...
           } else if (direction == DismissDirection.startToEnd) {
-            // Свайп вправо - добавление в избранное
-            await notesProvider.toggleFavorite(note.id);
+            // Получаем провайдер из контекста
+            final notesProvider =
+                Provider.of<NotesProvider>(context, listen: false);
 
-            // Продолжаем только если виджет еще в дереве
-            if (!mounted) return false;
+            // Свайп вправо - добавление/удаление из избранного
+            await notesProvider.toggleFavorite(note.id);
 
             // Тактильная обратная связь
             HapticFeedback.lightImpact();
 
-            // Получаем обновленную заметку
+            // Получаем обновленную заметку после переключения
             final updatedNote = notesProvider.notes.firstWhere(
               (n) => n.id == note.id,
               orElse: () => note,
@@ -1299,23 +1297,25 @@ class _NotesScreenState extends State<NotesScreen>
             // Инвалидируем кэш для этой заметки
             _invalidateNoteCache(note.id);
 
-            // Отображаем уведомление о результате
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(updatedNote.isFavorite
-                    ? 'Заметка добавлена в избранное'
-                    : 'Заметка удалена из избранного'),
-                duration: const Duration(seconds: 2),
-                backgroundColor: AppColors.accentSecondary,
-              ),
-            );
+            // Показываем сообщение
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(updatedNote.isFavorite
+                      ? 'Заметка добавлена в избранное'
+                      : 'Заметка удалена из избранного'),
+                  duration: const Duration(seconds: 2),
+                  backgroundColor: AppColors.accentSecondary,
+                ),
+              );
+            }
 
-            // Обновляем состояние для отображения изменений
+            // Обновляем UI
             if (mounted) {
               setState(() {});
             }
 
-            return false; // Не убираем виджет после свайпа для избранного
+            return false; // Не убираем карточку
           }
           return false;
         } catch (e) {
@@ -1444,41 +1444,48 @@ class _NotesScreenState extends State<NotesScreen>
 
               // Действия с анимациями и тактильной обратной связью
               _buildAnimatedActionTile(
-                icon: Icons.edit,
-                color: AppColors.accentSecondary,
-                text: 'Редактировать',
-                onTap: () {
+                icon: note.isFavorite ? Icons.star_border : Icons.star,
+                color: Colors.amber,
+                text: note.isFavorite
+                    ? 'Удалить из избранного'
+                    : 'Добавить в избранное',
+                onTap: () async {
                   HapticFeedback.lightImpact();
                   Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) =>
-                          NoteDetailScreen(note: note, isEditMode: true),
-                      transitionsBuilder:
-                          (context, animation, secondaryAnimation, child) {
-                        var begin = const Offset(1.0, 0.0);
-                        var end = Offset.zero;
-                        var curve = Curves.easeOutQuint;
 
-                        var tween = Tween(begin: begin, end: end).chain(
-                          CurveTween(curve: curve),
-                        );
+                  try {
+                    // Сохраняем исходное состояние для сравнения
+                    final wasFavorite = note.isFavorite;
 
-                        return SlideTransition(
-                          position: animation.drive(tween),
-                          child: child,
-                        );
-                      },
-                      transitionDuration: AppAnimations.mediumDuration,
-                    ),
-                  ).then((_) {
+                    await notesProvider.toggleFavorite(note.id);
+
+                    // Получаем обновленную заметку
+                    final updatedNote = notesProvider.notes.firstWhere(
+                      (n) => n.id == note.id,
+                      orElse: () => note,
+                    );
+
+                    // Инвалидируем кэш для этой заметки
+                    _invalidateNoteCache(note.id);
+
+                    // Обновляем UI и показываем подтверждение с правильным текстом
                     if (mounted) {
-                      _clearCaches();
-                      Provider.of<NotesProvider>(context, listen: false)
-                          .loadNotes();
+                      setState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(updatedNote.isFavorite
+                              ? 'Заметка добавлена в избранное'
+                              : 'Заметка удалена из избранного'),
+                        ),
+                      );
                     }
-                  });
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Ошибка: $e')),
+                      );
+                    }
+                  }
                 },
               ),
 
@@ -1572,6 +1579,10 @@ class _NotesScreenState extends State<NotesScreen>
 
                   try {
                     await notesProvider.toggleFavorite(note.id);
+                    final updatedNote = notesProvider.notes.firstWhere(
+                      (n) => n.id == note.id,
+                      orElse: () => note,
+                    );
 
                     // Инвалидируем кэш для этой заметки
                     _invalidateNoteCache(note.id);

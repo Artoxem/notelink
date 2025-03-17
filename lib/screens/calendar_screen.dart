@@ -12,6 +12,7 @@ import '../utils/note_status_utils.dart';
 import 'note_detail_screen.dart';
 import 'dart:math' as math;
 import '../widgets/note_list.dart';
+import 'package:flutter/services.dart';
 
 // Класс для рисования треугольника
 class TrianglePainter extends CustomPainter {
@@ -140,7 +141,11 @@ class CalendarScreen extends StatefulWidget {
         },
         transitionDuration: AppAnimations.mediumDuration,
       ),
-    );
+    ).then((_) {
+      // После возврата с экрана добавления заметки, обновляем только виджет списка заметок
+      // Экземпляр _CalendarScreenState не доступен здесь, поэтому
+      // данное обновление будет осуществляться автоматически через Consumer в SelectedDayNotesList
+    });
   }
 
   @override
@@ -197,10 +202,12 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    if (_isLoading) return; // Предотвращаем параллельную загрузку
+
+    _isLoading = true;
 
     try {
-      // Загружаем заметки, темы и связи между ними
+      // Загружаем заметки и темы
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
       final themesProvider =
           Provider.of<ThemesProvider>(context, listen: false);
@@ -210,14 +217,77 @@ class _CalendarScreenState extends State<CalendarScreen>
         themesProvider.loadThemes(),
       ]);
 
-      _processEvents(notesProvider.notes);
+      if (!mounted) return;
+
+      // Обновляем только события, без вызова setState()
+      _processEventsWithoutUpdate(notesProvider.notes);
+
+      _isLoading = false;
     } catch (e) {
       print('Ошибка при загрузке данных: $e');
-    } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        _isLoading = false;
       }
     }
+  }
+
+  // Добавьте новый метод для обработки событий без обновления UI
+  void _processEventsWithoutUpdate(List<Note> notes) {
+    if (!mounted) return;
+
+    final Map<DateTime, List<Note>> events = {};
+
+    for (final note in notes) {
+      // Заметки с дедлайном
+      if (note.hasDeadline && note.deadlineDate != null) {
+        final normalizedDate = DateTime(
+          note.deadlineDate!.year,
+          note.deadlineDate!.month,
+          note.deadlineDate!.day,
+        );
+
+        events[normalizedDate] ??= [];
+        if (!events[normalizedDate]!.any((n) => n.id == note.id)) {
+          events[normalizedDate]!.add(note);
+        }
+      }
+
+      // Заметки, привязанные к дате
+      if (note.hasDateLink && note.linkedDate != null) {
+        final normalizedDate = DateTime(
+          note.linkedDate!.year,
+          note.linkedDate!.month,
+          note.linkedDate!.day,
+        );
+
+        events[normalizedDate] ??= [];
+        if (!events[normalizedDate]!.any((n) => n.id == note.id)) {
+          events[normalizedDate]!.add(note);
+        }
+      } else {
+        // Если заметка НЕ привязана к дате и НЕ имеет дедлайн,
+        // только тогда добавляем её по дате создания
+        final creationDate = DateTime(
+          note.createdAt.year,
+          note.createdAt.month,
+          note.createdAt.day,
+        );
+
+        events[creationDate] ??= [];
+        if (!events[creationDate]!.any((n) => n.id == note.id)) {
+          events[creationDate]!.add(note);
+        }
+      }
+    }
+
+    // Сортировка заметок для каждого дня (от новых к старым)
+    events.forEach((date, dateNotes) {
+      dateNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    });
+
+    // Обновляем данные без вызова setState
+    _events = events;
+    _selectedEvents = _getEventsForDay(_selectedDay);
   }
 
   @override
@@ -472,123 +542,44 @@ class _CalendarScreenState extends State<CalendarScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
+      body: Column(
         children: [
-          CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              // Заголовок месяца
-              SliverToBoxAdapter(
-                child: _buildMonthHeader(),
-              ),
+          // Фиксированная часть - заголовок месяца
+          _buildMonthHeader(),
 
-              // Календарь в виде сетки
-              SliverToBoxAdapter(
-                child: Consumer<NotesProvider>(
-                  builder: (context, notesProvider, _) {
-                    return _buildGridCalendar(notesProvider);
-                  },
-                ),
-              ),
-
-              // Информационный блок
-              SliverToBoxAdapter(
-                child: _buildMonthStats(),
-              ),
-
-              // Заметки для выбранной даты
-              SliverToBoxAdapter(
-                child: Consumer<NotesProvider>(
-                  builder: (context, notesProvider, _) {
-                    if (notesProvider.isLoading) {
-                      return const SizedBox(
-                        height: 200,
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    } else if (_selectedEvents.isEmpty) {
-                      return _buildEmptyDateView();
-                    } else {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Заголовок с количеством заметок
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                                  style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.accentSecondary
-                                        .withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${_selectedEvents.length}',
-                                    style: const TextStyle(
-                                      color: AppColors.accentSecondary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Список заметок через NoteListWidget
-                          Container(
-                            height: MediaQuery.of(context).size.height * 0.5,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: NoteListWidget(
-                              notes: _selectedEvents,
-                              emptyMessage: 'Нет заметок на выбранный день',
-                              showThemeBadges: true,
-                              useCachedAnimation: false,
-                              onNoteTap: (note) => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      NoteDetailScreen(note: note),
-                                ),
-                              ).then((_) => _loadData()),
-                              onNoteDeleted: (note) async {
-                                await notesProvider.deleteNote(note.id);
-                                _loadData();
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Заметка удалена')),
-                                  );
-                                }
-                              },
-                              onNoteFavoriteToggled: (note) async {
-                                await notesProvider.toggleFavorite(note.id);
-                                _loadData();
-                              },
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
+          // Фиксированная часть - календарь в виде сетки
+          Consumer<NotesProvider>(
+            builder: (context, notesProvider, _) {
+              return _buildGridCalendar(notesProvider);
+            },
           ),
 
-          // Кнопка добавления, которая всегда видна
-          _buildAddNoteButton(),
+          // Фиксированная часть - информационный блок
+          _buildMonthStats(),
+
+          // Динамическая часть - список заметок для выбранной даты в отдельном виджете
+          Expanded(
+            child: Consumer<NotesProvider>(
+              builder: (context, notesProvider, _) {
+                if (notesProvider.isLoading) {
+                  return const SizedBox(
+                    height: 200,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                } else {
+                  // Используем отдельный виджет для списка заметок
+                  return SelectedDayNotesList(
+                    selectedDay: _selectedDay,
+                    notes: _selectedEvents,
+                  );
+                }
+              },
+            ),
+          ),
         ],
       ),
+      // Плавающая кнопка добавления
+      floatingActionButton: _buildAddNoteButton(),
     );
   }
 
@@ -1105,19 +1096,33 @@ class _CalendarScreenState extends State<CalendarScreen>
           }
           return confirm;
         } else if (direction == DismissDirection.startToEnd) {
-          // Свайп вправо - избранное
+          // Получаем провайдер из контекста
           final notesProvider =
               Provider.of<NotesProvider>(context, listen: false);
+
+          // Свайп вправо - добавление/удаление из избранного
           await notesProvider.toggleFavorite(note.id);
-          _loadData();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(note.isFavorite
-                  ? 'Заметка добавлена в избранное'
-                  : 'Заметка удалена из избранного'),
-            ),
+
+          // Получаем обновленную заметку
+          final updatedNote = notesProvider.notes.firstWhere(
+            (n) => n.id == note.id,
+            orElse: () => note,
           );
-          return false;
+
+          // Показываем сообщение
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(updatedNote.isFavorite
+                    ? 'Заметка добавлена в избранное'
+                    : 'Заметка удалена из избранного'),
+                duration: const Duration(seconds: 2),
+                backgroundColor: AppColors.accentSecondary,
+              ),
+            );
+          }
+
+          return false; // Не убираем карточку
         }
         return false;
       },
@@ -1334,6 +1339,9 @@ class _CalendarScreenState extends State<CalendarScreen>
   void _showNoteOptionsMenu(Note note) {
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
 
+    // Тактильная обратная связь
+    HapticFeedback.mediumImpact();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.cardBackground,
@@ -1473,6 +1481,7 @@ class _CalendarScreenState extends State<CalendarScreen>
         heroTag: 'calendarAddNote',
         backgroundColor: AppColors.accentSecondary,
         onPressed: () {
+          // Используем экземплярный метод вместо статического
           _showAddNoteWithDate(_selectedDay);
         },
         child: const Icon(
@@ -1506,6 +1515,170 @@ class _CalendarScreenState extends State<CalendarScreen>
         },
         transitionDuration: AppAnimations.mediumDuration,
       ),
+    ).then((_) {
+      // После возврата с экрана добавления заметки, обновляем события
+      // без обновления всего экрана
+      if (mounted) {
+        final notesProvider =
+            Provider.of<NotesProvider>(context, listen: false);
+        // Загружаем заметки без обновления UI
+        notesProvider.loadNotes().then((_) {
+          if (mounted) {
+            _processEventsWithoutUpdate(notesProvider.notes);
+          }
+        });
+      }
+    });
+  }
+}
+
+class SelectedDayNotesList extends StatefulWidget {
+  final DateTime selectedDay;
+  final List<Note> notes;
+
+  const SelectedDayNotesList({
+    Key? key,
+    required this.selectedDay,
+    required this.notes,
+  }) : super(key: key);
+
+  @override
+  State<SelectedDayNotesList> createState() => _SelectedDayNotesListState();
+}
+
+class _SelectedDayNotesListState extends State<SelectedDayNotesList> {
+  @override
+  Widget build(BuildContext context) {
+    if (widget.notes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.event_note,
+              size: 80,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Нет заметок на ${DateFormat('d MMMM yyyy').format(widget.selectedDay)}',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Создайте заметку, чтобы она появилась здесь',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF213E60),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Заголовок с количеством заметок
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Заметки на ${DateFormat('d MMMM').format(widget.selectedDay)}',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.accentSecondary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${widget.notes.length}',
+                  style: const TextStyle(
+                    color: AppColors.accentSecondary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Список заметок через NoteListWidget
+        Expanded(
+          child: NoteListWidget(
+            key: PageStorageKey<String>('notes_for_${_selectedDay.toString()}'),
+            notes: _selectedEvents,
+            emptyMessage: 'Нет заметок на выбранный день',
+            showThemeBadges: true,
+            useCachedAnimation: false,
+            onNoteTap: (note) => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NoteDetailScreen(note: note),
+              ),
+            ).then((_) => _loadData()),
+            onNoteDeleted: (note) async {
+              await notesProvider.deleteNote(note.id);
+              _loadData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Заметка удалена')),
+                );
+              }
+            },
+            onNoteFavoriteToggled: (note) async {
+              final notesProvider =
+                  Provider.of<NotesProvider>(context, listen: false);
+              await notesProvider.toggleFavorite(note.id);
+
+              // Получаем обновленную заметку после переключения
+              final updatedNote = notesProvider.notes.firstWhere(
+                (n) => n.id == note.id,
+                orElse: () => note,
+              );
+
+              _refreshNotes();
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(updatedNote.isFavorite
+                        ? 'Заметка добавлена в избранное'
+                        : 'Заметка удалена из избранного'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      ],
     );
+  }
+
+  // Метод для обновления только списка заметок
+  void _refreshNotes() {
+    if (!mounted) return;
+
+    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+    // Принудительно загружаем новые данные
+    notesProvider.loadNotes().then((_) {
+      if (!mounted) return;
+      setState(() {
+        // Обновляем только состояние этого виджета
+      });
+    });
   }
 }
