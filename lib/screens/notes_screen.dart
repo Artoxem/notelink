@@ -433,10 +433,6 @@ class _NotesScreenState extends State<NotesScreen>
     // Получаем отформатированный текст превью
     final String previewText = _createPreviewFromMarkdown(note.content, 150);
 
-    // Проверяем наличие изображений
-    final hasImages = note.hasImages;
-    final firstImagePath = hasImages ? _getFirstImagePath(note) : null;
-
     // Получаем статистику медиа
     final mediaCounts = _getMediaCounts(note);
 
@@ -670,94 +666,6 @@ class _NotesScreenState extends State<NotesScreen>
                   ),
                 ),
               ),
-
-            // Превью изображения (если есть)
-            if (firstImagePath != null)
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: Container(
-                  width: AppMediaDimens.thumbnailSize,
-                  height: AppMediaDimens.thumbnailSize,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                        AppMediaDimens.thumbnailBorderRadius),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(
-                        AppMediaDimens.thumbnailBorderRadius),
-                    child: FutureBuilder<ImageProvider?>(
-                      future: _imageCacheHelper.getThumbnail(
-                        firstImagePath,
-                        width: AppMediaDimens.thumbnailSize.toInt() * 2,
-                        height: AppMediaDimens.thumbnailSize.toInt() * 2,
-                      ),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return Container(
-                            color: Colors.grey.withOpacity(0.2),
-                            child: const Center(
-                              child: SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.0,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-
-                        if (snapshot.hasData && snapshot.data != null) {
-                          return Image(
-                            image: snapshot.data!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey.withOpacity(0.2),
-                                child: const Icon(Icons.broken_image,
-                                    size: 20, color: Colors.grey),
-                              );
-                            },
-                          );
-                        }
-
-                        // Запасной вариант, если не удалось загрузить
-                        try {
-                          final file = File(firstImagePath);
-                          if (file.existsSync()) {
-                            return Image.file(
-                              file,
-                              fit: BoxFit.cover,
-                              errorBuilder: (ctx, err, stack) => Container(
-                                color: Colors.grey.withOpacity(0.2),
-                                child: const Icon(Icons.broken_image,
-                                    size: 20, color: Colors.grey),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          // Игнорируем ошибки файловой системы
-                        }
-
-                        return Container(
-                          color: Colors.grey.withOpacity(0.2),
-                          child: const Icon(Icons.photo,
-                              size: 20, color: Colors.grey),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -887,13 +795,13 @@ class _NotesScreenState extends State<NotesScreen>
                   onLongPress: () => _showNoteOptions(note),
                   borderRadius:
                       BorderRadius.circular(AppDimens.cardBorderRadius),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Цветной индикатор слева карточки вида "список"
-                      Expanded(
-                        flex: 0, // Не забирает лишнее пространство
-                        child: Container(
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.stretch, // Растягиваем элементы
+                      children: [
+                        // Цветная вертикальная полоса слева
+                        Container(
                           width: 6.0,
                           decoration: BoxDecoration(
                             color: indicatorColor,
@@ -905,142 +813,139 @@ class _NotesScreenState extends State<NotesScreen>
                             ),
                           ),
                         ),
-                      ),
-                      // Основное содержимое
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Верхняя часть: дата создания и дедлайн в одну строку
-                              Row(
-                                children: [
-                                  // Дата создания
-                                  Text(
-                                    DateFormat('d MMM yyyy')
-                                        .format(note.createdAt),
-                                    style:
-                                        AppTextStyles.bodySmallLight.copyWith(
-                                      fontSize: 13,
+                        // Основное содержимое
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Верхняя часть: дата создания и дедлайн в одну строку
+                                Row(
+                                  children: [
+                                    // Дата создания
+                                    Text(
+                                      DateFormat('d MMM yyyy')
+                                          .format(note.createdAt),
+                                      style:
+                                          AppTextStyles.bodySmallLight.copyWith(
+                                        fontSize: 13,
+                                      ),
                                     ),
-                                  ),
 
-                                  // Дедлайн сразу после даты создания
-                                  if (note.hasDeadline &&
-                                      note.deadlineDate != null) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
+                                    // Дедлайн сразу после даты создания
+                                    if (note.hasDeadline &&
+                                        note.deadlineDate != null) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color.fromRGBO(
+                                              255, 255, 7, 0.35),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              note.isCompleted
+                                                  ? Icons.check_circle
+                                                  : Icons.timer,
+                                              size: 12,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              note.isCompleted
+                                                  ? 'Готово'
+                                                  : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
+                                              style: AppTextStyles.deadlineText,
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: const Color.fromRGBO(
-                                            255, 255, 7, 0.35),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            note.isCompleted
-                                                ? Icons.check_circle
-                                                : Icons.timer,
-                                            size: 12,
-                                            color: AppColors.textOnLight,
+                                    ],
+
+                                    const Spacer(),
+
+                                    // Кнопка меню
+                                    Material(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(15),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(15),
+                                        onTap: () => _showNoteOptions(note),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(2.0),
+                                          child: Icon(
+                                            Icons.more_vert,
+                                            size: 18,
+                                            color: AppColors.textOnLight
+                                                .withOpacity(0.7),
                                           ),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            note.isCompleted
-                                                ? 'Готово'
-                                                : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
-                                            style: AppTextStyles.deadlineText,
-                                          ),
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ],
+                                ),
 
-                                  const Spacer(),
+                                const SizedBox(height: 6),
 
-                                  // Кнопка меню
-                                  Material(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(15),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(15),
-                                      onTap: () => _showNoteOptions(note),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(2.0),
-                                        child: Icon(
-                                          Icons.more_vert,
-                                          size: 18,
-                                          color: AppColors.textOnLight
-                                              .withOpacity(0.7),
+                                // Заголовок заметки
+                                Text(
+                                  _getFirstLine(note.content),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textOnLight,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+
+                                // Содержимое заметки с адаптивной высотой и градиентом
+                                if (hasContent) ...[
+                                  const SizedBox(height: 3),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 0,
+                                      maxHeight: 60,
+                                    ),
+                                    child: ShaderMask(
+                                      shaderCallback: (Rect bounds) {
+                                        return LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.black,
+                                            Colors.transparent
+                                          ],
+                                          stops: const [0.7, 1.0],
+                                        ).createShader(bounds);
+                                      },
+                                      blendMode: BlendMode.dstIn,
+                                      child: Text(
+                                        previewText,
+                                        style: AppTextStyles.bodySmallLight
+                                            .copyWith(
+                                          fontSize: 14,
                                         ),
+                                        maxLines: 3,
                                       ),
                                     ),
                                   ),
                                 ],
-                              ),
 
-                              const SizedBox(height: 6),
-
-                              // Заголовок заметки
-                              Text(
-                                _getFirstLine(note.content),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textOnLight,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-
-                              // Содержимое заметки с адаптивной высотой и градиентом
-                              if (hasContent) ...[
-                                const SizedBox(height: 3),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    minHeight: 0,
-                                    maxHeight: 60,
-                                  ),
-                                  child: ShaderMask(
-                                    shaderCallback: (Rect bounds) {
-                                      return LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.black,
-                                          Colors.transparent
-                                        ],
-                                        stops: const [0.7, 1.0],
-                                      ).createShader(bounds);
-                                    },
-                                    blendMode: BlendMode.dstIn,
-                                    child: Text(
-                                      previewText,
-                                      style:
-                                          AppTextStyles.bodySmallLight.copyWith(
-                                        fontSize: 14,
-                                      ),
-                                      maxLines: 3,
-                                    ),
-                                  ),
-                                ),
-                              ],
-
-                              // Индикаторы медиа и теги в нижней части
-                              if (hasMedia || hasTags) ...[
+                                // Индикаторы медиа слева, тема справа
                                 const SizedBox(height: 6),
                                 Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    // Индикаторы медиа
+                                    // Индикаторы медиа (слева)
                                     if (hasMedia)
                                       MediaBadgeGroup(
                                         imagesCount: mediaCounts['images'] ?? 0,
@@ -1055,19 +960,20 @@ class _NotesScreenState extends State<NotesScreen>
                                         },
                                       ),
 
-                                    // Теги тем
+                                    // Заполнитель пространства
+                                    const Spacer(),
+
+                                    // Индикатор темы (теперь всегда справа)
                                     if (hasTags)
-                                      Flexible(
-                                        child: _buildThemeTags(note.themeIds),
-                                      ),
+                                      _buildFirstThemeTag(note.themeIds),
                                   ],
                                 ),
                               ],
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1082,14 +988,14 @@ class _NotesScreenState extends State<NotesScreen>
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(AppDimens.cardBorderRadius),
                       bottomRight:
-                          Radius.circular(AppDimens.cardBorderRadius - 4),
+                          Radius.circular(AppDimens.cardBorderRadius - 3),
                     ),
                     child: const Padding(
-                      padding: EdgeInsets.all(3.0), // Меньший отступ
+                      padding: EdgeInsets.all(1.8),
                       child: Icon(
                         Icons.star,
                         color: Colors.white,
-                        size: 12, // Уменьшенный размер на 25%
+                        size: 12,
                       ),
                     ),
                   ),
@@ -1098,6 +1004,48 @@ class _NotesScreenState extends State<NotesScreen>
           ),
         ),
       ),
+    );
+  }
+
+// Метод для отображения только первого тега темы с оранжевой окраской
+  Widget _buildFirstThemeTag(List<String> themeIds) {
+    return Consumer<ThemesProvider>(
+      builder: (context, themesProvider, _) {
+        if (themeIds.isEmpty) return const SizedBox();
+
+        // Берем только первую тему
+        final themeId = themeIds.first;
+        final theme = themesProvider.getThemeById(themeId);
+
+        if (theme == null) return const SizedBox();
+
+        // Определяем цвет темы
+        Color themeColor;
+        try {
+          themeColor = Color(int.parse(theme.color));
+        } catch (e) {
+          themeColor = Color(0xFFFF9800); // Оранжевый по умолчанию
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: themeColor,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            theme.name,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+      },
     );
   }
 

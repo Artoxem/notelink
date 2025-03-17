@@ -9,6 +9,7 @@ import 'screens/main_screen.dart';
 import 'services/database_service.dart';
 import 'utils/constants.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'services/sample_data_service.dart';
 
 void main() async {
   // Инициализируем Flutter
@@ -35,6 +36,25 @@ void main() async {
     notesProvider: notesProvider,
     themesProvider: themesProvider,
   ));
+  // Проверяем, загружены ли sample data
+  final prefs = await SharedPreferences.getInstance();
+  final sampleDataLoaded = prefs.getBool('sample_data_loaded') ?? false;
+
+  if (!sampleDataLoaded) {
+    // Загружаем данные из базы (если этого еще нет)
+    await notesProvider.loadNotes();
+    await themesProvider.loadThemes();
+
+    // Загружаем sample data только при первом запуске
+    final sampleDataService = SampleDataService(
+      notesProvider: notesProvider,
+      themesProvider: themesProvider,
+    );
+    await sampleDataService.loadSampleData();
+
+    // Устанавливаем флаг
+    await prefs.setBool('sample_data_loaded', true);
+  }
 }
 
 class MyApp extends StatelessWidget {

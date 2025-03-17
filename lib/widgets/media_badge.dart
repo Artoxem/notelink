@@ -161,6 +161,7 @@ class MediaBadgeGroup extends StatelessWidget {
           type: MediaBadgeType.image,
           count: imagesCount,
           size: badgeSize,
+          showCount: false, // Не показываем счетчик
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.image)
               : null,
@@ -175,6 +176,7 @@ class MediaBadgeGroup extends StatelessWidget {
           type: MediaBadgeType.file,
           count: filesCount,
           size: badgeSize,
+          showCount: false, // Не показываем счетчик
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.file)
               : null,
