@@ -18,8 +18,44 @@ class ThemeNotesScreen extends StatefulWidget {
   State<ThemeNotesScreen> createState() => _ThemeNotesScreenState();
 }
 
+// Клиппер для треугольной формы
+class TriangleClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.moveTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(TriangleClipper oldClipper) => false;
+}
+
+// Клиппер для пятиугольной формы
+class PentagonClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.moveTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height * 0.4);
+    path.lineTo(size.width * 0.8, size.height);
+    path.lineTo(size.width * 0.2, size.height);
+    path.lineTo(0, size.height * 0.4);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(PentagonClipper oldClipper) => false;
+}
+
 class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
   bool _isLoading = false;
+  bool _hasError = false;
+  String _errorMessage = '';
   List<Note> _themeNotes = [];
   Color _themeColor = Colors.blue;
 
@@ -41,25 +77,47 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
   Future<void> _loadNotes() async {
     setState(() {
       _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
     });
 
     try {
       final themesProvider =
           Provider.of<ThemesProvider>(context, listen: false);
-      final notesList = await themesProvider.getNotesForTheme(widget.theme.id);
+      // Добавление отладочной информации
+      print(
+          'Загружаем заметки для темы: ${widget.theme.id}, ${widget.theme.name}');
 
+      final notesList = await themesProvider.getNotesForTheme(widget.theme.id);
+      print('Загружено ${notesList.length} заметок');
+
+      // Сортировка и установка заметок
       notesList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      setState(() {
-        _themeNotes = notesList;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _themeNotes = notesList;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      debugPrint('Ошибка при загрузке заметок темы: $e');
+      print('Критическая ошибка при загрузке заметок темы: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _hasError = true;
+          _errorMessage = 'Не удалось загрузить заметки: $e';
         });
+        // Показываем сообщение об ошибке пользователю
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка загрузки заметок'),
+            action: SnackBarAction(
+              label: 'Повторить',
+              onPressed: _loadNotes,
+            ),
+          ),
+        );
       }
     }
   }
@@ -91,11 +149,178 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
     });
   }
 
+  // Добавляем метод для отображения логотипа темы
+  Widget _buildThemeLogo(NoteTheme theme, Color themeColor) {
+    // Определяем форму и содержимое логотипа в зависимости от типа
+    Widget icon;
+    ShapeBorder? shape;
+    Widget? customShape;
+
+    switch (theme.logoType) {
+      case ThemeLogoType.book:
+        // Круглая форма с иконкой книги
+        icon = const Icon(
+          Icons.book,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.shapes:
+        // Квадратная форма с иконкой геометрических фигур
+        icon = const Icon(
+          Icons.category,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        );
+        break;
+
+      case ThemeLogoType.feather:
+        // Треугольная форма с иконкой пера
+        icon = const Icon(
+          Icons.edit,
+          color: Colors.white,
+          size: 24,
+        );
+        // Треугольная форма реализована через ClipPath
+        customShape = ClipPath(
+          clipper: TriangleClipper(),
+          child: Container(
+            width: 48,
+            height: 48,
+            color: themeColor,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: icon,
+              ),
+            ),
+          ),
+        );
+        break;
+
+      case ThemeLogoType.scroll:
+        // Пятиугольная форма с иконкой свитка
+        icon = const Icon(
+          Icons.description,
+          color: Colors.white,
+          size: 24,
+        );
+        // Пятиугольная форма реализована через ClipPath
+        customShape = ClipPath(
+          clipper: PentagonClipper(),
+          child: Container(
+            width: 48,
+            height: 48,
+            color: themeColor,
+            child: Center(child: icon),
+          ),
+        );
+        break;
+
+      default:
+        // По умолчанию - круглая форма с иконкой книги
+        icon = const Icon(
+          Icons.book,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+    }
+
+    // Если есть кастомная форма, возвращаем ее
+    if (customShape != null) {
+      return customShape;
+    }
+
+    // Стандартная реализация для круглой и квадратной форм
+    return Material(
+      shape: shape,
+      color: themeColor,
+      elevation: 4,
+      shadowColor: themeColor.withOpacity(0.3),
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(child: icon),
+      ),
+    );
+  }
+
+  // Добавляем метод для отображения правильной иконки в зависимости от типа логотипа
+  Widget _buildThemeLogoIcon(ThemeLogoType logoType) {
+    // Определяем иконку в зависимости от типа логотипа
+    IconData iconData;
+
+    switch (logoType) {
+      case ThemeLogoType.book:
+        iconData = Icons.auto_stories;
+        break;
+      case ThemeLogoType.shapes:
+        iconData = Icons.category;
+        break;
+      case ThemeLogoType.feather:
+        iconData = Icons.brush;
+        break;
+      case ThemeLogoType.scroll:
+        iconData = Icons.description;
+        break;
+      case ThemeLogoType.microphone:
+        iconData = Icons.mic;
+        break;
+      case ThemeLogoType.code:
+        iconData = Icons.code;
+        break;
+      case ThemeLogoType.graduation:
+        iconData = Icons.school;
+        break;
+      case ThemeLogoType.beach:
+        iconData = Icons.beach_access;
+        break;
+      case ThemeLogoType.party:
+        iconData = Icons.celebration;
+        break;
+      case ThemeLogoType.home:
+        iconData = Icons.home;
+        break;
+      case ThemeLogoType.business:
+        iconData = Icons.business_center;
+        break;
+      case ThemeLogoType.fitness:
+        iconData = Icons.fitness_center;
+        break;
+      default:
+        iconData = Icons.auto_stories; // Значение по умолчанию
+    }
+
+    return Icon(
+      iconData,
+      color: Colors.white,
+      size: 18,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Тема: ${widget.theme.name}'),
+        title: Row(
+          children: [
+            Container(
+              height: 36,
+              width: 36,
+              margin: const EdgeInsets.only(right: 12),
+              child: _buildThemeLogo(widget.theme, _themeColor),
+            ),
+            Expanded(
+              child: Text('Тема: ${widget.theme.name}'),
+            ),
+          ],
+        ),
         backgroundColor: _themeColor.withOpacity(0.9),
         foregroundColor: Colors.white,
         actions: [
@@ -113,55 +338,86 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _themeNotes.isEmpty
-              ? _buildEmptyState()
-              : NoteListWidget(
-                  notes: _themeNotes,
-                  emptyMessage: 'В этой теме пока нет заметок',
-                  showThemeBadges: false,
-                  isInThemeView: true,
-                  themeId: widget.theme.id,
-                  swipeDirection: SwipeDirection.both,
-                  availableActions: const [
-                    NoteListAction.edit,
-                    NoteListAction.favorite,
-                    NoteListAction.delete,
-                    NoteListAction.unlinkFromTheme // Добавляем эту опцию
-                  ],
-                  onNoteDeleted: (note) async {
-                    final notesProvider =
-                        Provider.of<NotesProvider>(context, listen: false);
-                    await notesProvider.deleteNote(note.id);
-                    // Удаляем вызов _loadNotes(), обновление произойдет локально
-                  },
-                  onNoteUnlinked: (note) async {
-                    // Добавляем обработчик отвязки заметки от темы
-                    final themesProvider =
-                        Provider.of<ThemesProvider>(context, listen: false);
-                    await themesProvider.unlinkNoteFromTheme(
-                        widget.theme.id, note.id);
-                    // Удаляем вызов _loadNotes(), обновление произойдет локально
-                  },
-                  onNoteFavoriteToggled: (note) {
-                    // Не вызываем _loadNotes(), обновление происходит локально
-                  },
-                  onActionSelected: (note, action) {
-                    // Оптимизируем обработку действий
-                    if (action == NoteListAction.delete) {
-                      final notesProvider =
-                          Provider.of<NotesProvider>(context, listen: false);
-                      notesProvider.deleteNote(note.id);
-                      // Не вызываем _loadNotes()
-                    } else if (action == NoteListAction.unlinkFromTheme) {
-                      final themesProvider =
-                          Provider.of<ThemesProvider>(context, listen: false);
-                      themesProvider.unlinkNoteFromTheme(
-                          widget.theme.id, note.id);
-                      // Не вызываем _loadNotes()
-                    }
-                    // Для других действий не вызываем полное обновление
-                  },
-                ),
+          : _hasError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline,
+                          size: 48, color: Colors.red),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Произошла ошибка',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          _errorMessage,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadNotes,
+                        child: const Text('Попробовать снова'),
+                      ),
+                    ],
+                  ),
+                )
+              : _themeNotes.isEmpty
+                  ? _buildEmptyState()
+                  : NoteListWidget(
+                      notes: _themeNotes,
+                      emptyMessage: 'В этой теме пока нет заметок',
+                      showThemeBadges: false,
+                      isInThemeView: true,
+                      themeId: widget.theme.id,
+                      swipeDirection: SwipeDirection.both,
+                      availableActions: const [
+                        NoteListAction.edit,
+                        NoteListAction.favorite,
+                        NoteListAction.delete,
+                        NoteListAction.unlinkFromTheme // Добавляем эту опцию
+                      ],
+                      onNoteDeleted: (note) async {
+                        final notesProvider =
+                            Provider.of<NotesProvider>(context, listen: false);
+                        await notesProvider.deleteNote(note.id);
+                        // Удаляем вызов _loadNotes(), обновление произойдет локально
+                      },
+                      onNoteUnlinked: (note) async {
+                        // Добавляем обработчик отвязки заметки от темы
+                        final themesProvider =
+                            Provider.of<ThemesProvider>(context, listen: false);
+                        await themesProvider.unlinkNoteFromTheme(
+                            widget.theme.id, note.id);
+                        // Удаляем вызов _loadNotes(), обновление произойдет локально
+                      },
+                      onNoteFavoriteToggled: (note) {
+                        // Не вызываем _loadNotes(), обновление происходит локально
+                      },
+                      onActionSelected: (note, action) {
+                        // Оптимизируем обработку действий
+                        if (action == NoteListAction.delete) {
+                          final notesProvider = Provider.of<NotesProvider>(
+                              context,
+                              listen: false);
+                          notesProvider.deleteNote(note.id);
+                          // Не вызываем _loadNotes()
+                        } else if (action == NoteListAction.unlinkFromTheme) {
+                          final themesProvider = Provider.of<ThemesProvider>(
+                              context,
+                              listen: false);
+                          themesProvider.unlinkNoteFromTheme(
+                              widget.theme.id, note.id);
+                          // Не вызываем _loadNotes()
+                        }
+                        // Для других действий не вызываем полное обновление
+                      },
+                    ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _themeColor,
         onPressed: _createNoteInTheme,

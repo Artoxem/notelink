@@ -11,6 +11,7 @@ import '../screens/note_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
+import '../widgets/media_badge.dart';
 
 enum NoteListAction {
   edit,
@@ -152,6 +153,139 @@ class _NoteListWidgetState extends State<NoteListWidget>
     _noteColorCache.clear();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Widget _buildNoteContentPreview(Note note) {
+    // Регулярное выражение для поиска маркеров голосовых заметок
+    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
+    final String content = note.content;
+
+    // Проверяем наличие голосовых заметок
+    final bool hasVoiceNote = voiceRegex.hasMatch(content);
+
+    // Получаем текст для превью (без маркеров голосовых заметок)
+    String previewText = _getContentWithoutFirstLine(content);
+    previewText = previewText.replaceAll(voiceRegex, '');
+
+    if (hasVoiceNote) {
+      // Если есть голосовая заметка, показываем индикатор + текст
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Индикатор голосовой заметки
+          Container(
+            width: 24,
+            height: 24,
+            margin: const EdgeInsets.only(right: 8, top: 2),
+            decoration: BoxDecoration(
+              color: Colors.purple.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.mic,
+              size: 14,
+              color: Colors.purple,
+            ),
+          ),
+
+          // Текст превью
+          Expanded(
+            child: ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black, Colors.transparent],
+                  stops: const [0.7, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.dstIn,
+              child: Text(
+                previewText.trim(),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textOnLight,
+                ),
+                maxLines: 2,
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Стандартное отображение без голосовой заметки
+      return ShaderMask(
+        shaderCallback: (Rect bounds) {
+          return LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.black, Colors.transparent],
+            stops: const [0.7, 1.0],
+          ).createShader(bounds);
+        },
+        blendMode: BlendMode.dstIn,
+        child: Text(
+          previewText,
+          style: TextStyle(
+            fontSize: 14,
+            color: AppColors.textOnLight,
+          ),
+          maxLines: 3,
+        ),
+      );
+    }
+  }
+
+  Widget _buildContentPreview(String content) {
+    // Регулярное выражение для поиска маркеров голосовых заметок
+    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:([^)]+)\)');
+    final matches = voiceRegex.allMatches(content);
+
+    if (matches.isEmpty) {
+      // Если нет голосовых заметок, возвращаем обычный текстовый превью
+      return Text(
+        _getContentWithoutFirstLine(content),
+        style: TextStyle(
+          fontSize: 14,
+          color: AppColors.textOnLight,
+        ),
+        maxLines: 3,
+      );
+    }
+
+    // Если есть голосовые заметки, создаем комбинированное представление
+    return Row(
+      children: [
+        // Иконка микрофона для индикации голосовой заметки
+        Container(
+          width: 24,
+          height: 24,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            color: Colors.purple.withOpacity(0.2),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.mic,
+            size: 14,
+            color: Colors.purple,
+          ),
+        ),
+
+        // Текст превью (с удаленными маркерами голосовых заметок)
+        Expanded(
+          child: Text(
+            _getContentWithoutFirstLine(content)
+                .replaceAll(voiceRegex, '[голосовая заметка]'),
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.textOnLight,
+            ),
+            maxLines: 2,
+          ),
+        ),
+      ],
+    );
   }
 
   // Инициализация анимаций элементов списка
@@ -569,35 +703,13 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                 if (_getContentWithoutFirstLine(note.content)
                                     .isNotEmpty) ...[
                                   const SizedBox(height: 3),
-                                  // Содержимое заметки с градиентным затемнением
+                                  // Содержимое заметки с обработкой голосовых заметок
                                   ConstrainedBox(
                                     constraints: const BoxConstraints(
                                       minHeight: 0,
                                       maxHeight: 60,
                                     ),
-                                    child: ShaderMask(
-                                      shaderCallback: (Rect bounds) {
-                                        return LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                            Colors.black,
-                                            Colors.transparent
-                                          ],
-                                          stops: const [0.7, 1.0],
-                                        ).createShader(bounds);
-                                      },
-                                      blendMode: BlendMode.dstIn,
-                                      child: Text(
-                                        _getContentWithoutFirstLine(
-                                            note.content),
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: AppColors.textOnLight,
-                                        ),
-                                        maxLines: 3,
-                                      ),
-                                    ),
+                                    child: _buildNoteContentPreview(note),
                                   ),
                                 ],
 
@@ -683,47 +795,50 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   // Метод для отображения индикаторов медиа
   Widget _buildMediaIndicators(Note note) {
-    List<Widget> indicators = [];
+    // Определяем количество каждого типа медиа
+    int imagesCount = 0;
+    int audioCount = 0;
+    int filesCount = 0;
+    int voiceCount = 0;
 
-    // Изображения
-    if (note.hasImages) {
-      indicators.add(
-        _buildMediaIndicator(Icons.image, AppColors.accentPrimary),
-      );
+    // Подсчитываем по типам файлов
+    for (final mediaPath in note.mediaUrls) {
+      final extension = mediaPath.toLowerCase();
+      if (extension.endsWith('.jpg') ||
+          extension.endsWith('.jpeg') ||
+          extension.endsWith('.png')) {
+        imagesCount++;
+      } else if (extension.endsWith('.mp3') ||
+          extension.endsWith('.wav') ||
+          extension.endsWith('.m4a')) {
+        audioCount++;
+      } else {
+        filesCount++;
+      }
     }
 
-    // Аудио и голосовые заметки
-    if (note.hasAudio ||
-        note.hasVoiceNotes ||
-        note.content.contains('![voice]')) {
-      indicators.add(
-        _buildMediaIndicator(Icons.mic, Colors.purple),
-      );
-    }
+    // Проверяем на голосовые заметки в контенте
+    final voiceMatches =
+        RegExp(r'!\[voice\]\(voice:[^)]+\)').allMatches(note.content);
+    voiceCount = voiceMatches.length;
 
-    // Файлы
-    if (note.hasFiles) {
-      indicators.add(
-        _buildMediaIndicator(Icons.attach_file, Colors.blue),
-      );
-    }
-
-    return Row(children: indicators);
-  }
-
-  Widget _buildMediaIndicator(IconData icon, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Icon(
-        icon,
-        size: 16,
-        color: color,
-      ),
+    // Используем MediaBadgeGroup - такой же компонент, как в режиме "плитка"
+    return MediaBadgeGroup(
+      imagesCount: imagesCount,
+      audioCount: audioCount,
+      voiceCount: voiceCount,
+      filesCount: filesCount,
+      badgeSize: 24.0,
+      spacing: 4.0,
+      onBadgeTap: (type) {
+        // Тактильная обратная связь при нажатии
+        HapticFeedback.lightImpact();
+        if (widget.onNoteTap != null) {
+          widget.onNoteTap!(note);
+        } else {
+          _openNoteDetail(note);
+        }
+      },
     );
   }
 

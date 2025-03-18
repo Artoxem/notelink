@@ -13,6 +13,7 @@ import 'note_detail_screen.dart';
 import 'dart:math' as math;
 import '../widgets/note_list.dart';
 import 'package:flutter/services.dart';
+import '../widgets/media_badge.dart';
 
 // Класс для рисования треугольника
 class TrianglePainter extends CustomPainter {
@@ -542,23 +543,38 @@ class _CalendarScreenState extends State<CalendarScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          // Фиксированная часть - заголовок месяца
-          _buildMonthHeader(),
+      body: CustomScrollView(
+        slivers: [
+          // Заголовок месяца и календарь в SliverAppBar
+          SliverAppBar(
+            pinned: true,
+            floating: true,
+            expandedHeight: MediaQuery.of(context).size.height * 0.55,
+            backgroundColor: AppColors.primary,
+            automaticallyImplyLeading:
+                false, // Убираем стандартную кнопку назад
+            flexibleSpace: FlexibleSpaceBar(
+              background: Column(
+                children: [
+                  // Заголовок месяца
+                  _buildMonthHeader(),
 
-          // Фиксированная часть - календарь в виде сетки
-          Consumer<NotesProvider>(
-            builder: (context, notesProvider, _) {
-              return _buildGridCalendar(notesProvider);
-            },
+                  // Календарь в виде сетки
+                  Consumer<NotesProvider>(
+                    builder: (context, notesProvider, _) {
+                      return _buildGridCalendar(notesProvider);
+                    },
+                  ),
+
+                  // Информационный блок
+                  _buildMonthStats(),
+                ],
+              ),
+            ),
           ),
 
-          // Фиксированная часть - информационный блок
-          _buildMonthStats(),
-
-          // Динамическая часть - список заметок для выбранной даты в отдельном виджете
-          Expanded(
+          // Список заметок для выбранной даты
+          SliverToBoxAdapter(
             child: Consumer<NotesProvider>(
               builder: (context, notesProvider, _) {
                 if (notesProvider.isLoading) {
@@ -567,21 +583,93 @@ class _CalendarScreenState extends State<CalendarScreen>
                     child: Center(child: CircularProgressIndicator()),
                   );
                 } else {
-                  // Используем отдельный виджет для списка заметок
-                  return SelectedDayNotesList(
-                    selectedDay: _selectedDay,
-                    notes: _selectedEvents,
+                  // Заголовок с количеством заметок
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w500),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.accentSecondary.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${_selectedEvents.length}',
+                                style: const TextStyle(
+                                  color: AppColors.accentSecondary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   );
+                }
+              },
+            ),
+          ),
+
+          // Сам список заметок
+          SliverFillRemaining(
+            child: Consumer<NotesProvider>(
+              builder: (context, notesProvider, _) {
+                if (notesProvider.isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                } else {
+                  return _selectedEvents.isEmpty
+                      ? _buildEmptyDateView()
+                      : NoteListWidget(
+                          key: PageStorageKey<String>(
+                              'notes_for_${_selectedDay.toString()}'),
+                          notes: _selectedEvents,
+                          emptyMessage: 'Нет заметок на выбранный день',
+                          showThemeBadges: true,
+                          useCachedAnimation: false,
+                          swipeDirection: SwipeDirection.both,
+                          onNoteTap: _viewNoteDetails,
+                          onNoteDeleted: (note) async {
+                            final notesProvider = Provider.of<NotesProvider>(
+                                context,
+                                listen: false);
+                            await notesProvider.deleteNote(note.id);
+                          },
+                        );
                 }
               },
             ),
           ),
         ],
       ),
-      // Плавающая кнопка добавления
       floatingActionButton: _buildAddNoteButton(),
     );
   }
+
+  // метод для открытия деталей заметки
+  void _viewNoteDetails(Note note) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => NoteDetailScreen(note: note),
+    ),
+  ).then((_) {
+    _loadData();
+  });
+}
 
   Widget _buildMonthHeader() {
     return Padding(

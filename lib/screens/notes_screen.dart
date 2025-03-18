@@ -167,6 +167,84 @@ class _NotesScreenState extends State<NotesScreen>
     _mediaCountCache.remove(noteId);
   }
 
+  Widget _buildNoteContentPreview(Note note) {
+    // Регулярное выражение для поиска маркеров голосовых заметок
+    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
+    final String content = note.content;
+
+    // Проверяем наличие голосовых заметок
+    final bool hasVoiceNote = voiceRegex.hasMatch(content);
+
+    // Получаем текст для превью (без маркеров голосовых заметок)
+    String previewText = _createPreviewFromMarkdown(content, 150);
+
+    if (hasVoiceNote) {
+      // Если есть голосовая заметка, показываем индикатор + текст
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Индикатор голосовой заметки
+          Container(
+            width: 24,
+            height: 24,
+            margin: const EdgeInsets.only(right: 8, top: 2),
+            decoration: BoxDecoration(
+              color: Colors.purple.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.mic,
+              size: 14,
+              color: Colors.purple,
+            ),
+          ),
+
+          // Текст превью
+          Expanded(
+            child: ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black, Colors.transparent],
+                  stops: const [0.7, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.dstIn,
+              child: Text(
+                previewText.trim(),
+                style: AppTextStyles.bodySmallLight.copyWith(
+                  fontSize: 14,
+                ),
+                maxLines: 2,
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Стандартное отображение без голосовой заметки
+      return ShaderMask(
+        shaderCallback: (Rect bounds) {
+          return LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.black, Colors.transparent],
+            stops: const [0.7, 1.0],
+          ).createShader(bounds);
+        },
+        blendMode: BlendMode.dstIn,
+        child: Text(
+          previewText,
+          style: AppTextStyles.bodySmallLight.copyWith(
+            fontSize: 14,
+          ),
+          maxLines: 3,
+        ),
+      );
+    }
+  }
+
   // Метод для получения цвета темы с кэшированием
   Color _getThemeColor(String themeId, {Color defaultColor = Colors.blue}) {
     // Проверяем кэш
@@ -563,26 +641,9 @@ class _NotesScreenState extends State<NotesScreen>
 
                             const SizedBox(height: 4),
 
-                            // Содержимое заметки с градиентным затемнением
+                            // Содержимое заметки с обработкой голосовых заметок
                             Expanded(
-                              child: ShaderMask(
-                                shaderCallback: (Rect bounds) {
-                                  return LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [Colors.black, Colors.transparent],
-                                    stops: const [0.7, 1.0],
-                                  ).createShader(bounds);
-                                },
-                                blendMode: BlendMode.dstIn,
-                                child: Text(
-                                  previewText,
-                                  style: AppTextStyles.bodySmallLight.copyWith(
-                                    fontSize: 14,
-                                  ),
-                                  maxLines: 8,
-                                ),
-                              ),
+                              child: _buildNoteContentPreview(note),
                             ),
 
                             // Бейджи медиа внизу карточки (если есть)
@@ -1163,7 +1224,7 @@ class _NotesScreenState extends State<NotesScreen>
       return '';
     }
 
-    // Предварительная проверка наличия разметки для оптимизации производительности
+    // Предварительная проверка наличия разметки
     bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
         _boldRegex.hasMatch(markdown) ||
         _italicRegex.hasMatch(markdown) ||
@@ -1171,9 +1232,9 @@ class _NotesScreenState extends State<NotesScreen>
         _codeRegex.hasMatch(markdown);
 
     if (!hasMarkdown) {
-      // Если разметки нет, просто обрезаем текст,
-      // но сначала удаляем ссылки на голосовые заметки
-      String cleanText = markdown.replaceAll(_voiceRegex, '');
+      // Если разметки нет, удаляем только ссылки на голосовые заметки
+      String cleanText =
+          markdown.replaceAll(_voiceRegex, '[голосовая заметка] ');
       return cleanText.length > maxLength
           ? '${cleanText.substring(0, maxLength)}...'
           : cleanText;
@@ -1182,8 +1243,8 @@ class _NotesScreenState extends State<NotesScreen>
     // Последовательно удаляем разметку
     String text = markdown;
 
-    // Удаляем голосовые заметки полностью
-    text = text.replaceAll(_voiceRegex, '');
+    // Удаляем голосовые заметки и заменяем их маркером
+    text = text.replaceAll(_voiceRegex, '[голосовая заметка] ');
 
     // Заменяем ссылки их текстовым представлением
     text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');

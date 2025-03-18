@@ -39,18 +39,18 @@ class AppColors {
 
   // Цвета для тем (категорий) - цветные точки
   static const List<Color> themeColors = [
-    Color.fromARGB(255, 187, 162, 0), // Neon Gold - желтый
-    Color(0xFFFF4500), // Neon Apple - оранжевый
-    Color(0xFF27AE60), // Green - зеленый
-    Color(0xFF8B0000), // Neon Current - красный
-    Color(0xFF30336B), // Neon Pea - синий
-    Color.fromARGB(255, 65, 0, 102), // Neon Mauve - фиолетовый
-    Color.fromARGB(255, 125, 73, 41), // Neon Apricot - персиковый
-    Color.fromARGB(255, 22, 66, 177), // Neon Sky - голубой
-    Color.fromARGB(255, 255, 0, 81), // Westside - лиловый
-    Color(0xFF6495ED), // Neon Cornflower Blue - синий
-    Color(0xFFFF69B4), // Pink - розовый
-    Color(0xFF0B4619), // Forest - темно-зеленый
+    Color.fromARGB(255, 187, 162, 0),
+    Color(0xFFFF4500),
+    Color(0xFF27AE60),
+    Color(0xFF8B0000),
+    Color(0xFF30336B),
+    Color.fromARGB(255, 99, 0, 102),
+    Color.fromARGB(255, 125, 73, 41),
+    Color.fromARGB(255, 22, 66, 177),
+    Color.fromARGB(255, 255, 0, 81),
+    Color.fromARGB(255, 0, 0, 0),
+    Color.fromARGB(255, 192, 60, 126),
+    Color(0xFF0B4619),
   ];
 
   // Системные цвета для интерфейса

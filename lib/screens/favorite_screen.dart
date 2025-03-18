@@ -8,6 +8,7 @@ import '../utils/constants.dart';
 import '../utils/note_status_utils.dart';
 import 'note_detail_screen.dart';
 import 'package:intl/intl.dart';
+import '../widgets/note_list.dart';
 
 class FavoriteScreen extends StatefulWidget {
   const FavoriteScreen({super.key});
@@ -106,18 +107,44 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                   );
                 }
 
-                // Показываем список избранных заметок
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: favoriteNotes.length,
-                  itemBuilder: (context, index) {
-                    final note = favoriteNotes[index];
-                    return _buildFavoriteCard(note, notesProvider);
+                // Используем компонент NoteListWidget вместо ListView.builder
+                return NoteListWidget(
+                  notes: favoriteNotes,
+                  emptyMessage: 'Нет избранных заметок',
+                  showThemeBadges: true,
+                  useCachedAnimation: true,
+                  swipeDirection: SwipeDirection.both,
+                  availableActions: const [
+                    NoteListAction.edit,
+                    NoteListAction.favorite,
+                    NoteListAction.delete
+                  ],
+                  onNoteTap: _viewNoteDetails,
+                  onNoteDeleted: (note) async {
+                    final notesProvider =
+                        Provider.of<NotesProvider>(context, listen: false);
+                    await notesProvider.deleteNote(note.id);
+                    _loadData();
+                  },
+                  onNoteFavoriteToggled: (note) async {
+                    _loadData();
                   },
                 );
               },
             ),
     );
+  }
+
+  void _viewNoteDetails(Note note) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NoteDetailScreen(note: note),
+      ),
+    ).then((_) {
+      // Обновляем список после возврата с экрана деталей
+      _loadData();
+    });
   }
 
   // Построение карточки избранной заметки
@@ -267,17 +294,5 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
         ),
       ),
     );
-  }
-
-  void _viewNoteDetails(Note note) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(note: note),
-      ),
-    ).then((_) {
-      // Обновляем список после возврата с экрана деталей
-      _loadData();
-    });
   }
 }

@@ -43,64 +43,61 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
         ),
         const SizedBox(height: 12),
 
-        // Сетка с вариантами логотипов
+        // Сетка с вариантами логотипов (все в круглой форме)
         Wrap(
           spacing: 16,
           runSpacing: 16,
           children: [
-            // Вариант 1: Книга в круге
-            _buildLogoOption(
+            // Существующие логотипы (преобразованные в круглую форму)
+            _buildCircleLogoOption(
               ThemeLogoType.book,
-              const Icon(Icons.book, color: Colors.white),
-              'Книга',
-              const CircleBorder(),
+              const Icon(Icons.auto_stories, color: Colors.white, size: 32),
             ),
-
-            // Вариант 2: Категория в квадрате
-            _buildLogoOption(
+            _buildCircleLogoOption(
               ThemeLogoType.shapes,
-              const Icon(Icons.category, color: Colors.white),
-              'Фигуры',
-              RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              const Icon(Icons.category, color: Colors.white, size: 32),
             ),
-
-            // Вариант 3: Перо в треугольнике
-            _buildCustomLogoOption(
+            _buildCircleLogoOption(
               ThemeLogoType.feather,
-              const Icon(Icons.edit, color: Colors.white),
-              'Перо',
-              (color, child) => ClipPath(
-                clipper: TriangleClipper(),
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  color: color,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 12.0),
-                      child: child,
-                    ),
-                  ),
-                ),
-              ),
+              const Icon(Icons.brush, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.scroll,
+              const Icon(Icons.description, color: Colors.white, size: 32),
             ),
 
-            // Вариант 4: Свиток в пятиугольнике
-            _buildCustomLogoOption(
-              ThemeLogoType.scroll,
-              const Icon(Icons.description, color: Colors.white),
-              'Свиток',
-              (color, child) => ClipPath(
-                clipper: PentagonClipper(),
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  color: color,
-                  child: Center(child: child),
-                ),
-              ),
+            // Новые логотипы
+            _buildCircleLogoOption(
+              ThemeLogoType.microphone,
+              const Icon(Icons.mic, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.code,
+              const Icon(Icons.code, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.graduation,
+              const Icon(Icons.school, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.beach,
+              const Icon(Icons.beach_access, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.party,
+              const Icon(Icons.celebration, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.home,
+              const Icon(Icons.home, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.business,
+              const Icon(Icons.business_center, color: Colors.white, size: 32),
+            ),
+            _buildCircleLogoOption(
+              ThemeLogoType.fitness,
+              const Icon(Icons.fitness_center, color: Colors.white, size: 32),
             ),
           ],
         ),
@@ -108,7 +105,82 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
     );
   }
 
-// Вспомогательный метод для создания стандартных опций логотипа
+// Новый метод для создания однотипных круглых логотипов без подписей
+  Widget _buildCircleLogoOption(ThemeLogoType type, Icon icon) {
+    final isSelected = _selectedLogoType == type;
+    final color = _selectedColor;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedLogoType = type;
+          _isSettingsChanged = true;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected ? color : Colors.transparent,
+            width: 3,
+          ),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Material(
+          shape: const CircleBorder(),
+          color: color,
+          elevation: isSelected ? 6 : 2,
+          child: SizedBox(
+            width: 56,
+            height: 56,
+            child: Center(child: icon),
+          ),
+        ),
+      ),
+    );
+  }
+
+// Добавить новый метод для создания опции логотипа без текстовой метки
+  Widget _buildLogoOptionNoLabel(
+    ThemeLogoType type,
+    Icon icon,
+  ) {
+    final isSelected = _selectedLogoType == type;
+    final color = _selectedColor;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedLogoType = type;
+          _isSettingsChanged = true;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected ? color : Colors.transparent,
+            width: 3,
+          ),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Material(
+          shape: const CircleBorder(),
+          color: color,
+          elevation: isSelected ? 6 : 2,
+          child: SizedBox(
+            width: 64,
+            height: 64,
+            child: Center(child: icon),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Вспомогательный метод для создания стандартных опций логотипа
   Widget _buildLogoOption(
     ThemeLogoType type,
     Icon icon,

@@ -9,10 +9,11 @@ import 'package:intl/intl.dart';
 import '../providers/themes_provider.dart';
 import '../widgets/markdown_editor.dart';
 import '../widgets/voice_note_player.dart';
-import '../widgets/media_attachment_widget.dart'; // Новый импорт
-import '../services/media_service.dart'; // Новый импорт
+import '../widgets/media_attachment_widget.dart';
+import '../services/media_service.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note? note; // Null если создаем новую заметку
@@ -528,96 +529,199 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     // Если нет медиафайлов, не добавляем пустое пространство
     if (_mediaFiles.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Используем MediaGrid для отображения изображений сеткой 2xN
-        MediaGrid(
-          imagePaths: _mediaFiles,
-          onRemove: _removeMedia,
-          isEditing: _isEditMode,
-        ),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Заголовок секции медиа
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8.0),
+            child: Text(
+              "Прикрепленные файлы:",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
 
-        const SizedBox(height: 4), // Уменьшен отступ с 8 до 4
+          // Использем обертку для потенциально проблемных контентов
+          Container(
+            constraints: const BoxConstraints(
+              maxHeight: 200, // Ограничиваем максимальную высоту
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _mediaFiles.map((mediaPath) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: _buildMediaPreview(mediaPath),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-        // Используем FilesList для отображения остальных файлов
-        FilesList(
-          filePaths: _mediaFiles,
-          onRemove: _removeMedia,
-          isEditing: _isEditMode,
+// Улучшенный метод для отображения предварительного просмотра медиафайла с обработкой ошибок
+  Widget _buildMediaPreview(String mediaPath) {
+    final extension = mediaPath.toLowerCase();
+
+    // Проверка существования файла
+    final file = File(mediaPath);
+    final fileExists = file.existsSync();
+
+    return Container(
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        color: fileExists
+            ? AppColors.textBackground
+            : AppColors.error.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: fileExists
+              ? AppColors.secondary.withOpacity(0.3)
+              : AppColors.error.withOpacity(0.5),
+          width: 1,
         ),
-      ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Содержимое медиа или сообщение об ошибке
+          if (!fileExists)
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  color: AppColors.error,
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "Файл не найден",
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            )
+          else if (extension.endsWith('.jpg') ||
+              extension.endsWith('.jpeg') ||
+              extension.endsWith('.png'))
+            ClipRRect(
+              borderRadius: BorderRadius.circular(7),
+              child: Image.file(
+                File(mediaPath),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Center(
+                    child: Icon(Icons.broken_image, color: Colors.grey),
+                  );
+                },
+              ),
+            )
+          else if (extension.endsWith('.mp3') ||
+              extension.endsWith('.wav') ||
+              extension.endsWith('.m4a'))
+            const Icon(Icons.audiotrack, size: 48, color: Colors.purple)
+          else
+            const Icon(Icons.insert_drive_file, size: 48, color: Colors.blue),
+
+          // Кнопка удаления в режиме редактирования
+          if (_isEditMode)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  color: Colors.white,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _removeMedia(_mediaFiles.indexOf(mediaPath)),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   // Построение режима редактирования с добавлением медиафайлов
   Widget _buildEditMode() {
-    return CustomScrollView(
+    return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppDimens.mediumPadding,
-              vertical: 8), // Уменьшены вертикальные отступы
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              // Редактор Markdown с оптимизированной высотой
-              Container(
-                height: MediaQuery.of(context).size.height *
-                    0.35, // Уменьшена высота редактора с 0.4 до 0.35
-                constraints: BoxConstraints(
-                  minHeight: 150,
-                  maxHeight: MediaQuery.of(context).size.height *
-                      0.4, // Уменьшена максимальная высота с 0.5 до 0.4
-                ),
-                margin: const EdgeInsets.only(
-                    bottom: 8.0), // Уменьшен отступ с 16 до 8
-                child: MarkdownEditor(
-                  controller: _contentController,
-                  focusNode: _contentFocusNode,
-                  placeholder: 'Начните вводить текст заметки...',
-                  autofocus: false,
-                  onMediaAdded: (mediaPath) {
-                    setState(() {
-                      _mediaFiles.add(mediaPath);
-                      _isSettingsChanged = true;
-                    });
-                  },
-                ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.mediumPadding,
+          vertical: 8,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Редактор Markdown
+            Container(
+              constraints: BoxConstraints(
+                minHeight: 150,
+                maxHeight: MediaQuery.of(context).size.height * 0.4,
               ),
+              margin: const EdgeInsets.only(bottom: 8.0),
+              child: MarkdownEditor(
+                controller: _contentController,
+                focusNode: _contentFocusNode,
+                placeholder: 'Начните вводить текст заметки...',
+                autofocus: false,
+                onMediaAdded: (mediaPath) {
+                  setState(() {
+                    _mediaFiles.add(mediaPath);
+                    _isSettingsChanged = true;
+                  });
+                },
+              ),
+            ),
 
-              // Раздел с медиафайлами с оптимизированными отступами
-              _buildMediaSection(),
+            // Раздел с медиафайлами
+            _buildMediaSection(),
 
-              // Нижняя панель с настройками заметки в компактном виде
-              Container(
-                margin: const EdgeInsets.only(
-                    top: 8), // Уменьшен отступ с AppDimens.mediumPadding до 8
-                padding: const EdgeInsets.all(
-                    12), // Уменьшен отступ с AppDimens.mediumPadding до 12
-                decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.cardBorderRadius),
-                  boxShadow: [AppShadows.small],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Заголовок панели
-                    const Text(
-                      'Атрибуты:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14, // Уменьшен размер шрифта с 16 до 14
-                      ),
+            // Нижняя панель с настройками заметки
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
+                boxShadow: [AppShadows.small],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Заголовок панели
+                  const Text(
+                    'Атрибуты:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
-                    const SizedBox(
-                        height:
-                            8), // Уменьшен отступ с AppDimens.mediumPadding до 8
+                  ),
+                  const SizedBox(height: 8),
 
-                    // Двухколоночная структура с уменьшенными отступами
-                    Row(
+                  // Настройки в две колонки
+                  IntrinsicHeight(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Левая колонка - настройки дат и дедлайнов
@@ -628,11 +732,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
                         // Разделитель
                         Container(
-                          margin: const EdgeInsets.symmetric(
-                              horizontal:
-                                  8), // Уменьшен отступ с AppDimens.mediumPadding до 8
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
                           width: 1,
-                          height: 180, // Уменьшена высота с 220 до 180
                           color: AppColors.secondary.withOpacity(0.3),
                         ),
 
@@ -643,19 +744,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
 
-              // Уменьшенный отступ для клавиатуры
-              SizedBox(
-                  height: MediaQuery.of(context).viewInsets.bottom > 0
-                      ? 120
-                      : 0), // Уменьшен с 200 до 120
-            ]),
-          ),
+            // Отступ для клавиатуры
+            SizedBox(
+              height: MediaQuery.of(context).viewInsets.bottom > 0 ? 120 : 80,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
