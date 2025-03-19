@@ -142,11 +142,7 @@ class CalendarScreen extends StatefulWidget {
         },
         transitionDuration: AppAnimations.mediumDuration,
       ),
-    ).then((_) {
-      // После возврата с экрана добавления заметки, обновляем только виджет списка заметок
-      // Экземпляр _CalendarScreenState не доступен здесь, поэтому
-      // данное обновление будет осуществляться автоматически через Consumer в SelectedDayNotesList
-    });
+    );
   }
 
   @override
@@ -154,11 +150,16 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, RouteAware {
+  static final RouteObserver<ModalRoute> _routeObserver =
+      RouteObserver<ModalRoute>();
+
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
-  bool _isLoading = false; // Добавленная переменная
+  bool _isLoading = false;
+  bool _isCalendarExpanded = true;
+  bool _userManuallyCollapsed = false;
 
   Map<DateTime, List<Note>> _events = {};
   List<Note> _selectedEvents = [];
@@ -166,6 +167,10 @@ class _CalendarScreenState extends State<CalendarScreen>
   // Анимация для перехода между месяцами
   late AnimationController _pageChangeController;
   late Animation<double> _pageChangeAnimation;
+
+  // Анимация для затемнения
+  late AnimationController _overlayController;
+  late Animation<double> _overlayAnimation;
 
   @override
   void initState() {
@@ -189,6 +194,17 @@ class _CalendarScreenState extends State<CalendarScreen>
       }
     });
 
+    // Инициализация контроллера анимации для затемнения
+    _overlayController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+
+    _overlayAnimation = CurvedAnimation(
+      parent: _overlayController,
+      curve: Curves.easeInOut,
+    );
+
     // Загружаем данные при инициализации
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
@@ -196,10 +212,30 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ModalRoute<dynamic>? route = ModalRoute.of(context);
+    _routeObserver.subscribe(this, route!);
+  }
+
+  @override
   void dispose() {
     _pageChangeController.dispose();
-    // Убедимся, что все подписки отменены
+    _overlayController.dispose();
+    _routeObserver.unsubscribe(this);
     super.dispose();
+  }
+
+  // Восстановление исходной позиции при возврате на экран
+  @override
+  void didPopNext() {
+    super.didPopNext();
+    if (!_userManuallyCollapsed) {
+      setState(() {
+        _isCalendarExpanded = true;
+      });
+      _overlayController.reverse();
+    }
   }
 
   Future<void> _loadData() async {
@@ -292,8 +328,8 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void didUpdateWidget(CalendarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
     final notesProvider = Provider.of<NotesProvider>(context);
     if (!notesProvider.isLoading && notesProvider.notes.isNotEmpty) {
@@ -543,143 +579,188 @@ class _CalendarScreenState extends State<CalendarScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // Заголовок месяца и календарь в SliverAppBar
-          SliverAppBar(
-            pinned: true,
-            floating: true,
-            expandedHeight: MediaQuery.of(context).size.height * 0.55,
-            backgroundColor: AppColors.primary,
-            automaticallyImplyLeading:
-                false, // Убираем стандартную кнопку назад
-            flexibleSpace: FlexibleSpaceBar(
-              background: Column(
-                children: [
-                  // Заголовок месяца
-                  _buildMonthHeader(),
-
-                  // Календарь в виде сетки
-                  Consumer<NotesProvider>(
-                    builder: (context, notesProvider, _) {
-                      return _buildGridCalendar(notesProvider);
-                    },
-                  ),
-
-                  // Информационный блок
-                  _buildMonthStats(),
-                ],
-              ),
-            ),
+      appBar: AppBar(
+        title: const Text('Календарь'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Обновить',
           ),
+          IconButton(
+            icon: const Icon(Icons.star),
+            onPressed: () {},
+            tooltip: 'Избранное',
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              // Раздел с календарем (анимированной высотой)
+              AnimatedContainer(
+                duration: AppAnimations.mediumDuration,
+                height: _isCalendarExpanded
+                    ? MediaQuery.of(context).size.height *
+                        0.4 // Уменьшено на 25%
+                    : 90, // Компактный вид для свернутого состояния
+                curve: Curves.easeInOut,
+                child: Column(
+                  children: [
+                    // Заголовок месяца (уменьшенный)
+                    _buildMonthHeader(),
 
-          // Список заметок для выбранной даты
-          SliverToBoxAdapter(
-            child: Consumer<NotesProvider>(
-              builder: (context, notesProvider, _) {
-                if (notesProvider.isLoading) {
-                  return const SizedBox(
-                    height: 200,
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                } else {
-                  // Заголовок с количеством заметок
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w500),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color:
-                                    AppColors.accentSecondary.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${_selectedEvents.length}',
-                                style: const TextStyle(
-                                  color: AppColors.accentSecondary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
+                    // Календарь
+                    Expanded(
+                      child: Consumer<NotesProvider>(
+                        builder: (context, notesProvider, _) {
+                          return _buildGridCalendar(notesProvider);
+                        },
+                      ),
+                    ),
+
+                    // Информационный блок со статистикой (уменьшенный)
+                    if (_isCalendarExpanded) _buildMonthStats(),
+
+                    // Кнопка свернуть/развернуть
+                    _buildExpandCollapseButton(),
+                  ],
+                ),
+              ),
+
+              // Заголовок с заметками для выбранного дня
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentSecondary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_selectedEvents.length}',
+                        style: const TextStyle(
+                          color: AppColors.accentSecondary,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  );
-                }
-              },
-            ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Список заметок
+              Expanded(
+                child: _selectedEvents.isEmpty
+                    ? _buildEmptyDateView()
+                    : NoteListWidget(
+                        key: PageStorageKey<String>(
+                            'notes_for_${_selectedDay.toString()}'),
+                        notes: _selectedEvents,
+                        emptyMessage: 'Нет заметок на выбранный день',
+                        showThemeBadges: true,
+                        useCachedAnimation: false,
+                        swipeDirection: SwipeDirection.both,
+                        onNoteTap: _viewNoteDetails,
+                        onNoteDeleted: (note) async {
+                          final notesProvider = Provider.of<NotesProvider>(
+                              context,
+                              listen: false);
+                          await notesProvider.deleteNote(note.id);
+                          _loadData();
+                        },
+                      ),
+              ),
+            ],
           ),
 
-          // Сам список заметок
-          SliverFillRemaining(
-            child: Consumer<NotesProvider>(
-              builder: (context, notesProvider, _) {
-                if (notesProvider.isLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                } else {
-                  return _selectedEvents.isEmpty
-                      ? _buildEmptyDateView()
-                      : NoteListWidget(
-                          key: PageStorageKey<String>(
-                              'notes_for_${_selectedDay.toString()}'),
-                          notes: _selectedEvents,
-                          emptyMessage: 'Нет заметок на выбранный день',
-                          showThemeBadges: true,
-                          useCachedAnimation: false,
-                          swipeDirection: SwipeDirection.both,
-                          onNoteTap: _viewNoteDetails,
-                          onNoteDeleted: (note) async {
-                            final notesProvider = Provider.of<NotesProvider>(
-                                context,
-                                listen: false);
-                            await notesProvider.deleteNote(note.id);
-                          },
-                        );
-                }
-              },
+          // Затемняющий оверлей для календаря
+          if (!_isCalendarExpanded)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: _isCalendarExpanded,
+                child: AnimatedOpacity(
+                  opacity: _isCalendarExpanded ? 0.0 : 0.5,
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    color: Colors.black,
+                    // Оставляем прозрачной нижнюю часть для списка заметок
+                    child: Column(
+                      children: [
+                        // Этот контейнер будет закрывать только календарь
+                        Container(
+                          height: 90, // Высота свернутого календаря
+                        ),
+                        Expanded(child: Container(color: Colors.transparent)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
         ],
       ),
       floatingActionButton: _buildAddNoteButton(),
     );
   }
 
-  // метод для открытия деталей заметки
-  void _viewNoteDetails(Note note) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => NoteDetailScreen(note: note),
-    ),
-  ).then((_) {
-    _loadData();
-  });
-}
+  // Новый метод для кнопки сворачивания/разворачивания календаря
+  Widget _buildExpandCollapseButton() {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _isCalendarExpanded = !_isCalendarExpanded;
+          _userManuallyCollapsed = !_isCalendarExpanded;
+
+          if (_isCalendarExpanded) {
+            _overlayController.reverse();
+          } else {
+            _overlayController.forward();
+          }
+        });
+      },
+      child: Container(
+        width: double.infinity,
+        height: 20, // Уменьшенная высота
+        color: AppColors.accentSecondary.withOpacity(0.2),
+        child: Center(
+          child: Icon(
+            _isCalendarExpanded
+                ? Icons.keyboard_arrow_up
+                : Icons.keyboard_arrow_down,
+            color: AppColors.accentSecondary,
+            size: 18, // Уменьшенный размер иконки
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildMonthHeader() {
+    // Уменьшенная версия заголовка месяца (на 25%)
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 12.0, vertical: 8.0), // Уменьшенные отступы
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Кнопка предыдущего месяца
           IconButton(
-            icon: const Icon(Icons.chevron_left, size: 28),
+            icon:
+                const Icon(Icons.chevron_left, size: 22), // Уменьшенный размер
+            padding: EdgeInsets.zero, // Убираем отступы кнопки
+            constraints: const BoxConstraints(), // Убираем минимальный размер
             onPressed: () {
               setState(() {
                 _focusedDay = DateTime(
@@ -710,7 +791,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                   child: Text(
                     DateFormat('MMMM yyyy').format(_focusedDay),
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 16, // Уменьшенный размер шрифта
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF213E60),
                     ),
@@ -722,7 +803,10 @@ class _CalendarScreenState extends State<CalendarScreen>
 
           // Кнопка следующего месяца
           IconButton(
-            icon: const Icon(Icons.chevron_right, size: 28),
+            icon:
+                const Icon(Icons.chevron_right, size: 22), // Уменьшенный размер
+            padding: EdgeInsets.zero, // Убираем отступы кнопки
+            constraints: const BoxConstraints(), // Убираем минимальный размер
             onPressed: () {
               setState(() {
                 _focusedDay = DateTime(
@@ -747,6 +831,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       lastDay: DateTime.utc(2030, 12, 31),
       focusedDay: _focusedDay,
       calendarFormat: _calendarFormat,
+      rowHeight: 40, // Уменьшенная высота строки для компактности
 
       // Устанавливаем понедельник первым днем недели
       startingDayOfWeek: StartingDayOfWeek.monday,
@@ -777,10 +862,12 @@ class _CalendarScreenState extends State<CalendarScreen>
         // Убираем стандартные маркеры
         markersMaxCount: 0,
         cellMargin: EdgeInsets.all(0),
-        cellPadding: EdgeInsets.all(5),
-        defaultTextStyle: AppTextStyles.bodyMedium,
-        weekendTextStyle: TextStyle(color: AppColors.accentPrimary),
+        cellPadding: EdgeInsets.all(3), // Уменьшенный отступ
+        defaultTextStyle: TextStyle(fontSize: 12), // Уменьшенный шрифт
+        weekendTextStyle:
+            TextStyle(fontSize: 12, color: AppColors.accentPrimary),
         selectedTextStyle: TextStyle(
+          fontSize: 12, // Уменьшенный шрифт
           color: AppColors.textOnDark,
           fontWeight: FontWeight.bold,
         ),
@@ -789,6 +876,7 @@ class _CalendarScreenState extends State<CalendarScreen>
           shape: BoxShape.circle,
         ),
         todayTextStyle: TextStyle(
+          fontSize: 12, // Уменьшенный шрифт
           color: AppColors.textOnDark,
           fontWeight: FontWeight.bold,
         ),
@@ -801,12 +889,17 @@ class _CalendarScreenState extends State<CalendarScreen>
       // Стилизация заголовков дней недели
       daysOfWeekStyle: const DaysOfWeekStyle(
         weekdayStyle: TextStyle(
+          fontSize: 11, // Уменьшенный размер
           color: AppColors.textOnDark,
           fontWeight: FontWeight.bold,
         ),
         weekendStyle: TextStyle(
+          fontSize: 11, // Уменьшенный размер
           color: AppColors.accentPrimary,
           fontWeight: FontWeight.bold,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.transparent, // Прозрачный фон
         ),
       ),
 
@@ -894,8 +987,8 @@ class _CalendarScreenState extends State<CalendarScreen>
           top: 0,
           right: 0,
           child: Container(
-            width: 23, // Размер L-образного уголка
-            height: 20,
+            width: 20, // Уменьшенный размер L-образного уголка
+            height: 16, // Уменьшенная высота
             decoration: BoxDecoration(
               border: Border(
                 left: BorderSide(
@@ -917,11 +1010,12 @@ class _CalendarScreenState extends State<CalendarScreen>
               ),
             ),
             alignment: Alignment.topRight,
-            padding: const EdgeInsets.only(right: 4, top: 2),
+            padding:
+                const EdgeInsets.only(right: 2, top: 1), // Уменьшенные отступы
             child: Text(
               '${day.day}',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11, // Уменьшенный размер шрифта
                 color: dayTextColor,
                 fontWeight:
                     isToday || isSelected ? FontWeight.bold : FontWeight.normal,
@@ -933,15 +1027,15 @@ class _CalendarScreenState extends State<CalendarScreen>
         // Отображение индикаторов заметок (сгруппированных по темам)
         if (events.isNotEmpty)
           Positioned(
-            bottom: 4,
-            left: 4,
+            bottom: 2, // Ближе к низу
+            left: 2, // Ближе к левому краю
             child: _buildDayIndicatorsGroupedByThemes(context, events),
           ),
       ],
     );
   }
 
-  // счетчики под календарем
+  // счетчики под календарем (уменьшены на 35%)
   Widget _buildMonthStats() {
     final notesProvider = Provider.of<NotesProvider>(context);
     final notes = notesProvider.notes;
@@ -957,19 +1051,21 @@ class _CalendarScreenState extends State<CalendarScreen>
         currentMonthNotes.where((note) => note.hasDeadline).toList();
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(
+          horizontal: 16, vertical: 4), // Уменьшенные отступы
       child: Row(
         children: [
-          // Все заметки месяца - стильная карточка
+          // Все заметки месяца - стильная карточка (уменьшенная)
           Expanded(
             child: Card(
-              elevation: 3,
+              elevation: 2, // Уменьшенная тень
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius:
+                    BorderRadius.circular(12), // Уменьшенное закругление
               ),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 8), // Уменьшенные отступы
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -979,13 +1075,14 @@ class _CalendarScreenState extends State<CalendarScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius:
+                      BorderRadius.circular(12), // Уменьшенное закругление
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 40,
-                      height: 40,
+                      width: 26, // Уменьшенный размер иконки
+                      height: 26, // Уменьшенный размер иконки
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
@@ -993,17 +1090,17 @@ class _CalendarScreenState extends State<CalendarScreen>
                       child: Icon(
                         Icons.note_alt,
                         color: Colors.white,
-                        size: 20,
+                        size: 14, // Уменьшенный размер
                       ),
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(width: 8), // Уменьшенный отступ
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           currentMonthNotes.length.toString(),
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: 14, // Уменьшенный размер шрифта
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -1011,7 +1108,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           'in this month',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 10, // Уменьшенный размер шрифта
                             color: Colors.white.withOpacity(0.9),
                           ),
                         ),
@@ -1023,18 +1120,19 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
           ),
 
-          SizedBox(width: 12),
+          SizedBox(width: 8), // Уменьшенный отступ
 
-          // Задачи с дедлайном - стильная карточка
+          // Задачи с дедлайном - стильная карточка (уменьшенная)
           Expanded(
             child: Card(
-              elevation: 3,
+              elevation: 2, // Уменьшенная тень
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius:
+                    BorderRadius.circular(12), // Уменьшенное закругление
               ),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 8), // Уменьшенные отступы
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -1044,13 +1142,14 @@ class _CalendarScreenState extends State<CalendarScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius:
+                      BorderRadius.circular(12), // Уменьшенное закругление
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 40,
-                      height: 40,
+                      width: 26, // Уменьшенный размер иконки
+                      height: 26, // Уменьшенный размер иконки
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
@@ -1058,17 +1157,17 @@ class _CalendarScreenState extends State<CalendarScreen>
                       child: Icon(
                         Icons.timer,
                         color: Colors.white,
-                        size: 20,
+                        size: 14, // Уменьшенный размер
                       ),
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(width: 8), // Уменьшенный отступ
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           tasksNotes.length.toString(),
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: 14, // Уменьшенный размер шрифта
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -1076,7 +1175,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           'Deadlines',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 10, // Уменьшенный размер шрифта
                             color: Colors.white.withOpacity(0.9),
                           ),
                         ),
@@ -1121,461 +1220,34 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
             textAlign: TextAlign.center,
           ),
-          // Кнопка "Создать заметку" удалена, т.к. дублирует функционал кнопки "+"
         ],
       ),
     );
   }
 
-  // Виджет карточки заметки для отображения в списке
-  Widget _buildNoteCard(Note note) {
-    // Определяем цвет индикатора через утилиту
-    final borderColor = NoteStatusUtils.getNoteStatusColor(note);
-
-    return Dismissible(
-      key: Key('calendar_note_${note.id}'),
-      direction: DismissDirection.horizontal,
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20.0),
-        color: Colors.amber,
-        child: const Icon(Icons.star, color: Colors.white),
+  // метод для открытия деталей заметки
+  void _viewNoteDetails(Note note) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NoteDetailScreen(note: note),
       ),
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20.0),
-        color: Colors.red,
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.endToStart) {
-          // Свайп влево - удаление
-          final bool confirm = await showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return AlertDialog(
-                    title: const Text('Удалить заметку'),
-                    content: const Text(
-                        'Вы уверены, что хотите удалить эту заметку?'),
-                    actions: <Widget>[
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Отмена'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Удалить',
-                            style: TextStyle(color: Colors.red)),
-                      ),
-                    ],
-                  );
-                },
-              ) ??
-              false;
-
-          if (confirm) {
-            final notesProvider =
-                Provider.of<NotesProvider>(context, listen: false);
-            await notesProvider.deleteNote(note.id);
-            _loadData();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Заметка удалена')),
-            );
-          }
-          return confirm;
-        } else if (direction == DismissDirection.startToEnd) {
-          // Получаем провайдер из контекста
-          final notesProvider =
-              Provider.of<NotesProvider>(context, listen: false);
-
-          // Свайп вправо - добавление/удаление из избранного
-          await notesProvider.toggleFavorite(note.id);
-
-          // Получаем обновленную заметку
-          final updatedNote = notesProvider.notes.firstWhere(
-            (n) => n.id == note.id,
-            orElse: () => note,
-          );
-
-          // Показываем сообщение
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(updatedNote.isFavorite
-                    ? 'Заметка добавлена в избранное'
-                    : 'Заметка удалена из избранного'),
-                duration: const Duration(seconds: 2),
-                backgroundColor: AppColors.accentSecondary,
-              ),
-            );
-          }
-
-          return false; // Не убираем карточку
-        }
-        return false;
-      },
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        elevation: 3,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-          side: BorderSide(color: borderColor, width: 2),
-        ),
-        child: InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => NoteDetailScreen(note: note),
-              ),
-            ).then((_) => _loadData());
-          },
-          onLongPress: () => _showNoteOptionsMenu(note),
-          borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(AppDimens.mediumPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Верхняя часть с датой и дедлайном
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          DateFormat('d MMM yyyy').format(note.createdAt),
-                          style: AppTextStyles.bodySmallLight,
-                        ),
-                        if (note.hasDeadline && note.deadlineDate != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color.fromRGBO(255, 255, 7, 0.35),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  note.isCompleted
-                                      ? Icons.check_circle
-                                      : Icons.timer,
-                                  size: 12,
-                                  color: AppColors.textOnLight,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  note.isCompleted
-                                      ? 'Выполнено'
-                                      : 'до ${DateFormat('d MMM').format(note.deadlineDate!)}',
-                                  style: AppTextStyles.deadlineText,
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    // Заголовок и содержимое
-                    Text(
-                      _getFirstLineFromContent(note.content),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textOnLight,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _getBodyFromContent(note.content),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodyMediumLight,
-                    ),
-
-                    // Индикаторы медиа и тем
-                    if (note.mediaUrls.isNotEmpty || note.themeIds.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Row(
-                          children: [
-                            if (note.hasAudio)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: Icon(Icons.mic,
-                                    size: 16, color: Colors.purple),
-                              ),
-                            if (note.hasImages)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 8),
-                                child: Icon(Icons.photo,
-                                    size: 16, color: AppColors.textOnLight),
-                              ),
-                            if (note.hasFiles)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 8),
-                                child: Icon(Icons.attach_file,
-                                    size: 16, color: AppColors.textOnLight),
-                              ),
-                            const Spacer(),
-                            if (note.themeIds.isNotEmpty)
-                              _buildThemeTags(note.themeIds),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (note.isFavorite)
-                const Positioned(
-                  top: 0,
-                  right: 0,
-                  child: Material(
-                    color: Colors.amber,
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(AppDimens.cardBorderRadius),
-                      bottomLeft:
-                          Radius.circular(AppDimens.cardBorderRadius - 4),
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.all(4.0),
-                      child: Icon(Icons.star, color: Colors.white, size: 16),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-// Добавить вспомогательные методы
-  String _getFirstLineFromContent(String content) {
-    final firstLineEnd = content.indexOf('\n');
-    if (firstLineEnd == -1) return content;
-    String firstLine = content.substring(0, firstLineEnd).trim();
-    return firstLine.replaceAll(RegExp(r'^#+\s+'), '');
-  }
-
-  String _getBodyFromContent(String content) {
-    final firstLineEnd = content.indexOf('\n');
-    if (firstLineEnd == -1) return '';
-    return content.substring(firstLineEnd + 1).trim();
-  }
-
-  Widget _buildThemeTags(List<String> themeIds) {
-    return Consumer<ThemesProvider>(
-      builder: (context, themesProvider, _) {
-        final displayIds = themeIds.take(2).toList();
-        return Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            ...displayIds.map((id) {
-              final theme = themesProvider.getThemeById(id);
-              if (theme == null) return const SizedBox.shrink();
-
-              Color themeColor;
-              try {
-                themeColor = Color(int.parse(theme.color));
-              } catch (e) {
-                themeColor = AppColors.themeColors[0];
-              }
-
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: themeColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: themeColor.withOpacity(0.5), width: 0.5),
-                ),
-                child: Text(
-                  theme.name,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: themeColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              );
-            }),
-            if (themeIds.length > 2)
-              Text(
-                '+${themeIds.length - 2}',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textOnLight.withOpacity(0.6),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-// Добавить метод для показа опций заметки
-  void _showNoteOptionsMenu(Note note) {
-    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-
-    // Тактильная обратная связь
-    HapticFeedback.mediumImpact();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.cardBackground,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Действия с заметкой',
-                        style: AppTextStyles.heading3),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading:
-                    const Icon(Icons.edit, color: AppColors.accentSecondary),
-                title: const Text('Редактировать'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          NoteDetailScreen(note: note, isEditMode: true),
-                    ),
-                  ).then((_) => _loadData());
-                },
-              ),
-              if (note.hasDeadline && !note.isCompleted)
-                ListTile(
-                  leading: const Icon(Icons.check_circle,
-                      color: AppColors.completed),
-                  title: const Text('Отметить как выполненное'),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await notesProvider.completeNote(note.id);
-                    _loadData();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Задача отмечена как выполненная')),
-                      );
-                    }
-                  },
-                ),
-              ListTile(
-                leading: Icon(
-                  note.isFavorite ? Icons.star : Icons.star_border,
-                  color: Colors.amber,
-                ),
-                title: Text(note.isFavorite
-                    ? 'Удалить из избранного'
-                    : 'Добавить в избранное'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await notesProvider.toggleFavorite(note.id);
-                  _loadData();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(note.isFavorite
-                            ? 'Заметка добавлена в избранное'
-                            : 'Заметка удалена из избранного'),
-                      ),
-                    );
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title:
-                    const Text('Удалить', style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final bool confirm = await showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            title: const Text('Удалить заметку'),
-                            content: const Text(
-                                'Вы уверены, что хотите удалить эту заметку?'),
-                            actions: <Widget>[
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(context).pop(false),
-                                child: const Text('Отмена'),
-                              ),
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(context).pop(true),
-                                child: const Text('Удалить',
-                                    style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
-                          );
-                        },
-                      ) ??
-                      false;
-
-                  if (confirm) {
-                    await notesProvider.deleteNote(note.id);
-                    _loadData();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Заметка удалена')),
-                      );
-                    }
-                  }
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    ).then((_) {
+      _loadData();
+    });
   }
 
   // Плавающая кнопка добавления заметки
   Widget _buildAddNoteButton() {
-    return Positioned(
-      right: 16,
-      bottom: 16,
-      child: FloatingActionButton(
-        heroTag: 'calendarAddNote',
-        backgroundColor: AppColors.accentSecondary,
-        onPressed: () {
-          // Используем экземплярный метод вместо статического
-          _showAddNoteWithDate(_selectedDay);
-        },
-        child: const Icon(
-          Icons.add,
-          color: Colors.white,
-        ),
+    return FloatingActionButton(
+      heroTag: 'calendarAddNote',
+      backgroundColor: AppColors.accentSecondary,
+      onPressed: () {
+        _showAddNoteWithDate(_selectedDay);
+      },
+      child: const Icon(
+        Icons.add,
+        color: Colors.white,
       ),
     );
   }
@@ -1605,7 +1277,6 @@ class _CalendarScreenState extends State<CalendarScreen>
       ),
     ).then((_) {
       // После возврата с экрана добавления заметки, обновляем события
-      // без обновления всего экрана
       if (mounted) {
         final notesProvider =
             Provider.of<NotesProvider>(context, listen: false);
@@ -1613,125 +1284,12 @@ class _CalendarScreenState extends State<CalendarScreen>
         notesProvider.loadNotes().then((_) {
           if (mounted) {
             _processEventsWithoutUpdate(notesProvider.notes);
+            setState(() {
+              _selectedEvents = _getEventsForDay(_selectedDay);
+            });
           }
         });
       }
     });
-  }
-}
-
-class SelectedDayNotesList extends StatefulWidget {
-  final DateTime selectedDay;
-  final List<Note> notes;
-
-  const SelectedDayNotesList({
-    Key? key,
-    required this.selectedDay,
-    required this.notes,
-  }) : super(key: key);
-
-  @override
-  State<SelectedDayNotesList> createState() => _SelectedDayNotesListState();
-}
-
-class _SelectedDayNotesListState extends State<SelectedDayNotesList> {
-  @override
-  Widget build(BuildContext context) {
-    if (widget.notes.isEmpty) {
-      // Оставляем существующую реализацию для пустого состояния
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.event_note,
-              size: 80,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Нет заметок на ${DateFormat('d MMMM yyyy').format(widget.selectedDay)}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Создайте заметку, чтобы она появилась здесь',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF213E60),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Заголовок с количеством заметок
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Заметки на ${DateFormat('d MMMM').format(widget.selectedDay)}',
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.accentSecondary.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${widget.notes.length}',
-                  style: const TextStyle(
-                    color: AppColors.accentSecondary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Используем обновленный NoteListWidget
-        Expanded(
-          child: NoteListWidget(
-            key: PageStorageKey<String>(
-                'notes_for_${widget.selectedDay.toString()}'),
-            notes: widget.notes,
-            emptyMessage: 'Нет заметок на выбранный день',
-            showThemeBadges: true,
-            useCachedAnimation: false,
-            onNoteTap: (note) => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => NoteDetailScreen(note: note),
-              ),
-            ),
-            // Убираем вызов полного обновления
-            onNoteDeleted: (note) async {
-              final notesProvider =
-                  Provider.of<NotesProvider>(context, listen: false);
-              await notesProvider.deleteNote(note.id);
-              // Не вызываем метод _refreshNotes(), так как обновление происходит локально
-            },
-            onNoteFavoriteToggled: (note) async {
-              // Обработка переключения избранного теперь происходит внутри NoteListWidget
-              // и не требует внешнего обновления
-            },
-          ),
-        ),
-      ],
-    );
   }
 }
