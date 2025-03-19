@@ -150,16 +150,12 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen>
-    with TickerProviderStateMixin, RouteAware {
-  static final RouteObserver<ModalRoute> _routeObserver =
-      RouteObserver<ModalRoute>();
-
+    with TickerProviderStateMixin {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   bool _isLoading = false;
   bool _isCalendarExpanded = true;
-  bool _userManuallyCollapsed = false;
 
   Map<DateTime, List<Note>> _events = {};
   List<Note> _selectedEvents = [];
@@ -167,10 +163,6 @@ class _CalendarScreenState extends State<CalendarScreen>
   // Анимация для перехода между месяцами
   late AnimationController _pageChangeController;
   late Animation<double> _pageChangeAnimation;
-
-  // Анимация для затемнения
-  late AnimationController _overlayController;
-  late Animation<double> _overlayAnimation;
 
   @override
   void initState() {
@@ -194,17 +186,6 @@ class _CalendarScreenState extends State<CalendarScreen>
       }
     });
 
-    // Инициализация контроллера анимации для затемнения
-    _overlayController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-
-    _overlayAnimation = CurvedAnimation(
-      parent: _overlayController,
-      curve: Curves.easeInOut,
-    );
-
     // Загружаем данные при инициализации
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
@@ -212,30 +193,9 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final ModalRoute<dynamic>? route = ModalRoute.of(context);
-    _routeObserver.subscribe(this, route!);
-  }
-
-  @override
   void dispose() {
     _pageChangeController.dispose();
-    _overlayController.dispose();
-    _routeObserver.unsubscribe(this);
     super.dispose();
-  }
-
-  // Восстановление исходной позиции при возврате на экран
-  @override
-  void didPopNext() {
-    super.didPopNext();
-    if (!_userManuallyCollapsed) {
-      setState(() {
-        _isCalendarExpanded = true;
-      });
-      _overlayController.reverse();
-    }
   }
 
   Future<void> _loadData() async {
@@ -328,8 +288,8 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   @override
-  void didUpdateWidget(CalendarScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
 
     final notesProvider = Provider.of<NotesProvider>(context);
     if (!notesProvider.isLoading && notesProvider.notes.isNotEmpty) {
@@ -587,128 +547,91 @@ class _CalendarScreenState extends State<CalendarScreen>
             onPressed: _loadData,
             tooltip: 'Обновить',
           ),
-          IconButton(
-            icon: const Icon(Icons.star),
-            onPressed: () {},
-            tooltip: 'Избранное',
-          ),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              // Раздел с календарем (анимированной высотой)
-              AnimatedContainer(
-                duration: AppAnimations.mediumDuration,
-                height: _isCalendarExpanded
-                    ? MediaQuery.of(context).size.height *
-                        0.4 // Уменьшено на 25%
-                    : 90, // Компактный вид для свернутого состояния
-                curve: Curves.easeInOut,
-                child: Column(
-                  children: [
-                    // Заголовок месяца (уменьшенный)
-                    _buildMonthHeader(),
+          // Раздел с календарем (анимированной высотой)
+          AnimatedContainer(
+            duration: AppAnimations.mediumDuration,
+            height: _isCalendarExpanded
+                ? MediaQuery.of(context).size.height * 0.5
+                : 120,
+            curve: Curves.easeInOut,
+            child: Column(
+              children: [
+                // Заголовок месяца
+                _buildMonthHeader(),
 
-                    // Календарь
-                    Expanded(
-                      child: Consumer<NotesProvider>(
-                        builder: (context, notesProvider, _) {
-                          return _buildGridCalendar(notesProvider);
-                        },
-                      ),
-                    ),
-
-                    // Информационный блок со статистикой (уменьшенный)
-                    if (_isCalendarExpanded) _buildMonthStats(),
-
-                    // Кнопка свернуть/развернуть
-                    _buildExpandCollapseButton(),
-                  ],
+                // Календарь
+                Expanded(
+                  child: Consumer<NotesProvider>(
+                    builder: (context, notesProvider, _) {
+                      return _buildGridCalendar(notesProvider);
+                    },
+                  ),
                 ),
-              ),
 
-              // Заголовок с заметками для выбранного дня
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentSecondary.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_selectedEvents.length}',
-                        style: const TextStyle(
-                          color: AppColors.accentSecondary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                // Информационный блок со статистикой
+                if (_isCalendarExpanded) _buildMonthStats(),
 
-              // Список заметок
-              Expanded(
-                child: _selectedEvents.isEmpty
-                    ? _buildEmptyDateView()
-                    : NoteListWidget(
-                        key: PageStorageKey<String>(
-                            'notes_for_${_selectedDay.toString()}'),
-                        notes: _selectedEvents,
-                        emptyMessage: 'Нет заметок на выбранный день',
-                        showThemeBadges: true,
-                        useCachedAnimation: false,
-                        swipeDirection: SwipeDirection.both,
-                        onNoteTap: _viewNoteDetails,
-                        onNoteDeleted: (note) async {
-                          final notesProvider = Provider.of<NotesProvider>(
-                              context,
-                              listen: false);
-                          await notesProvider.deleteNote(note.id);
-                          _loadData();
-                        },
-                      ),
-              ),
-            ],
+                // Кнопка свернуть/развернуть
+                _buildExpandCollapseButton(),
+              ],
+            ),
           ),
 
-          // Затемняющий оверлей для календаря
-          if (!_isCalendarExpanded)
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: _isCalendarExpanded,
-                child: AnimatedOpacity(
-                  opacity: _isCalendarExpanded ? 0.0 : 0.5,
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    color: Colors.black,
-                    // Оставляем прозрачной нижнюю часть для списка заметок
-                    child: Column(
-                      children: [
-                        // Этот контейнер будет закрывать только календарь
-                        Container(
-                          height: 90, // Высота свернутого календаря
-                        ),
-                        Expanded(child: Container(color: Colors.transparent)),
-                      ],
+          // Заголовок с заметками для выбранного дня
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSecondary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_selectedEvents.length}',
+                    style: const TextStyle(
+                      color: AppColors.accentSecondary,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
+          ),
+
+          // Список заметок
+          Expanded(
+            child: _selectedEvents.isEmpty
+                ? _buildEmptyDateView()
+                : NoteListWidget(
+                    key: PageStorageKey<String>(
+                        'notes_for_${_selectedDay.toString()}'),
+                    notes: _selectedEvents,
+                    emptyMessage: 'Нет заметок на выбранный день',
+                    showThemeBadges: true,
+                    useCachedAnimation: false,
+                    swipeDirection: SwipeDirection.both,
+                    onNoteTap: _viewNoteDetails,
+                    onNoteDeleted: (note) async {
+                      final notesProvider =
+                          Provider.of<NotesProvider>(context, listen: false);
+                      await notesProvider.deleteNote(note.id);
+                      _loadData();
+                    },
+                  ),
+          ),
         ],
       ),
       floatingActionButton: _buildAddNoteButton(),
@@ -721,18 +644,11 @@ class _CalendarScreenState extends State<CalendarScreen>
       onTap: () {
         setState(() {
           _isCalendarExpanded = !_isCalendarExpanded;
-          _userManuallyCollapsed = !_isCalendarExpanded;
-
-          if (_isCalendarExpanded) {
-            _overlayController.reverse();
-          } else {
-            _overlayController.forward();
-          }
         });
       },
       child: Container(
         width: double.infinity,
-        height: 20, // Уменьшенная высота
+        height: 24,
         color: AppColors.accentSecondary.withOpacity(0.2),
         child: Center(
           child: Icon(
@@ -740,7 +656,6 @@ class _CalendarScreenState extends State<CalendarScreen>
                 ? Icons.keyboard_arrow_up
                 : Icons.keyboard_arrow_down,
             color: AppColors.accentSecondary,
-            size: 18, // Уменьшенный размер иконки
           ),
         ),
       ),
@@ -748,19 +663,14 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   Widget _buildMonthHeader() {
-    // Уменьшенная версия заголовка месяца (на 25%)
     return Padding(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12.0, vertical: 8.0), // Уменьшенные отступы
+      padding: const EdgeInsets.all(16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Кнопка предыдущего месяца
           IconButton(
-            icon:
-                const Icon(Icons.chevron_left, size: 22), // Уменьшенный размер
-            padding: EdgeInsets.zero, // Убираем отступы кнопки
-            constraints: const BoxConstraints(), // Убираем минимальный размер
+            icon: const Icon(Icons.chevron_left, size: 28),
             onPressed: () {
               setState(() {
                 _focusedDay = DateTime(
@@ -791,7 +701,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                   child: Text(
                     DateFormat('MMMM yyyy').format(_focusedDay),
                     style: TextStyle(
-                      fontSize: 16, // Уменьшенный размер шрифта
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF213E60),
                     ),
@@ -803,10 +713,7 @@ class _CalendarScreenState extends State<CalendarScreen>
 
           // Кнопка следующего месяца
           IconButton(
-            icon:
-                const Icon(Icons.chevron_right, size: 22), // Уменьшенный размер
-            padding: EdgeInsets.zero, // Убираем отступы кнопки
-            constraints: const BoxConstraints(), // Убираем минимальный размер
+            icon: const Icon(Icons.chevron_right, size: 28),
             onPressed: () {
               setState(() {
                 _focusedDay = DateTime(
@@ -831,7 +738,6 @@ class _CalendarScreenState extends State<CalendarScreen>
       lastDay: DateTime.utc(2030, 12, 31),
       focusedDay: _focusedDay,
       calendarFormat: _calendarFormat,
-      rowHeight: 40, // Уменьшенная высота строки для компактности
 
       // Устанавливаем понедельник первым днем недели
       startingDayOfWeek: StartingDayOfWeek.monday,
@@ -862,12 +768,10 @@ class _CalendarScreenState extends State<CalendarScreen>
         // Убираем стандартные маркеры
         markersMaxCount: 0,
         cellMargin: EdgeInsets.all(0),
-        cellPadding: EdgeInsets.all(3), // Уменьшенный отступ
-        defaultTextStyle: TextStyle(fontSize: 12), // Уменьшенный шрифт
-        weekendTextStyle:
-            TextStyle(fontSize: 12, color: AppColors.accentPrimary),
+        cellPadding: EdgeInsets.all(5),
+        defaultTextStyle: AppTextStyles.bodyMedium,
+        weekendTextStyle: TextStyle(color: AppColors.accentPrimary),
         selectedTextStyle: TextStyle(
-          fontSize: 12, // Уменьшенный шрифт
           color: AppColors.textOnDark,
           fontWeight: FontWeight.bold,
         ),
@@ -876,7 +780,6 @@ class _CalendarScreenState extends State<CalendarScreen>
           shape: BoxShape.circle,
         ),
         todayTextStyle: TextStyle(
-          fontSize: 12, // Уменьшенный шрифт
           color: AppColors.textOnDark,
           fontWeight: FontWeight.bold,
         ),
@@ -889,17 +792,12 @@ class _CalendarScreenState extends State<CalendarScreen>
       // Стилизация заголовков дней недели
       daysOfWeekStyle: const DaysOfWeekStyle(
         weekdayStyle: TextStyle(
-          fontSize: 11, // Уменьшенный размер
           color: AppColors.textOnDark,
           fontWeight: FontWeight.bold,
         ),
         weekendStyle: TextStyle(
-          fontSize: 11, // Уменьшенный размер
           color: AppColors.accentPrimary,
           fontWeight: FontWeight.bold,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.transparent, // Прозрачный фон
         ),
       ),
 
@@ -987,8 +885,8 @@ class _CalendarScreenState extends State<CalendarScreen>
           top: 0,
           right: 0,
           child: Container(
-            width: 20, // Уменьшенный размер L-образного уголка
-            height: 16, // Уменьшенная высота
+            width: 23, // Размер L-образного уголка
+            height: 20,
             decoration: BoxDecoration(
               border: Border(
                 left: BorderSide(
@@ -1010,12 +908,11 @@ class _CalendarScreenState extends State<CalendarScreen>
               ),
             ),
             alignment: Alignment.topRight,
-            padding:
-                const EdgeInsets.only(right: 2, top: 1), // Уменьшенные отступы
+            padding: const EdgeInsets.only(right: 4, top: 2),
             child: Text(
               '${day.day}',
               style: TextStyle(
-                fontSize: 11, // Уменьшенный размер шрифта
+                fontSize: 12,
                 color: dayTextColor,
                 fontWeight:
                     isToday || isSelected ? FontWeight.bold : FontWeight.normal,
@@ -1027,15 +924,15 @@ class _CalendarScreenState extends State<CalendarScreen>
         // Отображение индикаторов заметок (сгруппированных по темам)
         if (events.isNotEmpty)
           Positioned(
-            bottom: 2, // Ближе к низу
-            left: 2, // Ближе к левому краю
+            bottom: 4,
+            left: 4,
             child: _buildDayIndicatorsGroupedByThemes(context, events),
           ),
       ],
     );
   }
 
-  // счетчики под календарем (уменьшены на 35%)
+  // счетчики под календарем
   Widget _buildMonthStats() {
     final notesProvider = Provider.of<NotesProvider>(context);
     final notes = notesProvider.notes;
@@ -1051,21 +948,19 @@ class _CalendarScreenState extends State<CalendarScreen>
         currentMonthNotes.where((note) => note.hasDeadline).toList();
 
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: 16, vertical: 4), // Уменьшенные отступы
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          // Все заметки месяца - стильная карточка (уменьшенная)
+          // Все заметки месяца - стильная карточка
           Expanded(
             child: Card(
-              elevation: 2, // Уменьшенная тень
+              elevation: 3,
               shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(12), // Уменьшенное закругление
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 10, horizontal: 8), // Уменьшенные отступы
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -1075,14 +970,13 @@ class _CalendarScreenState extends State<CalendarScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius:
-                      BorderRadius.circular(12), // Уменьшенное закругление
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 26, // Уменьшенный размер иконки
-                      height: 26, // Уменьшенный размер иконки
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
@@ -1090,17 +984,17 @@ class _CalendarScreenState extends State<CalendarScreen>
                       child: Icon(
                         Icons.note_alt,
                         color: Colors.white,
-                        size: 14, // Уменьшенный размер
+                        size: 20,
                       ),
                     ),
-                    SizedBox(width: 8), // Уменьшенный отступ
+                    SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           currentMonthNotes.length.toString(),
                           style: TextStyle(
-                            fontSize: 14, // Уменьшенный размер шрифта
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -1108,7 +1002,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           'in this month',
                           style: TextStyle(
-                            fontSize: 10, // Уменьшенный размер шрифта
+                            fontSize: 14,
                             color: Colors.white.withOpacity(0.9),
                           ),
                         ),
@@ -1120,19 +1014,18 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
           ),
 
-          SizedBox(width: 8), // Уменьшенный отступ
+          SizedBox(width: 12),
 
-          // Задачи с дедлайном - стильная карточка (уменьшенная)
+          // Задачи с дедлайном - стильная карточка
           Expanded(
             child: Card(
-              elevation: 2, // Уменьшенная тень
+              elevation: 3,
               shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(12), // Уменьшенное закругление
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 10, horizontal: 8), // Уменьшенные отступы
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -1142,14 +1035,13 @@ class _CalendarScreenState extends State<CalendarScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius:
-                      BorderRadius.circular(12), // Уменьшенное закругление
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 26, // Уменьшенный размер иконки
-                      height: 26, // Уменьшенный размер иконки
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
@@ -1157,17 +1049,17 @@ class _CalendarScreenState extends State<CalendarScreen>
                       child: Icon(
                         Icons.timer,
                         color: Colors.white,
-                        size: 14, // Уменьшенный размер
+                        size: 20,
                       ),
                     ),
-                    SizedBox(width: 8), // Уменьшенный отступ
+                    SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           tasksNotes.length.toString(),
                           style: TextStyle(
-                            fontSize: 14, // Уменьшенный размер шрифта
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -1175,7 +1067,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           'Deadlines',
                           style: TextStyle(
-                            fontSize: 10, // Уменьшенный размер шрифта
+                            fontSize: 14,
                             color: Colors.white.withOpacity(0.9),
                           ),
                         ),
@@ -1220,6 +1112,7 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
             textAlign: TextAlign.center,
           ),
+          // Кнопка "Создать заметку" удалена, т.к. дублирует функционал кнопки "+"
         ],
       ),
     );
@@ -1291,5 +1184,121 @@ class _CalendarScreenState extends State<CalendarScreen>
         });
       }
     });
+  }
+}
+
+class SelectedDayNotesList extends StatefulWidget {
+  final DateTime selectedDay;
+  final List<Note> notes;
+
+  const SelectedDayNotesList({
+    Key? key,
+    required this.selectedDay,
+    required this.notes,
+  }) : super(key: key);
+
+  @override
+  State<SelectedDayNotesList> createState() => _SelectedDayNotesListState();
+}
+
+class _SelectedDayNotesListState extends State<SelectedDayNotesList> {
+  @override
+  Widget build(BuildContext context) {
+    if (widget.notes.isEmpty) {
+      // Оставляем существующую реализацию для пустого состояния
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.event_note,
+              size: 80,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Нет заметок на ${DateFormat('d MMMM yyyy').format(widget.selectedDay)}',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Создайте заметку, чтобы она появилась здесь',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF213E60),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Заголовок с количеством заметок
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Заметки на ${DateFormat('d MMMM').format(widget.selectedDay)}',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.accentSecondary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${widget.notes.length}',
+                  style: const TextStyle(
+                    color: AppColors.accentSecondary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Используем обновленный NoteListWidget
+        Expanded(
+          child: NoteListWidget(
+            key: PageStorageKey<String>(
+                'notes_for_${widget.selectedDay.toString()}'),
+            notes: widget.notes,
+            emptyMessage: 'Нет заметок на выбранный день',
+            showThemeBadges: true,
+            useCachedAnimation: false,
+            onNoteTap: (note) => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NoteDetailScreen(note: note),
+              ),
+            ),
+            // Убираем вызов полного обновления
+            onNoteDeleted: (note) async {
+              final notesProvider =
+                  Provider.of<NotesProvider>(context, listen: false);
+              await notesProvider.deleteNote(note.id);
+              // Не вызываем метод _refreshNotes(), так как обновление происходит локально
+            },
+            onNoteFavoriteToggled: (note) async {
+              // Обработка переключения избранного теперь происходит внутри NoteListWidget
+              // и не требует внешнего обновления
+            },
+          ),
+        ),
+      ],
+    );
   }
 }
