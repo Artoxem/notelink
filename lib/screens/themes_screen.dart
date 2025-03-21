@@ -212,7 +212,7 @@ class _ThemesScreenState extends State<ThemesScreen> {
                   padding: const EdgeInsets.all(12), // Уменьшено
                   child: Row(
                     children: [
-                      // Иконка темы с разными формами
+                      // Иконка темы с разными формами - ИСПОЛЬЗУЕМ logoType из модели
                       _buildThemeLogo(theme, themeColor),
 
                       const SizedBox(width: 12), // Уменьшено
@@ -465,6 +465,92 @@ class _ThemesScreenState extends State<ThemesScreen> {
             color: themeColor,
             child: Center(child: icon),
           ),
+        );
+        break;
+
+      case ThemeLogoType.microphone:
+        // Микрофон - добавляем новые типы
+        icon = const Icon(
+          Icons.mic,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.code:
+        // Программирование
+        icon = const Icon(
+          Icons.code,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        );
+        break;
+
+      case ThemeLogoType.graduation:
+        // Образование
+        icon = const Icon(
+          Icons.school,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.beach:
+        // Отдых
+        icon = const Icon(
+          Icons.beach_access,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.party:
+        // Праздники
+        icon = const Icon(
+          Icons.celebration,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.home:
+        // Дом
+        icon = const Icon(
+          Icons.home,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        );
+        break;
+
+      case ThemeLogoType.business:
+        // Бизнес
+        icon = const Icon(
+          Icons.business_center,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.fitness:
+        // Фитнес
+        icon = const Icon(
+          Icons.fitness_center,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         );
         break;
 

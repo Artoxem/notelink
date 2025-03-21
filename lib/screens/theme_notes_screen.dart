@@ -222,6 +222,92 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
         );
         break;
 
+      case ThemeLogoType.microphone:
+        // Микрофон - добавляем новые типы
+        icon = const Icon(
+          Icons.mic,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.code:
+        // Программирование
+        icon = const Icon(
+          Icons.code,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        );
+        break;
+
+      case ThemeLogoType.graduation:
+        // Образование
+        icon = const Icon(
+          Icons.school,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.beach:
+        // Отдых
+        icon = const Icon(
+          Icons.beach_access,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.party:
+        // Праздники
+        icon = const Icon(
+          Icons.celebration,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.home:
+        // Дом
+        icon = const Icon(
+          Icons.home,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        );
+        break;
+
+      case ThemeLogoType.business:
+        // Бизнес
+        icon = const Icon(
+          Icons.business_center,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = const CircleBorder();
+        break;
+
+      case ThemeLogoType.fitness:
+        // Фитнес
+        icon = const Icon(
+          Icons.fitness_center,
+          color: Colors.white,
+          size: 24,
+        );
+        shape = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        );
+        break;
+
       default:
         // По умолчанию - круглая форма с иконкой книги
         icon = const Icon(
@@ -321,8 +407,8 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
             ),
           ],
         ),
-        backgroundColor: _themeColor.withOpacity(0.9),
-        foregroundColor: Colors.white,
+        // Удалили покраску AppBar в цвет темы
+        // Теперь используется стандартный цвет приложения
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
