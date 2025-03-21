@@ -89,56 +89,36 @@ class _AudioWavePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
-    final linePaint = Paint()
-      ..color = color.withOpacity(0.5)
-      ..strokeWidth = 0.8
-      ..style = PaintingStyle.stroke;
-
     // Размер волновой формы
     final width = size.width;
     final height = size.height;
 
-    // Генерация случайных, но детерминированных высот волн
-    final random = math.Random(42);
-    final waveSegments = 12; // Количество сегментов волны
+    // Создаем один путь для всех линий вместо отдельных вызовов drawLine
+    final Path wavePath = Path();
+    final waveSegments = 8; // Уменьшаем количество сегментов с 12 до 8
     final segmentWidth = width / waveSegments;
 
-    // Базовая линия (центр)
-    canvas.drawLine(
-      Offset(0, height / 2),
-      Offset(width, height / 2),
-      linePaint,
-    );
+    // Генерируем статические, а не случайные высоты
+    final heights = [0.3, 0.5, 0.7, 0.9, 0.7, 0.5, 0.3, 0.2];
 
-    // Рисуем волны
     for (int i = 0; i < waveSegments; i++) {
       final x = i * segmentWidth;
+      double amplitude = heights[i % heights.length];
 
-      // Генерируем высоту волны
-      double amplitude;
-      if (i == 0 || i == waveSegments - 1) {
-        amplitude = 0.2; // Меньшая высота по краям
-      } else {
-        amplitude =
-            0.2 + random.nextDouble() * 0.6; // Случайная высота в середине
-      }
-
-      // Если анимация включена, добавляем движущийся эффект
       if (isAnimated) {
-        // Сдвиг фазы для создания эффекта движения
         final phase = (i / waveSegments + animationOffset) % 1.0;
-        amplitude *= math.sin(phase * math.pi * 2) * 0.3 + 0.7;
+        amplitude *= math.sin(phase * math.pi) * 0.3 + 0.7;
       }
 
       final waveHeight = height * amplitude;
+      final yStart = height / 2 - waveHeight / 2;
+      final yEnd = height / 2 + waveHeight / 2;
 
-      // Рисуем линию для текущего сегмента
-      canvas.drawLine(
-        Offset(x, height / 2 - waveHeight / 2),
-        Offset(x, height / 2 + waveHeight / 2),
-        paint,
-      );
+      wavePath.moveTo(x, yStart);
+      wavePath.lineTo(x, yEnd);
     }
+
+    canvas.drawPath(wavePath, paint);
   }
 
   @override

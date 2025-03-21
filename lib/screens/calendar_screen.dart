@@ -49,13 +49,16 @@ class GridCellPainter extends CustomPainter {
   final bool isToday;
   final bool isOutside;
   final Color heatmapColor;
+  final Color borderColor;
 
   GridCellPainter({
     this.isSelected = false,
     this.isToday = false,
     this.isOutside = false,
     required this.heatmapColor,
-  });
+    Color? borderColor,
+  }) : borderColor = borderColor ??
+            Colors.white.withOpacity(isSelected || isToday ? 0.7 : 0.4);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -74,13 +77,13 @@ class GridCellPainter extends CustomPainter {
       backgroundColor = AppColors.primary;
     }
 
-    // Рисуем основной фон ячейки
+    // Рисуем основной фон ячейки (одной операцией)
     final Paint backgroundPaint = Paint()
       ..color = backgroundColor
       ..style = PaintingStyle.fill;
     canvas.drawRect(Rect.fromLTWH(0, 0, width, height), backgroundPaint);
 
-    // Рисуем тепловую карту поверх основного фона
+    // Рисуем тепловую карту поверх основного фона, только если цвет не прозрачный
     if (heatmapColor != Colors.transparent) {
       final Paint heatmapPaint = Paint()
         ..color = heatmapColor
@@ -88,24 +91,19 @@ class GridCellPainter extends CustomPainter {
       canvas.drawRect(Rect.fromLTWH(0, 0, width, height), heatmapPaint);
     }
 
-    // Рисуем границы ячейки
+    // Минимизируем количество операций отрисовки границ
     final Paint borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.4)
-      ..strokeWidth = 1.0;
+      ..color = borderColor
+      ..strokeWidth = isSelected || isToday ? 1.5 : 1.0;
 
-    // Если это выбранная ячейка или сегодняшний день, делаем границы более яркими
-    if (isSelected || isToday) {
-      borderPaint.color = Colors.white.withOpacity(0.7);
-      borderPaint.strokeWidth = 1.5;
-    }
-
-    // Внешние границы ячейки
-    canvas.drawLine(Offset(0, 0), Offset(width, 0), borderPaint); // Верхняя
-    canvas.drawLine(
-        Offset(0, height), Offset(width, height), borderPaint); // Нижняя
-    canvas.drawLine(Offset(0, 0), Offset(0, height), borderPaint); // Левая
-    canvas.drawLine(
-        Offset(width, 0), Offset(width, height), borderPaint); // Правая
+    // Рисуем границы одним путем, вместо четырех отдельных линий
+    final Path borderPath = Path()
+      ..moveTo(0, 0)
+      ..lineTo(width, 0)
+      ..lineTo(width, height)
+      ..lineTo(0, height)
+      ..close();
+    canvas.drawPath(borderPath, borderPaint);
   }
 
   @override
@@ -113,7 +111,8 @@ class GridCellPainter extends CustomPainter {
     return oldDelegate.isSelected != isSelected ||
         oldDelegate.isToday != isToday ||
         oldDelegate.isOutside != isOutside ||
-        oldDelegate.heatmapColor != heatmapColor;
+        oldDelegate.heatmapColor != heatmapColor ||
+        oldDelegate.borderColor != borderColor;
   }
 }
 
@@ -538,101 +537,103 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Получаем размер экрана
+    final screenHeight = MediaQuery.of(context).size.height;
+    // Рассчитываем высоту календаря в зависимости от состояния
+    final calendarHeight = _isCalendarExpanded ? screenHeight * 0.45 : 0.0;
+    // Рассчитываем высоту статистики
+    final statsHeight = _isCalendarExpanded ? 50.0 : 0.0;
+
     return Scaffold(
-      body: AnimatedContainer(
-        duration: AppAnimations.mediumDuration,
-        // Применяем Transform для сдвига всего содержимого
-        transform: Matrix4.translationValues(
-            0,
-            _isCalendarExpanded
-                ? 0
-                : -MediaQuery.of(context).size.height * 0.30,
-            0),
-        child: Column(
-          children: [
-            // Раздел с календарем (фиксированной высоты)
-            Container(
-              height: MediaQuery.of(context).size.height * 0.45,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Заголовок месяца
-                  _buildMonthHeader(),
-
-                  // Календарь
-                  Expanded(
-                    child: Consumer<NotesProvider>(
-                      builder: (context, notesProvider, _) {
-                        return _buildGridCalendar(notesProvider);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Счетчики месяца
-            Container(
-              height: 50, // Фиксированная высота для счетчиков
-              child: _buildMonthStats(),
-            ),
-
-            // Кнопка свернуть/развернуть
-            _buildExpandCollapseButton(),
-
-            // Заголовок с заметками для выбранного дня
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentSecondary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${_selectedEvents.length}',
-                      style: const TextStyle(
-                        color: AppColors.accentSecondary,
-                        fontWeight: FontWeight.bold,
+      body: Column(
+        children: [
+          // Раздел с календарем (динамическая высота)
+          AnimatedContainer(
+            duration: AppAnimations.mediumDuration,
+            height: calendarHeight,
+            child: _isCalendarExpanded
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Заголовок месяца
+                      _buildMonthHeader(),
+                      // Календарь
+                      Expanded(
+                        child: Consumer<NotesProvider>(
+                          builder: (context, notesProvider, _) {
+                            return _buildGridCalendar(notesProvider);
+                          },
+                        ),
                       ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
+
+          // Счетчики месяца - с анимированной высотой
+          AnimatedContainer(
+            duration: AppAnimations.mediumDuration,
+            height: statsHeight,
+            child: _isCalendarExpanded
+                ? _buildMonthStats()
+                : const SizedBox.shrink(),
+          ),
+
+          // Кнопка свернуть/развернуть
+          _buildExpandCollapseButton(),
+
+          // Заголовок с заметками для выбранного дня
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSecondary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_selectedEvents.length}',
+                    style: const TextStyle(
+                      color: AppColors.accentSecondary,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
 
-            // Список заметок
-            Expanded(
-              child: _selectedEvents.isEmpty
-                  ? _buildEmptyDateView()
-                  : NoteListWidget(
-                      key: PageStorageKey<String>(
-                          'notes_for_${_selectedDay.toString()}'),
-                      notes: _selectedEvents,
-                      emptyMessage: 'Нет заметок на выбранный день',
-                      showThemeBadges: true,
-                      useCachedAnimation: false,
-                      swipeDirection: SwipeDirection.both,
-                      onNoteTap: _viewNoteDetails,
-                      onNoteDeleted: (note) async {
-                        final notesProvider =
-                            Provider.of<NotesProvider>(context, listen: false);
-                        await notesProvider.deleteNote(note.id);
-                        _loadData();
-                      },
-                    ),
-            ),
-          ],
-        ),
+          // Список заметок - занимает всё оставшееся пространство
+          Expanded(
+            child: _selectedEvents.isEmpty
+                ? _buildEmptyDateView()
+                : NoteListWidget(
+                    key: PageStorageKey<String>(
+                        'notes_for_${_selectedDay.toString()}'),
+                    notes: _selectedEvents,
+                    emptyMessage: 'Нет заметок на выбранный день',
+                    showThemeBadges: true,
+                    useCachedAnimation: false,
+                    swipeDirection: SwipeDirection.both,
+                    onNoteTap: _viewNoteDetails,
+                    onNoteDeleted: (note) async {
+                      final notesProvider =
+                          Provider.of<NotesProvider>(context, listen: false);
+                      await notesProvider.deleteNote(note.id);
+                      _loadData();
+                    },
+                  ),
+          ),
+        ],
       ),
       floatingActionButton: _buildAddNoteButton(),
     );
