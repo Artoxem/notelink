@@ -46,6 +46,9 @@ class _ThemesScreenState extends State<ThemesScreen> {
           Provider.of<ThemesProvider>(context, listen: false);
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
 
+      // Очищаем все кэши перед загрузкой
+      themesProvider.clearAllCaches();
+
       await Future.wait([
         themesProvider.loadThemes(),
         notesProvider.loadNotes(),

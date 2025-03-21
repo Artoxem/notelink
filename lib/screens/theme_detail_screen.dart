@@ -673,6 +673,9 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen>
 
     final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
 
+    // Очищаем кэши перед сохранением
+    themesProvider.clearAllCaches();
+
     if (_isEditing && widget.theme != null) {
       // Обновление существующей темы
       final updatedTheme = widget.theme!.copyWith(

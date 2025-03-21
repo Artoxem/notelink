@@ -73,6 +73,8 @@ class NoteTheme {
   }
 
   factory NoteTheme.fromMap(Map<String, dynamic> map) {
+    print('LogoType из БД: ${map['logoType']}'); // Отладочная информация
+
     return NoteTheme(
       id: map['id'],
       name: map['name'],

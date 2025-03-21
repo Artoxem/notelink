@@ -256,6 +256,13 @@ class ThemesProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // Полная очистка всех кэшей
+  void clearAllCaches() {
+    _notesForThemeCache.clear();
+    _themeCache.clear();
+    notifyListeners();
+  }
+
   // Получение всех тем для заметки
   List<NoteTheme> getThemesForNote(String noteId) {
     return _themes.where((theme) => theme.noteIds.contains(noteId)).toList();
