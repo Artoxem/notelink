@@ -888,20 +888,27 @@ class _NoteListWidgetState extends State<NoteListWidget>
       return _noteColorCache[note.id]!;
     }
 
+    // Базовый цвет на основе статуса заметки (дедлайн, завершено и т.д.)
     Color color = NoteStatusUtils.getNoteStatusColor(note);
 
-    // В режиме просмотра темы используем цвет текущей темы для заметок
+    // В режиме просмотра темы проверяем, привязана ли заметка к текущей теме
     if (widget.isInThemeView && widget.themeId != null) {
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
-      final theme = themesProvider.getThemeById(widget.themeId!);
+      // Проверяем, привязана ли заметка к теме
+      if (note.themeIds.contains(widget.themeId)) {
+        final themesProvider =
+            Provider.of<ThemesProvider>(context, listen: false);
+        final theme = themesProvider.getThemeById(widget.themeId!);
 
-      if (theme != null) {
-        try {
-          color = Color(int.parse(theme.color));
-        } catch (e) {
-          // Оставляем изначальный цвет в случае ошибки
+        if (theme != null) {
+          try {
+            color = Color(int.parse(theme.color));
+          } catch (e) {
+            // Оставляем изначальный цвет в случае ошибки
+          }
         }
+      } else {
+        // Заметка не привязана к текущей теме - используем нейтральный серый цвет
+        color = Colors.grey;
       }
     }
     // В общем режиме используем цвет первой темы заметки, если есть
