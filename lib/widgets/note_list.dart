@@ -561,13 +561,12 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
       // Cтруктура виджетов карточки
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
         child: Material(
           // Используем Material без ClipRRect для предотвращения обрезания
           color: Colors.transparent,
           child: Stack(
-            clipBehavior:
-                Clip.none, // Отключаем обрезание в Stack
+            clipBehavior: Clip.none, // Отключаем обрезание в Stack
             children: [
               // Основная карточка без ClipRRect
               Card(
@@ -757,8 +756,8 @@ class _NoteListWidgetState extends State<NoteListWidget>
               // Индикатор избранного с отрицательным смещением
               if (note.isFavorite)
                 Positioned(
-                  top: -4, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение вверх
-                  left: -4, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение влево
+                  top: -2, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение вверх
+                  left: -2, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение влево
                   child: Material(
                     color: Colors.amber,
                     borderRadius: const BorderRadius.only(
