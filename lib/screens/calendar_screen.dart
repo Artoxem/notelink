@@ -538,101 +538,103 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Получаем размер экрана
+    final screenHeight = MediaQuery.of(context).size.height;
+    // Рассчитываем высоту календаря в зависимости от состояния
+    final calendarHeight = _isCalendarExpanded ? screenHeight * 0.45 : 0.0;
+    // Рассчитываем высоту статистики
+    final statsHeight = _isCalendarExpanded ? 50.0 : 0.0;
+
     return Scaffold(
-      body: AnimatedContainer(
-        duration: AppAnimations.mediumDuration,
-        // Применяем Transform для сдвига всего содержимого
-        transform: Matrix4.translationValues(
-            0,
-            _isCalendarExpanded
-                ? 0
-                : -MediaQuery.of(context).size.height * 0.30,
-            0),
-        child: Column(
-          children: [
-            // Раздел с календарем (фиксированной высоты)
-            Container(
-              height: MediaQuery.of(context).size.height * 0.45,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Заголовок месяца
-                  _buildMonthHeader(),
-
-                  // Календарь
-                  Expanded(
-                    child: Consumer<NotesProvider>(
-                      builder: (context, notesProvider, _) {
-                        return _buildGridCalendar(notesProvider);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Счетчики месяца
-            Container(
-              height: 50, // Фиксированная высота для счетчиков
-              child: _buildMonthStats(),
-            ),
-
-            // Кнопка свернуть/развернуть
-            _buildExpandCollapseButton(),
-
-            // Заголовок с заметками для выбранного дня
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentSecondary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${_selectedEvents.length}',
-                      style: const TextStyle(
-                        color: AppColors.accentSecondary,
-                        fontWeight: FontWeight.bold,
+      body: Column(
+        children: [
+          // Раздел с календарем (динамическая высота)
+          AnimatedContainer(
+            duration: AppAnimations.mediumDuration,
+            height: calendarHeight,
+            child: _isCalendarExpanded
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Заголовок месяца
+                      _buildMonthHeader(),
+                      // Календарь
+                      Expanded(
+                        child: Consumer<NotesProvider>(
+                          builder: (context, notesProvider, _) {
+                            return _buildGridCalendar(notesProvider);
+                          },
+                        ),
                       ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
+
+          // Счетчики месяца - с анимированной высотой
+          AnimatedContainer(
+            duration: AppAnimations.mediumDuration,
+            height: statsHeight,
+            child: _isCalendarExpanded
+                ? _buildMonthStats()
+                : const SizedBox.shrink(),
+          ),
+
+          // Кнопка свернуть/развернуть
+          _buildExpandCollapseButton(),
+
+          // Заголовок с заметками для выбранного дня
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSecondary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_selectedEvents.length}',
+                    style: const TextStyle(
+                      color: AppColors.accentSecondary,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
 
-            // Список заметок
-            Expanded(
-              child: _selectedEvents.isEmpty
-                  ? _buildEmptyDateView()
-                  : NoteListWidget(
-                      key: PageStorageKey<String>(
-                          'notes_for_${_selectedDay.toString()}'),
-                      notes: _selectedEvents,
-                      emptyMessage: 'Нет заметок на выбранный день',
-                      showThemeBadges: true,
-                      useCachedAnimation: false,
-                      swipeDirection: SwipeDirection.both,
-                      onNoteTap: _viewNoteDetails,
-                      onNoteDeleted: (note) async {
-                        final notesProvider =
-                            Provider.of<NotesProvider>(context, listen: false);
-                        await notesProvider.deleteNote(note.id);
-                        _loadData();
-                      },
-                    ),
-            ),
-          ],
-        ),
+          // Список заметок - занимает всё оставшееся пространство
+          Expanded(
+            child: _selectedEvents.isEmpty
+                ? _buildEmptyDateView()
+                : NoteListWidget(
+                    key: PageStorageKey<String>(
+                        'notes_for_${_selectedDay.toString()}'),
+                    notes: _selectedEvents,
+                    emptyMessage: 'Нет заметок на выбранный день',
+                    showThemeBadges: true,
+                    useCachedAnimation: false,
+                    swipeDirection: SwipeDirection.both,
+                    onNoteTap: _viewNoteDetails,
+                    onNoteDeleted: (note) async {
+                      final notesProvider =
+                          Provider.of<NotesProvider>(context, listen: false);
+                      await notesProvider.deleteNote(note.id);
+                      _loadData();
+                    },
+                  ),
+          ),
+        ],
       ),
       floatingActionButton: _buildAddNoteButton(),
     );
