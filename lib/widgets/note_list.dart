@@ -74,6 +74,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   // Кэш для оптимизации производительности
   final Map<String, Color> _noteColorCache = {};
+  // Кэш для обработанных текстов - добавляем для оптимизации
+  final Map<String, String> _firstLineCache = {};
+  final Map<String, String> _contentPreviewCache = {};
 
   // Контроллер прокрутки для сохранения позиции
   final ScrollController _scrollController = ScrollController();
@@ -83,6 +86,16 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   // Локальная копия списка заметок для управления анимациями
   late List<Note> _localNotes;
+
+  // Статические регулярные выражения для обработки Markdown - создаются один раз
+  static final RegExp _headingsRegex = RegExp(r'#{1,6}\s+');
+  static final RegExp _boldRegex = RegExp(r'\*\*|__');
+  static final RegExp _italicRegex = RegExp(r'\*|_(?!\*)');
+  static final RegExp _linksRegex = RegExp(r'\[([^\]]+)\]\([^)]+\)');
+  static final RegExp _codeRegex = RegExp(r'`[^`]+`');
+
+  // Обновленное регулярное выражение для полного удаления голосовых заметок
+  static final RegExp _voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
 
   @override
   void initState() {
@@ -100,6 +113,21 @@ class _NoteListWidgetState extends State<NoteListWidget>
       // Инициализируем анимации
       _initializeItemAnimations();
       _animationController.forward();
+    }
+
+    // Предварительно обрабатываем тексты заметок для кэширования
+    _precacheNoteTexts();
+  }
+
+  // Новый метод для предварительной обработки текстов
+  void _precacheNoteTexts() {
+    for (final note in _localNotes) {
+      if (!_firstLineCache.containsKey(note.id)) {
+        _firstLineCache[note.id] = _processFirstLine(note.content);
+      }
+      if (!_contentPreviewCache.containsKey(note.id)) {
+        _contentPreviewCache[note.id] = _processContentPreview(note.content);
+      }
     }
   }
 
@@ -122,12 +150,18 @@ class _NoteListWidgetState extends State<NoteListWidget>
         if (index != -1) {
           _removeNoteLocally(index);
         }
+        // Очищаем кэш для удаленных заметок
+        _firstLineCache.remove(removedId);
+        _contentPreviewCache.remove(removedId);
       }
 
       // Обрабатываем добавленные заметки
       for (final addedId in addedIds) {
         final note = widget.notes.firstWhere((n) => n.id == addedId);
         _localNotes.add(note);
+        // Кэшируем тексты для новых заметок
+        _firstLineCache[addedId] = _processFirstLine(note.content);
+        _contentPreviewCache[addedId] = _processContentPreview(note.content);
       }
 
       // Обновляем существующие заметки
@@ -139,6 +173,12 @@ class _NoteListWidgetState extends State<NoteListWidget>
         );
 
         if (updatedNote != _localNotes[i]) {
+          // Если контент изменился, обновляем кэш
+          if (updatedNote.content != _localNotes[i].content) {
+            _firstLineCache[noteId] = _processFirstLine(updatedNote.content);
+            _contentPreviewCache[noteId] =
+                _processContentPreview(updatedNote.content);
+          }
           _localNotes[i] = updatedNote;
         }
       }
@@ -151,140 +191,105 @@ class _NoteListWidgetState extends State<NoteListWidget>
       _animationController.dispose();
     }
     _noteColorCache.clear();
+    _firstLineCache.clear();
+    _contentPreviewCache.clear();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Widget _buildNoteContentPreview(Note note) {
-    // Регулярное выражение для поиска маркеров голосовых заметок
-    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
-    final String content = note.content;
+  // Оптимизированные методы для обработки текста
+  // Метод для извлечения и форматирования первой строки
+  String _processFirstLine(String content) {
+    // Полностью удаляем голосовые метки (не оставляем никаких заменителей)
+    String cleanContent = content.replaceAll(_voiceRegex, '');
 
-    // Проверяем наличие голосовых заметок
-    final bool hasVoiceNote = voiceRegex.hasMatch(content);
+    // Убираем лишние пробелы, которые могли остаться после удаления голосовых меток
+    cleanContent = cleanContent.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-    // Получаем текст для превью (без маркеров голосовых заметок)
-    String previewText = _getContentWithoutFirstLine(content);
-    previewText = previewText.replaceAll(voiceRegex, '');
-
-    if (hasVoiceNote) {
-      // Если есть голосовая заметка, показываем индикатор + текст
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Индикатор голосовой заметки
-          Container(
-            width: 24,
-            height: 24,
-            margin: const EdgeInsets.only(right: 8, top: 2),
-            decoration: BoxDecoration(
-              color: Colors.purple.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.mic,
-              size: 14,
-              color: Colors.purple,
-            ),
-          ),
-
-          // Текст превью
-          Expanded(
-            child: ShaderMask(
-              shaderCallback: (Rect bounds) {
-                return LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black, Colors.transparent],
-                  stops: const [0.7, 1.0],
-                ).createShader(bounds);
-              },
-              blendMode: BlendMode.dstIn,
-              child: Text(
-                previewText.trim(),
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textOnLight,
-                ),
-                maxLines: 2,
-              ),
-            ),
-          ),
-        ],
-      );
-    } else {
-      // Стандартное отображение без голосовой заметки
-      return ShaderMask(
-        shaderCallback: (Rect bounds) {
-          return LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.black, Colors.transparent],
-            stops: const [0.7, 1.0],
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.dstIn,
-        child: Text(
-          previewText,
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textOnLight,
-          ),
-          maxLines: 3,
-        ),
-      );
+    final firstLineEnd = cleanContent.indexOf('\n');
+    if (firstLineEnd == -1) {
+      // Удаляем markdown разметку из всего текста
+      return _cleanMarkdown(cleanContent);
     }
+
+    // Очищаем только первую строку
+    String firstLine = cleanContent.substring(0, firstLineEnd).trim();
+    return _cleanMarkdown(firstLine);
   }
 
-  Widget _buildContentPreview(String content) {
-    // Регулярное выражение для поиска маркеров голосовых заметок
-    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:([^)]+)\)');
-    final matches = voiceRegex.allMatches(content);
+  // Метод для извлечения и форматирования контента без первой строки
+  String _processContentPreview(String content) {
+    // Полностью удаляем голосовые метки (не оставляем никаких заменителей)
+    String cleanContent = content.replaceAll(_voiceRegex, '');
 
-    if (matches.isEmpty) {
-      // Если нет голосовых заметок, возвращаем обычный текстовый превью
-      return Text(
-        _getContentWithoutFirstLine(content),
+    // Убираем лишние пробелы, которые могли остаться после удаления голосовых меток
+    cleanContent = cleanContent.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    final firstLineEnd = cleanContent.indexOf('\n');
+    if (firstLineEnd == -1) return '';
+
+    // Берем только контент после первой строки
+    String restContent = cleanContent.substring(firstLineEnd + 1).trim();
+    // Очищаем markdown
+    return _cleanMarkdown(restContent);
+  }
+
+  // Упрощенный метод очистки markdown (без частых регулярных выражений)
+  String _cleanMarkdown(String text) {
+    if (text.isEmpty) return '';
+
+    // Последовательно удаляем разметку наиболее распространенных элементов
+    String cleaned = text;
+
+    // Удаляем заголовки
+    cleaned = cleaned.replaceAll(_headingsRegex, '');
+
+    // Удаляем жирный и курсив
+    cleaned = cleaned.replaceAll(_boldRegex, '');
+    cleaned = cleaned.replaceAll(_italicRegex, '');
+
+    // Заменяем ссылки только текстом
+    cleaned =
+        cleaned.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
+
+    // Удаляем код - используем replaceAllMapped вместо replaceAll с функцией
+    cleaned = cleaned.replaceAllMapped(_codeRegex, (match) {
+      final code = match.group(0) ?? '';
+      return code.length > 2 ? code.substring(1, code.length - 1) : '';
+    });
+
+    return cleaned.trim();
+  }
+
+  Widget _buildNoteContentPreview(Note note) {
+    // Получаем текст для превью из кэша
+    final String previewText =
+        _contentPreviewCache[note.id] ?? _processContentPreview(note.content);
+
+    // Проверяем, не пустой ли текст
+    if (previewText.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Показываем только текст без индикаторов голосовых заметок
+    return ShaderMask(
+      shaderCallback: (Rect bounds) {
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.black, Colors.transparent],
+          stops: const [0.7, 1.0],
+        ).createShader(bounds);
+      },
+      blendMode: BlendMode.dstIn,
+      child: Text(
+        previewText,
         style: TextStyle(
           fontSize: 14,
           color: AppColors.textOnLight,
         ),
         maxLines: 3,
-      );
-    }
-
-    // Если есть голосовые заметки, создаем комбинированное представление
-    return Row(
-      children: [
-        // Иконка микрофона для индикации голосовой заметки
-        Container(
-          width: 24,
-          height: 24,
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(
-            color: Colors.purple.withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.mic,
-            size: 14,
-            color: Colors.purple,
-          ),
-        ),
-
-        // Текст превью (с удаленными маркерами голосовых заметок)
-        Expanded(
-          child: Text(
-            _getContentWithoutFirstLine(content)
-                .replaceAll(voiceRegex, '[голосовая заметка]'),
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textOnLight,
-            ),
-            maxLines: 2,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -689,7 +694,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
                                 // Заголовок заметки (первая строка)
                                 Text(
-                                  _getFirstLine(note.content),
+                                  // Используем кэшированную первую строку
+                                  _firstLineCache[note.id] ??
+                                      _processFirstLine(note.content),
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -700,7 +707,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                 ),
 
                                 // Добавляем проверку на наличие контента
-                                if (_getContentWithoutFirstLine(note.content)
+                                if ((_contentPreviewCache[note.id] ?? '')
                                     .isNotEmpty) ...[
                                   const SizedBox(height: 3),
                                   // Содержимое заметки с обработкой голосовых заметок
@@ -767,22 +774,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
         ),
       ),
     );
-  }
-
-  // Вспомогательные методы форматирования и интерфейса сохраняем без изменений
-  String _getFirstLine(String content) {
-    final firstLineEnd = content.indexOf('\n');
-    if (firstLineEnd == -1) return content;
-    return content
-        .substring(0, firstLineEnd)
-        .trim()
-        .replaceAll(RegExp(r'^#+\s+'), '');
-  }
-
-  String _getContentWithoutFirstLine(String content) {
-    final firstLineEnd = content.indexOf('\n');
-    if (firstLineEnd == -1) return '';
-    return content.substring(firstLineEnd + 1).trim();
   }
 
   bool _hasMediaContent(Note note) {

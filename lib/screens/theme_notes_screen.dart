@@ -8,6 +8,7 @@ import '../utils/constants.dart';
 import 'note_detail_screen.dart';
 import 'theme_detail_screen.dart';
 import '../widgets/note_list.dart';
+import '../widgets/media_badge.dart';
 
 class ThemeNotesScreen extends StatefulWidget {
   final NoteTheme theme;
@@ -455,55 +456,7 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                 )
               : _themeNotes.isEmpty
                   ? _buildEmptyState()
-                  : NoteListWidget(
-                      notes: _themeNotes,
-                      emptyMessage: 'В этой теме пока нет заметок',
-                      showThemeBadges: false,
-                      isInThemeView: true,
-                      themeId: widget.theme.id,
-                      swipeDirection: SwipeDirection.both,
-                      availableActions: const [
-                        NoteListAction.edit,
-                        NoteListAction.favorite,
-                        NoteListAction.delete,
-                        NoteListAction.unlinkFromTheme // Добавляем эту опцию
-                      ],
-                      onNoteDeleted: (note) async {
-                        final notesProvider =
-                            Provider.of<NotesProvider>(context, listen: false);
-                        await notesProvider.deleteNote(note.id);
-                        // Удаляем вызов _loadNotes(), обновление произойдет локально
-                      },
-                      onNoteUnlinked: (note) async {
-                        // Добавляем обработчик отвязки заметки от темы
-                        final themesProvider =
-                            Provider.of<ThemesProvider>(context, listen: false);
-                        await themesProvider.unlinkNoteFromTheme(
-                            widget.theme.id, note.id);
-                        // Удаляем вызов _loadNotes(), обновление произойдет локально
-                      },
-                      onNoteFavoriteToggled: (note) {
-                        // Не вызываем _loadNotes(), обновление происходит локально
-                      },
-                      onActionSelected: (note, action) {
-                        // Оптимизируем обработку действий
-                        if (action == NoteListAction.delete) {
-                          final notesProvider = Provider.of<NotesProvider>(
-                              context,
-                              listen: false);
-                          notesProvider.deleteNote(note.id);
-                          // Не вызываем _loadNotes()
-                        } else if (action == NoteListAction.unlinkFromTheme) {
-                          final themesProvider = Provider.of<ThemesProvider>(
-                              context,
-                              listen: false);
-                          themesProvider.unlinkNoteFromTheme(
-                              widget.theme.id, note.id);
-                          // Не вызываем _loadNotes()
-                        }
-                        // Для других действий не вызываем полное обновление
-                      },
-                    ),
+                  : _buildNotesInTheme(),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _themeColor,
         onPressed: _createNoteInTheme,
@@ -511,6 +464,219 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
+  }
+
+  // Новый метод для построения списка заметок в теме
+  Widget _buildNotesInTheme() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _themeNotes.length,
+      itemBuilder: (context, index) {
+        final note = _themeNotes[index];
+        return _buildNotePreviewCard(note);
+      },
+    );
+  }
+
+  // Новый метод для построения карточки превью заметки с округлыми краями
+  Widget _buildNotePreviewCard(Note note) {
+    // Подготовка медиа счетчиков
+    int imagesCount = 0;
+    int audioCount = 0;
+    int filesCount = 0;
+    int voiceCount = 0;
+
+    // Подсчет медиа-файлов
+    for (final mediaPath in note.mediaUrls) {
+      final extension = mediaPath.toLowerCase();
+      if (extension.endsWith('.jpg') ||
+          extension.endsWith('.jpeg') ||
+          extension.endsWith('.png')) {
+        imagesCount++;
+      } else if (extension.endsWith('.mp3') ||
+          extension.endsWith('.wav') ||
+          extension.endsWith('.m4a')) {
+        audioCount++;
+      } else {
+        filesCount++;
+      }
+    }
+
+    // Подсчет голосовых заметок в контенте
+    final voiceMatches =
+        RegExp(r'!\[voice\]\(voice:[^)]+\)').allMatches(note.content);
+    voiceCount = voiceMatches.length;
+
+    // Цвет превью (используем основной цвет темы)
+    Color cardColor = Colors.white.withOpacity(0.9);
+
+    // Построение карточки
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(note: note),
+            ),
+          ).then((_) {
+            _loadNotes();
+          });
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(16), // Круглые края
+            border: Border.all(
+              color: _themeColor.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Индикатор медиа и дедлайна
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Тип заметки - голосовая, изображение, документ и т.д.
+                      if (voiceCount > 0)
+                        const Icon(Icons.mic,
+                            size: 20, color: Colors.deepPurple)
+                      else if (note.hasImages)
+                        const Icon(Icons.photo, size: 20, color: Colors.teal)
+                      else if (note.hasFiles)
+                        const Icon(Icons.insert_drive_file,
+                            size: 20, color: Colors.blue)
+                      else
+                        const Icon(Icons.note, size: 20, color: Colors.grey),
+                    ],
+                  ),
+                ),
+
+                // Основное содержимое
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Заголовок заметки
+                      Text(
+                        _getTitleFromContent(note.content),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      // Медиа индикаторы и дедлайн
+                      Row(
+                        children: [
+                          // Индикатор дедлайна (если есть)
+                          if (note.hasDeadline && note.deadlineDate != null)
+                            Container(
+                              margin: const EdgeInsets.only(right: 8.0),
+                              child: Icon(
+                                Icons.timer,
+                                size: 12, // 50% от размера иконок медиа
+                                color: Colors.orangeAccent,
+                              ),
+                            ),
+
+                          // Индикаторы медиа в компактном виде
+                          if (imagesCount > 0 ||
+                              audioCount > 0 ||
+                              voiceCount > 0 ||
+                              filesCount > 0)
+                            MediaBadgeGroup(
+                              imagesCount: imagesCount,
+                              audioCount: audioCount,
+                              voiceCount: voiceCount,
+                              filesCount: filesCount,
+                              badgeSize: 20, // Меньший размер для превью
+                              spacing: 4.0,
+                              showCounters: false, // Отключаем счетчики
+                              showOnlyUnique:
+                                  true, // Показываем только по одному значку для каждого типа
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Дата
+                Container(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    _getTimeAgo(note.updatedAt),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Вспомогательный метод для извлечения заголовка из контента
+  String _getTitleFromContent(String content) {
+    // Сначала удаляем метки голосовых заметок
+    final cleanContent =
+        content.replaceAll(RegExp(r'!\[voice\]\(voice:[^)]+\)'), '');
+
+    // Берем первую строку как заголовок
+    final firstLineEnd = cleanContent.indexOf('\n');
+    if (firstLineEnd == -1) {
+      return cleanContent
+          .trim(); // Если нет переносов строки, возвращаем весь контент
+    }
+
+    // Получаем первую строку
+    String firstLine = cleanContent.substring(0, firstLineEnd).trim();
+
+    // Удаляем markdown-разметку из заголовка (например, "#", "**" и т.д.)
+    firstLine = firstLine.replaceAll(
+        RegExp(r'^#+\s+'), ''); // Удаляем символы заголовка
+    firstLine = firstLine.replaceAll(
+        RegExp(r'\*\*|\*|__'), ''); // Удаляем звездочки и подчеркивания
+
+    return firstLine;
+  }
+
+  // Вспомогательный метод для форматирования времени
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays == 0) {
+      return 'сегодня';
+    } else if (difference.inDays == 1) {
+      return 'вчера';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} дн. назад';
+    } else {
+      return '${dateTime.day}.${dateTime.month}.${dateTime.year}';
+    }
   }
 
   Widget _buildEmptyState() {

@@ -121,6 +121,8 @@ class MediaBadgeGroup extends StatelessWidget {
   final double badgeSize;
   final double spacing;
   final bool showEmptyBadges;
+  final bool showCounters; // Новый параметр для отображения счетчиков
+  final bool showOnlyUnique; // Новый параметр для отображения только уникальных типов медиа
   final Function(MediaBadgeType type)? onBadgeTap;
 
   const MediaBadgeGroup({
@@ -132,6 +134,8 @@ class MediaBadgeGroup extends StatelessWidget {
     this.badgeSize = 24.0,
     this.spacing = 4.0,
     this.showEmptyBadges = false,
+    this.showCounters = true, // По умолчанию показываем счетчики
+    this.showOnlyUnique = false, // По умолчанию показываем все значки
     this.onBadgeTap,
   }) : super(key: key);
 
@@ -139,14 +143,20 @@ class MediaBadgeGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final List<Widget> badges = [];
 
-    // Аудио и голосовые заметки в один значок (без счетчика)
-    if (voiceCount > 0 || audioCount > 0 || showEmptyBadges) {
+    // Определяем, есть ли медиа каждого типа
+    final bool hasAudio = audioCount > 0;
+    final bool hasVoice = voiceCount > 0;
+    final bool hasImages = imagesCount > 0;
+    final bool hasFiles = filesCount > 0;
+
+    // Аудио и голосовые заметки
+    if ((hasVoice || hasAudio) || showEmptyBadges) {
       badges.add(
         MediaBadge(
           type: MediaBadgeType.voice,
           count: voiceCount + audioCount,
           size: badgeSize,
-          showCount: false, // Не показываем счетчик для аудио
+          showCount: showCounters, // Используем параметр showCounters
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.voice)
               : null,
@@ -155,13 +165,13 @@ class MediaBadgeGroup extends StatelessWidget {
     }
 
     // Для изображений с счетчиком
-    if (imagesCount > 0 || showEmptyBadges) {
+    if (hasImages || showEmptyBadges) {
       badges.add(
         MediaBadge(
           type: MediaBadgeType.image,
           count: imagesCount,
           size: badgeSize,
-          showCount: false, // Не показываем счетчик
+          showCount: showCounters, // Используем параметр showCounters
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.image)
               : null,
@@ -170,13 +180,13 @@ class MediaBadgeGroup extends StatelessWidget {
     }
 
     // Для файлов с счетчиком
-    if (filesCount > 0 || showEmptyBadges) {
+    if (hasFiles || showEmptyBadges) {
       badges.add(
         MediaBadge(
           type: MediaBadgeType.file,
           count: filesCount,
           size: badgeSize,
-          showCount: false, // Не показываем счетчик
+          showCount: showCounters, // Используем параметр showCounters
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.file)
               : null,
