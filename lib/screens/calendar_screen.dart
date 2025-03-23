@@ -14,6 +14,7 @@ import 'dart:math' as math;
 import '../widgets/note_list.dart';
 import 'package:flutter/services.dart';
 import '../widgets/media_badge.dart';
+import 'deadlines_screen.dart';
 
 // Класс для рисования треугольника
 class TrianglePainter extends CustomPainter {
@@ -1027,67 +1028,84 @@ class _CalendarScreenState extends State<CalendarScreen>
 
           // Задачи с дедлайном - стильная карточка (уменьшенная на 60% по высоте)
           Expanded(
-            child: Card(
-              margin: EdgeInsets.zero, // Убираем отступ карточки
-              elevation: 2, // Уменьшена тень
-              shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(12), // Уменьшен радиус скругления
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 6, horizontal: 6), // Уменьшено с 10,8 до 6,6
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color.fromARGB(255, 121, 158, 73).withOpacity(0.8),
-                      Color.fromARGB(255, 121, 158, 73).withOpacity(0.5),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+            child: InkWell(
+              onTap: () {
+                // Переход на экран со списком задач с дедлайнами
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DeadlinesScreen(),
                   ),
+                ).then((_) {
+                  // Обновляем данные после возврата
+                  if (mounted) {
+                    _loadData();
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Card(
+                margin: EdgeInsets.zero, // Убираем отступ карточки
+                elevation: 2, // Уменьшена тень
+                shape: RoundedRectangleBorder(
                   borderRadius:
                       BorderRadius.circular(12), // Уменьшен радиус скругления
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 20, // Уменьшено с 26 до 20
-                      height: 20, // Уменьшено с 26 до 20
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.timer,
-                        color: Colors.white,
-                        size: 12, // Уменьшено с 14 до 12
-                      ),
-                    ),
-                    SizedBox(width: 6), // Уменьшено с 8 до 6
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          tasksNotes.length.toString(),
-                          style: TextStyle(
-                            fontSize: 14, // Уменьшено с 16 до 14
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          'Deadlines',
-                          style: TextStyle(
-                            fontSize: 10, // Уменьшено с 12 до 10
-                            color: Colors.white.withOpacity(0.9),
-                          ),
-                        ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 6, horizontal: 6), // Уменьшено с 10,8 до 6,6
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color.fromARGB(255, 121, 158, 73).withOpacity(0.8),
+                        Color.fromARGB(255, 121, 158, 73).withOpacity(0.5),
                       ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  ],
+                    borderRadius:
+                        BorderRadius.circular(12), // Уменьшен радиус скругления
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 20, // Уменьшено с 26 до 20
+                        height: 20, // Уменьшено с 26 до 20
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.timer,
+                          color: Colors.white,
+                          size: 12, // Уменьшено с 14 до 12
+                        ),
+                      ),
+                      SizedBox(width: 6), // Уменьшено с 8 до 6
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            tasksNotes.length.toString(),
+                            style: TextStyle(
+                              fontSize: 14, // Уменьшено с 16 до 14
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            'Deadlines',
+                            style: TextStyle(
+                              fontSize: 10, // Уменьшено с 12 до 10
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

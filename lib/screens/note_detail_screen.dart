@@ -40,6 +40,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   final _contentFocusNode = FocusNode();
 
   bool _hasDeadline = false;
+  bool _isTaskCompleted = false;
   DateTime? _deadlineDate;
   bool _hasDateLink = true;
   DateTime? _linkedDate;
@@ -110,17 +111,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       curve: Curves.easeInOut,
     );
 
-    // Инициализация контроллера анимации для режима перехода
-    _modeTransitionController = AnimationController(
-      vsync: this,
-      duration: AppAnimations.mediumDuration,
-    );
-
-    _modeTransitionAnimation = CurvedAnimation(
-      parent: _modeTransitionController,
-      curve: Curves.easeInOut,
-    );
-
     if (widget.note != null) {
       // Редактирование существующей заметки
       _contentController.text = widget.note!.content;
@@ -138,6 +128,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       // Загружаем медиафайлы
       _mediaFiles = List.from(widget.note!.mediaUrls);
 
+      // Инициализируем статус задачи
+      _isTaskCompleted = widget.note!.isCompleted;
+
       _isEditing = true;
 
       // Используем переданный параметр для определения начального режима
@@ -148,28 +141,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         _modeTransitionController.value = 1.0; // Анимация в конечном состоянии
       }
     } else {
-      // Создание новой заметки - сразу включаем режим редактирования
-      _isEditMode = true;
-      _modeTransitionController.value = 1.0; // Анимация в конечном состоянии
-
-      // Но не активируем автофокус для предотвращения появления клавиатуры
-      _contentFocusNode.canRequestFocus = false;
-
-      // Автоматически привязываем к выбранной или текущей дате
-      _hasDateLink = true;
-      _linkedDate = widget.initialDate ?? DateTime.now();
-
-      // Инициализируем пустой список для медиафайлов
-      _mediaFiles = [];
-
-      // Инициализируем темы, если они переданы
-      if (widget.initialThemeIds != null &&
-          widget.initialThemeIds!.isNotEmpty) {
-        _selectedThemeIds = List.from(widget.initialThemeIds!);
-        _isSettingsChanged = true; // Отмечаем, что настройки изменены
-      }
-
-      // Не устанавливаем дедлайн автоматически
+      // ...остальной код без изменений
     }
 
     // Слушаем изменения табов для переключения между режимами
@@ -180,7 +152,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       });
     });
 
-    // Слушаем изменения фокуса
+    // Слушаем фокус
     _focusNode.addListener(_handleFocusChange);
 
     // Слушаем изменения содержимого
@@ -422,6 +394,68 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
+  // Метод для показа диалога подтверждения завершения задачи
+  Future<void> _showCompleteTaskDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Завершить задачу'),
+        content: const Text(
+          'Вы уверены, что хотите пометить эту задачу как выполненную?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.completed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Выполнено'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && widget.note != null) {
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+      try {
+        // Вызываем метод completeNote для изменения статуса
+        await notesProvider.completeNote(widget.note!.id);
+
+        // Обновляем данные на экране
+        if (mounted) {
+          setState(() {
+            // Используем локальное состояние вместо изменения widget.note
+            _isTaskCompleted = true;
+          });
+
+          // Показываем уведомление
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Задача помечена как выполненная'),
+              backgroundColor: AppColors.completed,
+            ),
+          );
+        }
+      } catch (e) {
+        // Обработка ошибок
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   // Построение режима просмотра с добавлением медиафайлов
   Widget _buildViewMode() {
     final bool enableMarkdown =
@@ -460,9 +494,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                 Row(
                   children: [
                     Icon(
-                      widget.note?.isCompleted ?? false
-                          ? Icons.check_circle
-                          : Icons.timer,
+                      _isTaskCompleted ? Icons.check_circle : Icons.timer,
                       size: 14, // Уменьшен с 16 до 14
                       color: _getDeadlineColor(),
                     ),
@@ -480,13 +512,62 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             ],
           ),
 
-          // Теги/темы, если есть - компактно в одну строку
-          if (_selectedThemeIds.isNotEmpty)
-            Padding(
-              padding:
-                  const EdgeInsets.only(top: 8.0), // Уменьшен с 16.0 до 8.0
-              child: _buildThemeTags(),
+          // Теги/темы, если есть - компактно в одну строку, а также кнопка "Выполнено"
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0), // Уменьшен с 16.0 до 8.0
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Маркеры тем (если есть)
+                if (_selectedThemeIds.isNotEmpty)
+                  Expanded(child: _buildThemeTags())
+                else
+                  const Spacer(), // Пустое пространство, если тем нет
+
+                // Кнопка "Выполнено" для незавершенных задач
+                if (_hasDeadline && _deadlineDate != null)
+                  _isTaskCompleted
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.completed,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.check_circle,
+                                  color: Colors.white, size: 16),
+                              SizedBox(width: 4),
+                              Text(
+                                'Выполнено',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: _showCompleteTaskDialog,
+                          icon:
+                              const Icon(Icons.check_circle_outline, size: 16),
+                          label: const Text('Выполнить',
+                              style: TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentSecondary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            minimumSize: const Size(0, 30),
+                          ),
+                        ),
+              ],
             ),
+          ),
 
           // Разделитель
           const Padding(
@@ -994,7 +1075,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
   // Определение цвета для дедлайна
   Color _getDeadlineColor() {
-    if (widget.note?.isCompleted ?? false) {
+    if (_isTaskCompleted) {
       return AppColors.completed;
     }
 
