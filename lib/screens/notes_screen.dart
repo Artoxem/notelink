@@ -721,7 +721,6 @@ class _NotesScreenState extends State<NotesScreen>
       direction: DismissDirection.horizontal,
 
       // Фон для свайпа вправо (избранное)
-
       background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20.0),
@@ -732,18 +731,19 @@ class _NotesScreenState extends State<NotesScreen>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppColors.fabBackground.withOpacity(0.8),
-                AppColors.fabBackground.withOpacity(0.6)
+                AppColors.accentSecondary.withOpacity(0.8),
+                AppColors.accentSecondary.withOpacity(0.6)
               ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
-            borderRadius: BorderRadius.horizontal(left: Radius.circular(22)),
+            borderRadius:
+                const BorderRadius.horizontal(left: Radius.circular(22)),
           ),
-          child: Row(
+          child: const Row(
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.center,
-            children: const [
+            children: [
               Icon(
                 Icons.star,
                 color: Colors.orange,
@@ -765,18 +765,19 @@ class _NotesScreenState extends State<NotesScreen>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppColors.fabBackground.withOpacity(0.6),
-                AppColors.fabBackground.withOpacity(0.8),
+                AppColors.accentSecondary.withOpacity(0.6),
+                AppColors.accentSecondary.withOpacity(0.8),
               ],
               begin: Alignment.centerRight,
               end: Alignment.centerLeft,
             ),
-            borderRadius: BorderRadius.horizontal(right: Radius.circular(22)),
+            borderRadius:
+                const BorderRadius.horizontal(right: Radius.circular(22)),
           ),
-          child: Row(
+          child: const Row(
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.center,
-            children: const [
+            children: [
               Spacer(),
               Icon(
                 Icons.delete,

@@ -8,6 +8,7 @@ import 'note_detail_screen.dart';
 import '../models/note.dart';
 import '../models/theme.dart';
 import '../utils/constants.dart';
+import '../widgets/media_badge.dart';
 
 class ThemesScreen extends StatefulWidget {
   const ThemesScreen({super.key});
@@ -397,209 +398,87 @@ class _ThemesScreenState extends State<ThemesScreen> {
 
 // Метод для создания логотипа темы
   Widget _buildThemeLogo(NoteTheme theme, Color themeColor) {
-    // Определяем форму и содержимое логотипа в зависимости от типа
-    Widget icon;
-    ShapeBorder? shape;
-    Widget? customShape;
+    // Определяем иконку в зависимости от типа
+    IconData iconData;
 
     switch (theme.logoType) {
       case ThemeLogoType.book:
-        // Круглая форма с иконкой книги
-        icon = const Icon(
-          Icons.book,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+        iconData = Icons.book;
         break;
-
       case ThemeLogoType.shapes:
-        // Квадратная форма с иконкой геометрических фигур
-        icon = const Icon(
-          Icons.category,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
+        iconData = Icons.category;
         break;
-
       case ThemeLogoType.feather:
-        // Треугольная форма с иконкой пера
-        icon = const Icon(
-          Icons.edit,
-          color: Colors.white,
-          size: 24,
-        );
-        // Треугольная форма реализована через ClipPath
-        customShape = ClipPath(
-          clipper: TriangleClipper(),
-          child: Container(
-            width: 48,
-            height: 48,
-            color: themeColor,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: icon,
-              ),
-            ),
-          ),
-        );
+        iconData = Icons.edit;
         break;
-
       case ThemeLogoType.scroll:
-        // Пятиугольная форма с иконкой свитка
-        icon = const Icon(
-          Icons.description,
-          color: Colors.white,
-          size: 24,
-        );
-        // Пятиугольная форма реализована через ClipPath
-        customShape = ClipPath(
-          clipper: PentagonClipper(),
-          child: Container(
-            width: 48,
-            height: 48,
-            color: themeColor,
-            child: Center(child: icon),
-          ),
-        );
+        iconData = Icons.description;
         break;
-
       case ThemeLogoType.microphone:
-        // Микрофон - добавляем новые типы
-        icon = const Icon(
-          Icons.mic,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+        iconData = Icons.mic;
         break;
-
       case ThemeLogoType.code:
-        // Программирование
-        icon = const Icon(
-          Icons.code,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
+        iconData = Icons.code;
         break;
-
       case ThemeLogoType.graduation:
-        // Образование
-        icon = const Icon(
-          Icons.school,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+        iconData = Icons.school;
         break;
-
       case ThemeLogoType.beach:
-        // Отдых
-        icon = const Icon(
-          Icons.beach_access,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+        iconData = Icons.beach_access;
         break;
-
       case ThemeLogoType.party:
-        // Праздники
-        icon = const Icon(
-          Icons.celebration,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+        iconData = Icons.celebration;
         break;
-
       case ThemeLogoType.home:
-        // Дом
-        icon = const Icon(
-          Icons.home,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
+        iconData = Icons.home;
         break;
-
       case ThemeLogoType.business:
-        // Бизнес
-        icon = const Icon(
-          Icons.business_center,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+        iconData = Icons.business_center;
         break;
-
       case ThemeLogoType.fitness:
-        // Фитнес
-        icon = const Icon(
-          Icons.fitness_center,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
+        iconData = Icons.fitness_center;
         break;
-
       default:
-        // По умолчанию - круглая форма с иконкой книги
-        icon = const Icon(
-          Icons.book,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+        iconData = Icons.book;
     }
 
-    // Если есть кастомная форма, возвращаем ее
-    if (customShape != null) {
-      return customShape;
-    }
-
-    // Стандартная реализация для круглой и квадратной форм
+    // Используем круглую форму для всех иконок
     return Material(
-      shape: shape,
+      shape: const CircleBorder(),
       color: themeColor,
       elevation: 4,
       shadowColor: themeColor.withOpacity(0.3),
       child: SizedBox(
         width: 48,
         height: 48,
-        child: Center(child: icon),
+        child: Center(
+          child: Icon(
+            iconData,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
       ),
     );
   }
 
 // Метод для предпросмотра заметки
-  Widget _buildNotePreviewer(Note noteItem, Color themeColor) {
+  Widget _buildNotePreviewer(Note note, Color themeColor) {
     // Извлекаем текст для превью
     String previewText = '';
 
     // Пробуем извлечь заголовок из Markdown или берем начало контента
-    final headerMatch = RegExp(r'^#{1,3}\s+(.+)$', multiLine: true)
-        .firstMatch(noteItem.content);
+    final headerMatch =
+        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(note.content);
     if (headerMatch != null) {
       previewText = headerMatch.group(1) ?? '';
     } else {
       // Если нет заголовка, берем начало текста (первую строку)
-      final firstLineBreak = noteItem.content.indexOf('\n');
+      final firstLineBreak = note.content.indexOf('\n');
       if (firstLineBreak > 0) {
-        previewText = noteItem.content.substring(0, firstLineBreak).trim();
+        previewText = note.content.substring(0, firstLineBreak).trim();
       } else {
-        previewText = noteItem.content.trim();
+        previewText = note.content.trim();
       }
     }
 
@@ -612,81 +491,136 @@ class _ThemesScreenState extends State<ThemesScreen> {
             '') // Убираем голосовые заметки
         .trim();
 
+    // Подсчитываем разные типы медиа для значков
+    int imagesCount = 0;
+    int audioCount = 0;
+    int voiceCount = 0;
+    int filesCount = 0;
+
+    // Подсчет медиа-файлов
+    for (final mediaPath in note.mediaUrls) {
+      final extension = mediaPath.toLowerCase();
+      if (extension.endsWith('.jpg') ||
+          extension.endsWith('.jpeg') ||
+          extension.endsWith('.png')) {
+        imagesCount++;
+      } else if (extension.endsWith('.mp3') ||
+          extension.endsWith('.wav') ||
+          extension.endsWith('.m4a')) {
+        audioCount++;
+      } else {
+        filesCount++;
+      }
+    }
+
+    // Подсчет голосовых заметок в контенте
+    final voiceMatches =
+        RegExp(r'!\[voice\]\(voice:[^)]+\)').allMatches(note.content);
+    voiceCount = voiceMatches.length;
+
+    // Высота превью для полного скругления
+    const double previewHeight = 32;
+
     return InkWell(
-      onTap: () => _openNoteDetail(noteItem),
-      borderRadius: BorderRadius.circular(8),
-      child: Card(
-        margin: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 3), // Уменьшено на 25%
-        elevation: 0.5,
-        color: AppColors.textBackground.withOpacity(0.7),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(
-            color: themeColor.withOpacity(0.2),
-            width: 1,
-          ),
+      onTap: () => _openNoteDetail(note),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(previewHeight / 2),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 6), // Уменьшено
-          child: Row(
-            children: [
-              // Блок с иконками медиа
-              if (_hasMediaContent(noteItem))
-                Container(
-                  padding: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      right: BorderSide(
-                        color: AppColors.secondary.withOpacity(0.3),
-                        width: 1,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            height: previewHeight,
+            decoration: BoxDecoration(
+              color: AppColors.textBackground.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(previewHeight / 2),
+              border: Border.all(
+                color: themeColor.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Иконки медиа и дедлайна слева
+                Padding(
+                  padding: const EdgeInsets.only(left: 10, right: 8),
+                  child: Row(
+                    children: [
+                      // Иконка дедлайна (если есть)
+                      if (note.hasDeadline && note.deadlineDate != null)
+                        Icon(
+                          Icons.timer,
+                          size: 13, // 60% от обычного размера иконок (20-22px)
+                          color: Colors.orange,
+                        ),
+
+                      // Добавляем небольшой отступ между иконками
+                      if (note.hasDeadline &&
+                          note.deadlineDate != null &&
+                          (note.hasImages ||
+                              note.hasAudio ||
+                              note.hasFiles ||
+                              note.hasVoiceNotes))
+                        const SizedBox(width: 6),
+
+                      // Иконки медиа с использованием MediaBadgeGroup
+                      if (imagesCount > 0 ||
+                          audioCount > 0 ||
+                          voiceCount > 0 ||
+                          filesCount > 0)
+                        MediaBadgeGroup(
+                          imagesCount: imagesCount,
+                          audioCount: audioCount,
+                          voiceCount: voiceCount,
+                          filesCount: filesCount,
+                          badgeSize: 20, // Уменьшенный размер для превью
+                          spacing: 4,
+                          showCounters: false, // Без счетчиков
+                          showOnlyUnique: true, // Только уникальные типы
+                        ),
+                    ],
+                  ),
+                ),
+
+                // Текст превью
+                Expanded(
+                  child: ShaderMask(
+                    shaderCallback: (Rect bounds) {
+                      return LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [Colors.black, Colors.transparent],
+                        stops: const [0.85, 1.0],
+                      ).createShader(bounds);
+                    },
+                    blendMode: BlendMode.dstIn,
+                    child: Text(
+                      previewText.trim(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textOnLight,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
                     ),
                   ),
-                  child: _buildMediaIcon(noteItem),
                 ),
 
-              // Отступ после иконок или если их нет, то от начала
-              const SizedBox(width: 8),
-
-              // Текст заметки с эффектом затухания
-              Expanded(
-                child: ShaderMask(
-                  shaderCallback: (Rect bounds) {
-                    return LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [Colors.black, Colors.transparent],
-                      stops: const [
-                        0.85,
-                        1.0
-                      ], // 85% текста видно полностью, затем затухание
-                    ).createShader(bounds);
-                  },
-                  blendMode: BlendMode.dstIn,
+                // Дата
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, right: 10),
                   child: Text(
-                    previewText,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textOnLight,
+                    _formatDate(note.createdAt),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textOnLight.withOpacity(0.6),
                     ),
-                    maxLines: 1,
-                    overflow:
-                        TextOverflow.fade, // Используем fade вместо ellipsis
                   ),
                 ),
-              ),
-
-              // Дата создания заметки
-              Text(
-                _formatDate(noteItem.createdAt),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textOnLight.withOpacity(0.6),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -787,31 +721,6 @@ class _ThemesScreenState extends State<ThemesScreen> {
     );
   }
 
-  // Проверка наличия медиа в заметке
-  bool _hasMediaContent(Note note) {
-    return note.hasImages ||
-        note.hasAudio ||
-        note.hasFiles ||
-        note.hasVoiceNotes ||
-        RegExp(r'!\[voice\]\(voice:[^)]+\)').hasMatch(note.content);
-  }
-
-// Создание иконки медиа для заметки
-  Widget _buildMediaIcon(Note note) {
-    // Приоритет иконок: изображение > голос > файл
-    if (note.hasImages) {
-      return const Icon(Icons.image, size: 16, color: AppColors.accentPrimary);
-    } else if (note.hasAudio ||
-        note.hasVoiceNotes ||
-        RegExp(r'!\[voice\]\(voice:[^)]+\)').hasMatch(note.content)) {
-      return const Icon(Icons.mic, size: 16, color: Colors.purple);
-    } else if (note.hasFiles) {
-      return const Icon(Icons.attach_file, size: 16, color: Colors.blue);
-    }
-
-    return const Icon(Icons.note, size: 16, color: AppColors.textOnLight);
-  }
-
   // Открытие заметки для просмотра
   void _openNoteDetail(Note note) {
     Navigator.push(
@@ -897,38 +806,4 @@ class _ThemesScreenState extends State<ThemesScreen> {
       ),
     );
   }
-}
-
-// Клиппер для треугольной формы
-class TriangleClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(size.width / 2, 0);
-    path.lineTo(size.width, size.height);
-    path.lineTo(0, size.height);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(TriangleClipper oldClipper) => false;
-}
-
-// Клиппер для пятиугольной формы
-class PentagonClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(size.width / 2, 0);
-    path.lineTo(size.width, size.height * 0.4);
-    path.lineTo(size.width * 0.8, size.height);
-    path.lineTo(size.width * 0.2, size.height);
-    path.lineTo(0, size.height * 0.4);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(PentagonClipper oldClipper) => false;
 }

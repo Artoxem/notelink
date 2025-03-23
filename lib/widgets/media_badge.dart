@@ -112,7 +112,7 @@ class MediaBadge extends StatelessWidget {
   }
 }
 
-// Виджет для отображения группы бейджей
+// Виджет для отображения группы бейджей с оптимизированными размерами для темы
 class MediaBadgeGroup extends StatelessWidget {
   final int imagesCount;
   final int audioCount;
@@ -121,8 +121,9 @@ class MediaBadgeGroup extends StatelessWidget {
   final double badgeSize;
   final double spacing;
   final bool showEmptyBadges;
-  final bool showCounters; // Новый параметр для отображения счетчиков
-  final bool showOnlyUnique; // Новый параметр для отображения только уникальных типов медиа
+  final bool showCounters; // Параметр для отображения счетчиков
+  final bool
+      showOnlyUnique; // Параметр для отображения только уникальных типов медиа
   final Function(MediaBadgeType type)? onBadgeTap;
 
   const MediaBadgeGroup({
@@ -134,8 +135,8 @@ class MediaBadgeGroup extends StatelessWidget {
     this.badgeSize = 24.0,
     this.spacing = 4.0,
     this.showEmptyBadges = false,
-    this.showCounters = true, // По умолчанию показываем счетчики
-    this.showOnlyUnique = false, // По умолчанию показываем все значки
+    this.showCounters = false,
+    this.showOnlyUnique = false,
     this.onBadgeTap,
   }) : super(key: key);
 
@@ -149,14 +150,14 @@ class MediaBadgeGroup extends StatelessWidget {
     final bool hasImages = imagesCount > 0;
     final bool hasFiles = filesCount > 0;
 
-    // Аудио и голосовые заметки
+    // Аудио и голосовые заметки - объединяем для компактности
     if ((hasVoice || hasAudio) || showEmptyBadges) {
       badges.add(
         MediaBadge(
           type: MediaBadgeType.voice,
           count: voiceCount + audioCount,
           size: badgeSize,
-          showCount: showCounters, // Используем параметр showCounters
+          showCount: showCounters,
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.voice)
               : null,
@@ -164,14 +165,14 @@ class MediaBadgeGroup extends StatelessWidget {
       );
     }
 
-    // Для изображений с счетчиком
+    // Для изображений
     if (hasImages || showEmptyBadges) {
       badges.add(
         MediaBadge(
           type: MediaBadgeType.image,
           count: imagesCount,
           size: badgeSize,
-          showCount: showCounters, // Используем параметр showCounters
+          showCount: showCounters,
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.image)
               : null,
@@ -179,14 +180,14 @@ class MediaBadgeGroup extends StatelessWidget {
       );
     }
 
-    // Для файлов с счетчиком
+    // Для файлов
     if (hasFiles || showEmptyBadges) {
       badges.add(
         MediaBadge(
           type: MediaBadgeType.file,
           count: filesCount,
           size: badgeSize,
-          showCount: showCounters, // Используем параметр showCounters
+          showCount: showCounters,
           onTap: onBadgeTap != null
               ? () => onBadgeTap!(MediaBadgeType.file)
               : null,
@@ -194,7 +195,7 @@ class MediaBadgeGroup extends StatelessWidget {
       );
     }
 
-    // Отображаем бейджи в ряд с заданным отступом
+    // Оптимизированная компактная структура с малыми отступами
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: badges.isEmpty

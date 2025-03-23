@@ -430,139 +430,146 @@ class _NoteListWidgetState extends State<NoteListWidget>
     // Определяем направления свайпа
     final DismissDirection dismissDirection = _getDismissDirection();
 
-    // Создаём свайпабельный элемент
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Dismissible(
-        key: Key('note_${note.id}'),
-        direction: dismissDirection,
+    // ВАЖНОЕ ИЗМЕНЕНИЕ: Убираем все ClipRRect из структуры виджетов
+    // И используем отрицательное смещение для значка избранного
 
-        // Фон для свайпа вправо (избранное)
-        background: Container(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.only(left: 20.0),
-          color: Colors.transparent,
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.fabBackground.withOpacity(0.8),
-                  AppColors.fabBackground.withOpacity(0.6)
-                ],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
-              borderRadius: BorderRadius.horizontal(left: Radius.circular(22)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: const [
-                Icon(
-                  Icons.star,
-                  color: Colors.orange,
-                  size: 22,
-                ),
+    return Dismissible(
+      key: Key('note_${note.id}'),
+      direction: dismissDirection,
+
+      // Фон для свайпа вправо (избранное)
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20.0),
+        color: Colors.transparent,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.accentSecondary.withOpacity(0.8),
+                AppColors.accentSecondary.withOpacity(0.6)
               ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
             ),
+            borderRadius:
+                const BorderRadius.horizontal(left: Radius.circular(22)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.star,
+                color: Colors.orange,
+                size: 22,
+              ),
+            ],
           ),
         ),
+      ),
 
-        // Фон для свайпа влево (удаление)
-        secondaryBackground: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20.0),
-          color: Colors.transparent,
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.fabBackground.withOpacity(0.6),
-                  AppColors.fabBackground.withOpacity(0.8),
-                ],
-                begin: Alignment.centerRight,
-                end: Alignment.centerLeft,
-              ),
-              borderRadius: BorderRadius.horizontal(right: Radius.circular(22)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: const [
-                Spacer(),
-                Icon(
-                  Icons.delete,
-                  color: Colors.red,
-                  size: 22,
-                ),
+      // Фон для свайпа влево (удаление)
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.transparent,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.accentSecondary.withOpacity(0.6),
+                AppColors.accentSecondary.withOpacity(0.8),
               ],
+              begin: Alignment.centerRight,
+              end: Alignment.centerLeft,
             ),
+            borderRadius:
+                const BorderRadius.horizontal(right: Radius.circular(22)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Spacer(),
+              Icon(
+                Icons.delete,
+                color: Colors.red,
+                size: 22,
+              ),
+            ],
           ),
         ),
+      ),
 
-        // Подтверждение действия при свайпе с улучшенной обработкой ошибок
-        confirmDismiss: (direction) async {
-          if (!mounted) return false;
+      confirmDismiss: (direction) async {
+        if (!mounted) return false;
 
-          try {
-            if (direction == DismissDirection.endToStart) {
-              // Свайп влево - удаление или отвязка от темы
-              if (widget.isInThemeView && widget.themeId != null) {
-                // Отвязка от темы, если мы находимся внутри темы
-                final result = await _showUnlinkConfirmationDialog(note);
-                if (result && widget.onNoteUnlinked != null) {
-                  widget.onNoteUnlinked!(note);
-                }
-                return result;
-              } else {
-                // Удаление заметки в других случаях
-                final result = await _showDeleteConfirmationDialog(note);
-                if (result) {
-                  // Находим индекс заметки в локальном списке
-                  final index = _localNotes.indexWhere((n) => n.id == note.id);
-                  if (index != -1) {
-                    // Локально удаляем заметку с анимацией
-                    _removeNoteLocally(index);
+        try {
+          if (direction == DismissDirection.endToStart) {
+            // Свайп влево - удаление или отвязка от темы
+            if (widget.isInThemeView && widget.themeId != null) {
+              // Отвязка от темы, если мы находимся внутри темы
+              final result = await _showUnlinkConfirmationDialog(note);
+              if (result && widget.onNoteUnlinked != null) {
+                widget.onNoteUnlinked!(note);
+              }
+              return result;
+            } else {
+              // Удаление заметки в других случаях
+              final result = await _showDeleteConfirmationDialog(note);
+              if (result) {
+                // Находим индекс заметки в локальном списке
+                final index = _localNotes.indexWhere((n) => n.id == note.id);
+                if (index != -1) {
+                  // Локально удаляем заметку с анимацией
+                  _removeNoteLocally(index);
 
-                    // Вызываем обработчик удаления из родительского виджета
-                    if (widget.onNoteDeleted != null) {
-                      widget.onNoteDeleted!(note);
-                    }
+                  // Вызываем обработчик удаления из родительского виджета
+                  if (widget.onNoteDeleted != null) {
+                    widget.onNoteDeleted!(note);
                   }
                 }
-                return false; // Не позволяем Dismissible обрабатывать удаление
               }
-            } else if (direction == DismissDirection.startToEnd) {
-              // Свайп вправо - добавление/удаление из избранного
-              _toggleFavoriteLocally(note);
-              return false; // Не убираем карточку
+              return false; // Не позволяем Dismissible обрабатывать удаление
             }
-            return false;
-          } catch (e) {
-            // Обработка ошибок при взаимодействии
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Произошла ошибка: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-            return false;
+          } else if (direction == DismissDirection.startToEnd) {
+            // Свайп вправо - добавление/удаление из избранного
+            _toggleFavoriteLocally(note);
+            return false; // Не убираем карточку
           }
-        },
+          return false;
+        } catch (e) {
+          // Обработка ошибок при взаимодействии
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Произошла ошибка: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return false;
+        }
+      },
 
-        // Действие после успешного свайпа - не используем, так как обрабатываем в confirmDismiss
-        onDismissed: (direction) {},
+      onDismissed: (direction) {},
 
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      // Cтруктура виджетов карточки
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        child: Material(
+          // Используем Material без ClipRRect для предотвращения обрезания
+          color: Colors.transparent,
           child: Stack(
+            clipBehavior:
+                Clip.none, // Отключаем обрезание в Stack
             children: [
+              // Основная карточка без ClipRRect
               Card(
                 margin: EdgeInsets.zero,
                 elevation: 3,
@@ -747,20 +754,20 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 ),
               ),
 
-              // Индикатор избранного
+              // Индикатор избранного с отрицательным смещением
               if (note.isFavorite)
                 Positioned(
-                  top: 0,
-                  left: 0,
+                  top: -4, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение вверх
+                  left: -4, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение влево
                   child: Material(
                     color: Colors.amber,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(AppDimens.cardBorderRadius),
-                      bottomRight:
-                          Radius.circular(AppDimens.cardBorderRadius - 3),
+                      bottomRight: Radius.circular(
+                          8), // Фиксированное значение для углового скругления
                     ),
                     child: const Padding(
-                      padding: EdgeInsets.all(4.0),
+                      padding: EdgeInsets.all(3.0),
                       child: Icon(
                         Icons.star,
                         color: Colors.white,
