@@ -553,7 +553,9 @@ class _ThemesScreenState extends State<ThemesScreen> {
                         Icon(
                           Icons.timer,
                           size: 13, // 60% от обычного размера иконок (20-22px)
-                          color: Colors.orange,
+                          color: note.isCompleted
+                              ? Color(0xFF008000)
+                              : Colors.orange,
                         ),
 
                       // Добавляем небольшой отступ между иконками

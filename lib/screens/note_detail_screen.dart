@@ -141,7 +141,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         _modeTransitionController.value = 1.0; // Анимация в конечном состоянии
       }
     } else {
-      // ...остальной код без изменений
+      // Создание новой заметки
+      _contentController.text = '';
+      _hasDeadline = false;
+      _deadlineDate = null;
+      _hasDateLink = true;
+      _linkedDate = widget.initialDate ?? DateTime.now();
+      _selectedThemeIds = widget.initialThemeIds != null
+          ? List.from(widget.initialThemeIds!)
+          : [];
+      _emoji = null;
+      _mediaFiles = [];
+      _isTaskCompleted = false;
+      _isEditing = false;
+      _isEditMode =
+          true; // Для новой заметки сразу включаем режим редактирования
+
+      // Для новой заметки сразу устанавливаем анимацию редактирования
+      _modeTransitionController.value = 1.0;
     }
 
     // Слушаем изменения табов для переключения между режимами
@@ -525,6 +542,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                   const Spacer(), // Пустое пространство, если тем нет
 
                 // Кнопка "Выполнено" для незавершенных задач
+                if (_selectedThemeIds.isNotEmpty)
+                  Expanded(child: _buildThemeTags())
+                else
+                  const Spacer(), // Пустое пространство, если тем нет
+
+// Изменение для кнопки "Выполнено"
                 if (_hasDeadline && _deadlineDate != null)
                   _isTaskCompleted
                       ? Container(
@@ -532,7 +555,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                               horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: AppColors.completed,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(
+                                12), // Изменить значение скругления
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
