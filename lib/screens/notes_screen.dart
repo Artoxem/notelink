@@ -483,11 +483,11 @@ class _NotesScreenState extends State<NotesScreen>
     final Animation<double> animation =
         _itemAnimations[note.id] ?? const AlwaysStoppedAnimation(1.0);
 
-    // Получаем отформатированный текст превью
-    final String previewText = _createPreviewFromMarkdown(note.content, 150);
-
     // Получаем статистику медиа
     final mediaCounts = _getMediaCounts(note);
+
+    // Очищаем контент только от меток голосовых заметок, сохраняя другое форматирование
+    String cleanContent = note.content.replaceAll(_voiceRegex, '');
 
     return AnimatedBuilder(
       animation: animation,
@@ -530,6 +530,7 @@ class _NotesScreenState extends State<NotesScreen>
                         ),
                       ),
                     ),
+
                     // Основное содержимое
                     Expanded(
                       child: Padding(
@@ -540,9 +541,8 @@ class _NotesScreenState extends State<NotesScreen>
                             // Верхняя часть с датой, дедлайном и меню
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Компактная таблица дат
+                                // Колонка с датой и дедлайном
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
@@ -600,24 +600,18 @@ class _NotesScreenState extends State<NotesScreen>
                                 ),
 
                                 // Кнопка меню
-                                AnimatedContainer(
-                                  duration: AppAnimations.feedbackDuration,
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
+                                const Spacer(),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
                                     borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(15),
-                                      onTap: () => _showNoteOptions(note),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(4.0),
-                                        child: Icon(
-                                          Icons.more_vert,
-                                          size: 18,
-                                          color: AppColors.textOnLight,
-                                        ),
+                                    onTap: () => _showNoteOptions(note),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4.0),
+                                      child: Icon(
+                                        Icons.more_vert,
+                                        size: 18,
+                                        color: AppColors.textOnLight,
                                       ),
                                     ),
                                   ),
@@ -627,23 +621,59 @@ class _NotesScreenState extends State<NotesScreen>
 
                             const SizedBox(height: 8),
 
-                            // Заголовок заметки с увеличенным размером шрифта
-                            Text(
-                              _getFirstLine(note.content),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textOnLight,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            // Содержимое заметки с обработкой голосовых заметок
+                            // Содержимое заметки с поддержкой markdown
                             Expanded(
-                              child: _buildNoteContentPreview(note),
+                              child: ShaderMask(
+                                shaderCallback: (Rect bounds) {
+                                  return LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.black, Colors.transparent],
+                                    stops: const [0.7, 1.0],
+                                  ).createShader(bounds);
+                                },
+                                blendMode: BlendMode.dstIn,
+                                child: ClipRect(
+                                  child: MarkdownBody(
+                                    data: cleanContent.trim(),
+                                    selectable: false,
+                                    shrinkWrap: true,
+                                    softLineBreak: true,
+                                    styleSheet: MarkdownStyleSheet(
+                                      p: AppTextStyles.bodyMediumLight
+                                          .copyWith(fontSize: 13),
+                                      h1: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textOnLight,
+                                      ),
+                                      h2: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textOnLight,
+                                      ),
+                                      h3: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textOnLight,
+                                      ),
+                                      em: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                        color: AppColors.textOnLight,
+                                      ),
+                                      strong: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textOnLight,
+                                      ),
+                                      listBullet: AppTextStyles.bodyMediumLight
+                                          .copyWith(
+                                        fontSize: 13,
+                                        color: AppColors.textOnLight,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
 
                             // Бейджи медиа внизу карточки (если есть)

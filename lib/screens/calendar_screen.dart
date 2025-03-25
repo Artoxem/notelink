@@ -852,9 +852,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     return Container(
       margin: EdgeInsets.symmetric(
           horizontal: horizontalPadding, vertical: isSmallScreen ? 1.0 : 2.0),
-      constraints: BoxConstraints(
-          minHeight: isSmallScreen ? 35.0 : 40.0,
-          maxHeight: isSmallScreen ? 40.0 : 50.0),
+      height: isSmallScreen ? 35.0 : 40.0, // Фиксированная высота
       child: Row(
         children: [
           // Все заметки месяца - стильная карточка с адаптивными размерами

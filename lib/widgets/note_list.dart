@@ -272,7 +272,17 @@ class _NoteListWidgetState extends State<NoteListWidget>
     cleanContent = cleanContent.replaceAll(RegExp(r'\s+'), ' ').trim();
 
     final firstLineEnd = cleanContent.indexOf('\n');
-    if (firstLineEnd == -1) return '';
+
+    // Изменение здесь: если нет символа новой строки, возвращаем сам контент
+    // чтобы превью всегда содержало текст
+    if (firstLineEnd == -1) {
+      // Если содержимое достаточно длинное, возвращаем его часть
+      if (cleanContent.length > 30) {
+        return _cleanMarkdown(cleanContent);
+      }
+      // Если слишком короткое, возвращаем пустую строку
+      return '';
+    }
 
     // Берем только контент после первой строки
     String restContent = cleanContent.substring(firstLineEnd + 1).trim();
@@ -814,20 +824,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
                                 const SizedBox(height: 6),
 
-                                // Заголовок заметки (первая строка)
-                                Text(
-                                  // Используем кэшированную первую строку
-                                  _firstLineCache[note.id] ??
-                                      _processFirstLine(note.content),
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textOnLight,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-
                                 // Добавляем проверку на наличие контента
                                 if ((_contentPreviewCache[note.id] ?? '')
                                     .isNotEmpty) ...[
@@ -920,7 +916,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
     );
   }
 
-// Метод для отображения превью контента с эффектом затухания
+  // Метод для отображения превью контента с эффектом затухания
   Widget _buildNoteContentPreview(Note note) {
     // Получаем текст для превью из кэша
     final String previewText =
