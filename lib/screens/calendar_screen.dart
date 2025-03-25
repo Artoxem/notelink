@@ -90,12 +90,38 @@ class _CalendarScreenState extends State<CalendarScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+
+    // Добавляем слушателя для обновления данных при изменении NotesProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+      notesProvider.addListener(_onNotesChanged);
+    });
   }
 
   @override
   void dispose() {
+    // Отписываемся от слушателя NotesProvider
+    try {
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+      notesProvider.removeListener(_onNotesChanged);
+    } catch (e) {
+      // Игнорируем ошибки при закрытии экрана
+    }
+
     _pageChangeController.dispose();
     super.dispose();
+  }
+
+  // Обработчик изменений в NotesProvider
+  void _onNotesChanged() {
+    if (mounted) {
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+      setState(() {
+        _processEvents(notesProvider.notes);
+        _selectedEvents = _getEventsForDay(_selectedDay);
+      });
+    }
   }
 
   Future<void> _loadData() async {
@@ -111,15 +137,13 @@ class _CalendarScreenState extends State<CalendarScreen>
       final themesProvider =
           Provider.of<ThemesProvider>(context, listen: false);
 
-      await Future.wait([
-        notesProvider.loadNotes(force: true),
-        themesProvider.loadThemes(),
-      ]);
+      // Принудительно загружаем данные из базы данных
+      await notesProvider.loadNotes(force: true);
+      await themesProvider.loadThemes();
 
       if (!mounted) return;
 
       setState(() {
-        // Обновляем события и выбранные события
         _processEvents(notesProvider.notes);
         _selectedEvents = _getEventsForDay(_selectedDay);
         _isLoading = false;
@@ -146,8 +170,6 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   void _processEvents(List<Note> notes) {
-    if (!mounted) return;
-
     final Map<DateTime, List<Note>> events = {};
 
     for (final note in notes) {
@@ -198,18 +220,28 @@ class _CalendarScreenState extends State<CalendarScreen>
       dateNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     });
 
-    setState(() {
-      _events = events;
-      _selectedEvents = _getEventsForDay(_selectedDay);
-    });
+    _events = events;
+    _selectedEvents = _getEventsForDay(_selectedDay);
   }
 
+  // Вынесем метод получения событий для дня в отдельную функцию с обработкой ошибок
   List<Note> _getEventsForDay(DateTime day) {
-    // Нормализуем дату (без времени) для корректного сравнения
-    final normalizedDay = DateTime(day.year, day.month, day.day);
+    try {
+      // Нормализуем дату (без времени) для корректного сравнения
+      final normalizedDay = DateTime(day.year, day.month, day.day);
 
-    // Безопасно возвращаем события или пустой список, если их нет
-    return _events[normalizedDay] ?? [];
+      // Безопасно возвращаем события или пустой список, если их нет
+      final events = _events[normalizedDay];
+      if (events == null) {
+        return [];
+      }
+
+      // Возвращаем копию списка для предотвращения случайных модификаций
+      return List<Note>.from(events);
+    } catch (e) {
+      print('Ошибка при получении событий для дня: $e');
+      return []; // Возвращаем пустой список в случае ошибки
+    }
   }
 
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
@@ -386,12 +418,20 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Получаем размер экрана
-    final screenHeight = MediaQuery.of(context).size.height;
-    // Рассчитываем высоту календаря в зависимости от состояния
-    final calendarHeight = _isCalendarExpanded ? screenHeight * 0.45 : 0.0;
-    // Рассчитываем высоту статистики
-    final statsHeight = _isCalendarExpanded ? 50.0 : 0.0;
+    // Получаем информацию о размере экрана
+    final mediaQuery = MediaQuery.of(context);
+    final screenHeight = mediaQuery.size.height;
+    final screenWidth = mediaQuery.size.width;
+    final isSmallScreen = screenHeight < 600;
+
+    // Адаптивно рассчитываем высоту компонентов
+    final calendarHeight = _isCalendarExpanded
+        ? screenHeight * (isSmallScreen ? 0.35 : 0.45)
+        : 0.0;
+
+    // Расчет высоты статистики - адаптивный
+    final statsHeight =
+        _isCalendarExpanded ? (isSmallScreen ? 40.0 : 50.0) : 0.0;
 
     return Scaffold(
       body: Column(
@@ -406,10 +446,13 @@ class _CalendarScreenState extends State<CalendarScreen>
                     children: [
                       // Заголовок месяца
                       _buildMonthHeader(),
-                      // Календарь
+                      // Календарь с автоматическим обновлением
                       Expanded(
                         child: Consumer<NotesProvider>(
                           builder: (context, notesProvider, _) {
+                            // Обновляем события при изменении данных в провайдере
+                            _processEvents(notesProvider.notes);
+                            _selectedEvents = _getEventsForDay(_selectedDay);
                             return _buildGridCalendar(notesProvider);
                           },
                         ),
@@ -419,12 +462,12 @@ class _CalendarScreenState extends State<CalendarScreen>
                 : const SizedBox.shrink(),
           ),
 
-          // Счетчики месяца - с анимированной высотой
+          // Счетчики месяца - с адаптивной высотой
           AnimatedContainer(
             duration: AppAnimations.mediumDuration,
             height: statsHeight,
             child: _isCalendarExpanded
-                ? _buildMonthStats()
+                ? _buildMonthStats(isSmallScreen)
                 : const SizedBox.shrink(),
           ),
 
@@ -433,25 +476,30 @@ class _CalendarScreenState extends State<CalendarScreen>
 
           // Заголовок с заметками для выбранного дня
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.04,
+                vertical: isSmallScreen ? 4.0 : 6.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                      fontSize: isSmallScreen ? 14 : 16,
+                      fontWeight: FontWeight.w500),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 6 : 8,
+                      vertical: isSmallScreen ? 1 : 2),
                   decoration: BoxDecoration(
                     color: AppColors.accentSecondary.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '${_selectedEvents.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 12 : 14,
                       color: AppColors.accentSecondary,
                       fontWeight: FontWeight.bold,
                     ),
@@ -461,45 +509,36 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
           ),
 
-          // Список заметок - занимает всё оставшееся пространство
+          // Список заметок с автоматическим обновлением
           Expanded(
             child: Consumer<NotesProvider>(
               builder: (context, notesProvider, _) {
-                // Проверяем, не изменились ли заметки
-                // и обновляем список выбранных заметок
+                // Обновляем выбранные события при изменении данных в провайдере
                 _selectedEvents = _getEventsForDay(_selectedDay);
 
-                // Показываем пустое состояние, если заметок нет
-                if (_selectedEvents.isEmpty) {
-                  return _buildEmptyDateView();
-                }
+                return _selectedEvents.isEmpty
+                    ? _buildEmptyDateView()
+                    : NoteListWidget(
+                        key: PageStorageKey<String>(
+                            'notes_for_${_selectedDay.toString()}'),
+                        notes: _selectedEvents,
+                        emptyMessage: 'Нет заметок на выбранный день',
+                        showThemeBadges: true,
+                        useCachedAnimation: false,
+                        swipeDirection: SwipeDirection.both,
+                        onNoteTap: _viewNoteDetails,
+                        onNoteDeleted: (note) async {
+                          await notesProvider.deleteNote(note.id);
 
-                // Иначе показываем список заметок
-                return NoteListWidget(
-                  key: PageStorageKey<String>(
-                      'notes_for_${_selectedDay.toString()}'),
-                  notes: _selectedEvents,
-                  emptyMessage: 'Нет заметок на выбранный день',
-                  showThemeBadges: true,
-                  useCachedAnimation: false,
-                  swipeDirection: SwipeDirection.both,
-                  onNoteTap: _viewNoteDetails,
-                  onNoteDeleted: (note) async {
-                    // Удаляем заметку
-                    await notesProvider.deleteNote(note.id);
-
-                    // После удаления обновляем данные
-                    if (mounted) {
-                      // Перезагружаем все заметки
-                      await _loadData();
-
-                      // Обновляем UI с новым списком выбранных заметок
-                      setState(() {
-                        _selectedEvents = _getEventsForDay(_selectedDay);
-                      });
-                    }
-                  },
-                );
+                          if (mounted) {
+                            // Обновляем интерфейс после удаления
+                            setState(() {
+                              _processEvents(notesProvider.notes);
+                              _selectedEvents = _getEventsForDay(_selectedDay);
+                            });
+                          }
+                        },
+                      );
               },
             ),
           ),
@@ -779,10 +818,15 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
-  // счетчики под календарем
-  Widget _buildMonthStats() {
+  // счетчики под календарем с адаптивными размерами
+  Widget _buildMonthStats(bool isSmallScreen) {
     final notesProvider = Provider.of<NotesProvider>(context);
     final notes = notesProvider.notes;
+
+    // Получаем размер экрана для адаптивных расчетов
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth * 0.04; // 4% от ширины экрана
+    final itemSpacing = screenWidth * 0.015; // 1.5% от ширины экрана
 
     // Фильтруем заметки по текущему месяцу
     final currentMonthNotes = notes.where((note) {
@@ -798,22 +842,32 @@ class _CalendarScreenState extends State<CalendarScreen>
     final unthemedNotes =
         currentMonthNotes.where((note) => note.themeIds.isEmpty).toList();
 
+    // Адаптивные размеры для иконок и текста
+    final iconSize = isSmallScreen ? 16.0 : 20.0;
+    final primaryFontSize = isSmallScreen ? 12.0 : 14.0;
+    final secondaryFontSize = isSmallScreen ? 9.0 : 10.0;
+    final verticalPadding = isSmallScreen ? 4.0 : 6.0;
+    final horizontalPadding2 = isSmallScreen ? 4.0 : 6.0;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      height: 48, // Явно задаем высоту контейнера
+      margin: EdgeInsets.symmetric(
+          horizontal: horizontalPadding, vertical: isSmallScreen ? 1.0 : 2.0),
+      constraints: BoxConstraints(
+          minHeight: isSmallScreen ? 35.0 : 40.0,
+          maxHeight: isSmallScreen ? 40.0 : 50.0),
       child: Row(
         children: [
-          // Все заметки месяца - стильная карточка
+          // Все заметки месяца - стильная карточка с адаптивными размерами
           Expanded(
             child: Card(
               margin: EdgeInsets.zero, // Убираем отступ карточки
               elevation: 2, // Уменьшена тень
               shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(12), // Уменьшен радиус скругления
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                padding: EdgeInsets.symmetric(
+                    vertical: verticalPadding, horizontal: horizontalPadding2),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -823,14 +877,13 @@ class _CalendarScreenState extends State<CalendarScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius:
-                      BorderRadius.circular(12), // Уменьшен радиус скругления
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 20, // Уменьшено с 26 до 20
-                      height: 20, // Уменьшено с 26 до 20
+                      width: iconSize,
+                      height: iconSize,
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
@@ -838,10 +891,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                       child: Icon(
                         Icons.note_alt,
                         color: Colors.white,
-                        size: 12, // Уменьшено с 14 до 12
+                        size: iconSize * 0.6,
                       ),
                     ),
-                    SizedBox(width: 6), // Уменьшено с 8 до 6
+                    SizedBox(width: itemSpacing),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -850,7 +903,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           currentMonthNotes.length.toString(),
                           style: TextStyle(
-                            fontSize: 14, // Уменьшено с 16 до 14
+                            fontSize: primaryFontSize,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -858,7 +911,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           'в этом месяце',
                           style: TextStyle(
-                            fontSize: 10, // Уменьшено с 12 до 10
+                            fontSize: secondaryFontSize,
                             color: Colors.white.withOpacity(0.9),
                           ),
                         ),
@@ -870,9 +923,9 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
           ),
 
-          SizedBox(width: 6), // Уменьшено с 8 до 6
+          SizedBox(width: itemSpacing),
 
-          // Заметки без темы - новая стильная карточка
+          // Заметки без темы - адаптивная карточка
           Expanded(
             child: InkWell(
               onTap: () {
@@ -891,15 +944,15 @@ class _CalendarScreenState extends State<CalendarScreen>
               },
               borderRadius: BorderRadius.circular(12),
               child: Card(
-                margin: EdgeInsets.zero, // Убираем отступ карточки
-                elevation: 2, // Уменьшена тень
+                margin: EdgeInsets.zero,
+                elevation: 2,
                 shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(12), // Уменьшен радиус скругления
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                  padding: EdgeInsets.symmetric(
+                      vertical: verticalPadding,
+                      horizontal: horizontalPadding2),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -909,14 +962,13 @@ class _CalendarScreenState extends State<CalendarScreen>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius:
-                        BorderRadius.circular(12), // Уменьшен радиус скругления
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 20, // Уменьшено с 26 до 20
-                        height: 20, // Уменьшено с 26 до 20
+                        width: iconSize,
+                        height: iconSize,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
@@ -924,10 +976,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                         child: Icon(
                           Icons.layers_clear,
                           color: Colors.white,
-                          size: 12, // Уменьшено с 14 до 12
+                          size: iconSize * 0.6,
                         ),
                       ),
-                      SizedBox(width: 6), // Уменьшено с 8 до 6
+                      SizedBox(width: itemSpacing),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -936,7 +988,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             unthemedNotes.length.toString(),
                             style: TextStyle(
-                              fontSize: 14, // Уменьшено с 16 до 14
+                              fontSize: primaryFontSize,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
@@ -944,7 +996,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             'Без темы',
                             style: TextStyle(
-                              fontSize: 10, // Уменьшено с 12 до 10
+                              fontSize: secondaryFontSize,
                               color: Colors.white.withOpacity(0.9),
                             ),
                           ),
@@ -957,9 +1009,9 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
           ),
 
-          SizedBox(width: 6), // Уменьшено с 8 до 6
+          SizedBox(width: itemSpacing),
 
-          // Задачи с дедлайном - стильная карточка
+          // Задачи с дедлайном - адаптивная карточка
           Expanded(
             child: InkWell(
               onTap: () {
@@ -978,15 +1030,15 @@ class _CalendarScreenState extends State<CalendarScreen>
               },
               borderRadius: BorderRadius.circular(12),
               child: Card(
-                margin: EdgeInsets.zero, // Убираем отступ карточки
-                elevation: 2, // Уменьшена тень
+                margin: EdgeInsets.zero,
+                elevation: 2,
                 shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(12), // Уменьшен радиус скругления
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                  padding: EdgeInsets.symmetric(
+                      vertical: verticalPadding,
+                      horizontal: horizontalPadding2),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1001,8 +1053,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                   child: Row(
                     children: [
                       Container(
-                        width: 20,
-                        height: 20,
+                        width: iconSize,
+                        height: iconSize,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
@@ -1010,10 +1062,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                         child: Icon(
                           Icons.timer,
                           color: Colors.white,
-                          size: 12,
+                          size: iconSize * 0.6,
                         ),
                       ),
-                      SizedBox(width: 6),
+                      SizedBox(width: itemSpacing),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -1022,7 +1074,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             tasksNotes.length.toString(),
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: primaryFontSize,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
@@ -1030,7 +1082,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             'Дедлайны',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: secondaryFontSize,
                               color: Colors.white.withOpacity(0.9),
                             ),
                           ),
@@ -1112,6 +1164,7 @@ class _CalendarScreenState extends State<CalendarScreen>
         builder: (context) => NoteDetailScreen(note: note),
       ),
     ).then((_) {
+      // После возврата принудительно обновляем данные
       _loadData();
     });
   }
@@ -1154,10 +1207,20 @@ class _CalendarScreenState extends State<CalendarScreen>
         },
         transitionDuration: AppAnimations.mediumDuration,
       ),
-    ).then((_) {
-      // После возврата с экрана добавления заметки, обновляем события
+    ).then((_) async {
+      // После возврата с экрана создания заметки, обновляем данные
       if (mounted) {
-        _loadData();
+        // Сначала перезагружаем данные
+        await _loadData();
+
+        // Затем обновляем UI и список выбранных заметок
+        setState(() {
+          // Обновляем список выбранных заметок для текущей даты
+          final notesProvider =
+              Provider.of<NotesProvider>(context, listen: false);
+          _processEvents(notesProvider.notes);
+          _selectedEvents = _getEventsForDay(_selectedDay);
+        });
       }
     });
   }

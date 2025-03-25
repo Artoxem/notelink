@@ -319,7 +319,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
       return const SizedBox.shrink();
     }
 
-    // Показываем только текст без индикаторов голосовых заметок
+    // Показываем текст с эффектом затухания (используем ShaderMask)
     return ShaderMask(
       shaderCallback: (Rect bounds) {
         return LinearGradient(
@@ -336,7 +336,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
           fontSize: 14,
           color: AppColors.textOnLight,
         ),
-        maxLines: 3,
+        maxLines: 2, // Увеличиваем до двух строк
       ),
     );
   }
@@ -543,7 +543,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // ИСПРАВЛЕНО: Показываем значок в зависимости от типа действия
+              // Показываем значок в зависимости от типа действия
               Icon(
                 note.hasDeadline
                     ? (note.isCompleted
@@ -630,7 +630,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
               return false; // Не позволяем Dismissible обрабатывать удаление
             }
           } else if (direction == DismissDirection.startToEnd) {
-            // ИСПРАВЛЕНО: Свайп вправо - обработка в зависимости от типа заметки
+            // Свайп вправо - обработка в зависимости от типа заметки
             if (note.hasDeadline &&
                 widget.availableActions.contains(NoteListAction.complete)) {
               // Для задач с дедлайном - переключение статуса выполнения
