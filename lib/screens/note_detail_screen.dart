@@ -531,7 +531,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
           // Теги/темы, если есть - компактно в одну строку, а также кнопка "Выполнено"
           Padding(
-            padding: const EdgeInsets.only(top: 8.0), // Уменьшен с 16.0 до 8.0
+            padding: const EdgeInsets.only(top: 8.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -539,15 +539,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                 if (_selectedThemeIds.isNotEmpty)
                   Expanded(child: _buildThemeTags())
                 else
-                  const Spacer(), // Пустое пространство, если тем нет
+                  const Spacer(),
+
+                const Spacer(),
 
                 // Кнопка "Выполнено" для незавершенных задач
-                if (_selectedThemeIds.isNotEmpty)
-                  Expanded(child: _buildThemeTags())
-                else
-                  const Spacer(), // Пустое пространство, если тем нет
-
-// Изменение для кнопки "Выполнено"
                 if (_hasDeadline && _deadlineDate != null)
                   _isTaskCompleted
                       ? Container(
@@ -555,8 +551,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                               horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: AppColors.completed,
-                            borderRadius: BorderRadius.circular(
-                                12), // Изменить значение скругления
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -603,6 +598,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           // Содержимое заметки с поддержкой Markdown и голосовых сообщений
           if (enableMarkdown)
             Container(
+              width: double
+                  .infinity, // Добавляем это свойство для растягивания на всю ширину
               padding: const EdgeInsets.all(12.0), // Уменьшено с 16.0 до 12.0
               decoration: BoxDecoration(
                 color: AppColors.textBackground,
@@ -612,17 +609,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               child: _buildMarkdownWithVoiceNotes(_contentController.text),
             )
           else
-            Text(
-              _contentController.text,
-              style: AppTextStyles.bodyMediumLight,
-            ),
-
-          // Отображение медиафайлов в режиме просмотра
-          if (_mediaFiles.isNotEmpty)
-            Padding(
-              padding:
-                  const EdgeInsets.only(top: 16.0), // Уменьшено с 24.0 до 16.0
-              child: _buildMediaSection(),
+            SizedBox(
+              width: double
+                  .infinity, // Добавляем SizedBox с full width для текстового варианта
+              child: Text(
+                _contentController.text,
+                style: AppTextStyles.bodyMediumLight,
+              ),
             ),
         ],
       ),
