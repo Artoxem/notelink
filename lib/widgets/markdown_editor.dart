@@ -49,6 +49,10 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   late AnimationController _focusModeController;
   late Animation<double> _focusModeAnimation;
 
+  // Регулярные выражения для определения типа списка
+  final RegExp _bulletListRegex = RegExp(r'^\s*[-*+]\s+');
+  final RegExp _numberedListRegex = RegExp(r'^\s*(\d+)\.\s+');
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +80,9 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
     // Слушаем фокус для определения режима фокусировки
     _focusNode.addListener(_handleFocusChange);
+
+    // Добавляем обработчик клавиш для поддержки автоматического продолжения списков
+    widget.controller.addListener(_handleTextChange);
   }
 
   @override
@@ -86,7 +93,225 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     _focusNode.removeListener(_handleFocusChange);
     _tabController.dispose();
     _focusModeController.dispose();
+
+    // Удаляем обработчик при удалении виджета
+    widget.controller.removeListener(_handleTextChange);
+
     super.dispose();
+  }
+
+  void _handleTextChange() {
+    // Наблюдаем за изменениями, но не делаем ничего дополнительного здесь
+    // Все обработки списков мы делаем по нажатию клавиш в методе _handleKeyEvent
+  }
+
+  // Функция для обработки нажатий клавиш в текстовом поле
+  bool _handleKeyEvent(RawKeyEvent event) {
+    // Обрабатываем только нажатия клавиши Enter и Backspace
+    if (event is RawKeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.enter) {
+        final TextEditingValue value = widget.controller.value;
+        final String text = value.text;
+        final int cursorPosition = value.selection.baseOffset;
+
+        // Если курсор не находится в правильной позиции, выходим
+        if (cursorPosition < 0 || cursorPosition > text.length) {
+          return false;
+        }
+
+        // Определяем текущую строку до курсора
+        final String textBeforeCursor = text.substring(0, cursorPosition);
+        final int lineStartOffset = textBeforeCursor.lastIndexOf('\n') + 1;
+        final String currentLine = textBeforeCursor.substring(lineStartOffset);
+
+        // Проверяем, находимся ли мы в нумерованном списке
+        final numberedMatch = _numberedListRegex.firstMatch(currentLine);
+        if (numberedMatch != null) {
+          // Получаем текущий номер и увеличиваем его
+          final int currentNumber = int.parse(numberedMatch.group(1)!);
+
+          // Если строка содержит только маркер списка без текста, удаляем маркер
+          if (currentLine.trim() == '$currentNumber. ') {
+            final newText =
+                text.replaceRange(lineStartOffset, cursorPosition, '');
+            widget.controller.value = TextEditingValue(
+              text: newText,
+              selection: TextSelection.collapsed(offset: lineStartOffset),
+            );
+            return true;
+          }
+
+          // Иначе создаем новый элемент списка
+          final nextNumber = currentNumber + 1;
+          final injectedText = '\n$nextNumber. ';
+
+          // Вставляем текст и перемещаем курсор после нового маркера
+          final String newText =
+              text.replaceRange(cursorPosition, cursorPosition, injectedText);
+          // Рассчитываем новое положение курсора после маркера
+          final int newCursorPosition = cursorPosition + injectedText.length;
+
+          widget.controller.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: newCursorPosition),
+          );
+
+          if (widget.onChanged != null) {
+            widget.onChanged!(newText);
+          }
+
+          return true;
+        }
+
+        // Проверяем, находимся ли мы в маркированном списке
+        final bulletMatch = _bulletListRegex.firstMatch(currentLine);
+        if (bulletMatch != null) {
+          // Получаем используемый маркер (-, *, +)
+          final String marker = currentLine.trim()[0];
+
+          // Если строка содержит только маркер списка без текста, удаляем маркер
+          if (currentLine.trim() == '$marker ') {
+            final newText =
+                text.replaceRange(lineStartOffset, cursorPosition, '');
+            widget.controller.value = TextEditingValue(
+              text: newText,
+              selection: TextSelection.collapsed(offset: lineStartOffset),
+            );
+            return true;
+          }
+
+          // Иначе создаем новый элемент списка
+          final injectedText = '\n$marker ';
+
+          // Вставляем текст и перемещаем курсор после нового маркера
+          final String newText =
+              text.replaceRange(cursorPosition, cursorPosition, injectedText);
+          // Рассчитываем новое положение курсора после маркера
+          final int newCursorPosition = cursorPosition + injectedText.length;
+
+          widget.controller.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: newCursorPosition),
+          );
+
+          if (widget.onChanged != null) {
+            widget.onChanged!(newText);
+          }
+
+          return true;
+        }
+      } else if (event.logicalKey == LogicalKeyboardKey.backspace) {
+        // Можно добавить логику для удаления маркера, если пользователь
+        // нажимает Backspace в начале пустого пункта списка
+        final TextEditingValue value = widget.controller.value;
+        final String text = value.text;
+        final int cursorPosition = value.selection.baseOffset;
+
+        // Если курсор не находится в правильной позиции или находится в начале текста, выходим
+        if (cursorPosition <= 0 || cursorPosition > text.length) {
+          return false;
+        }
+
+        // Определяем текущую строку до курсора
+        final String textBeforeCursor = text.substring(0, cursorPosition);
+        final int lineStartOffset = textBeforeCursor.lastIndexOf('\n') + 1;
+        final String currentLine = textBeforeCursor.substring(lineStartOffset);
+
+        // Проверяем, находимся ли мы в конце маркера списка (нумерованного или маркированного)
+        final bool isAtBulletEnd = _bulletListRegex.hasMatch(currentLine) &&
+            currentLine.trim().length == 2;
+        final bool isAtNumberedEnd = _numberedListRegex.hasMatch(currentLine);
+
+        if (isAtNumberedEnd) {
+          final match = _numberedListRegex.firstMatch(currentLine);
+          final String fullMatch = match!.group(0)!;
+          if (currentLine.length == fullMatch.length) {
+            // Если курсор находится сразу после маркера списка, удаляем всю строку
+            final newText =
+                text.replaceRange(lineStartOffset, cursorPosition, '');
+            widget.controller.value = TextEditingValue(
+              text: newText,
+              selection: TextSelection.collapsed(offset: lineStartOffset),
+            );
+            return true;
+          }
+        }
+
+        if (isAtBulletEnd) {
+          // Если курсор находится сразу после маркера списка, удаляем всю строку
+          final newText =
+              text.replaceRange(lineStartOffset, cursorPosition, '');
+          widget.controller.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: lineStartOffset),
+          );
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  // Функция для вставки текста в текущую позицию курсора
+  void _insertText(String textToInsert) {
+    final TextEditingValue value = widget.controller.value;
+    final int start = value.selection.baseOffset;
+
+    if (start < 0) return;
+
+    final String newText = value.text.replaceRange(start, start, textToInsert);
+
+    // Определяем позицию курсора для маркеров списков
+    int cursorPosition = start + textToInsert.length;
+
+    // Для списков перемещаем курсор сразу после маркера
+    if (_bulletListRegex.hasMatch(textToInsert.trim()) ||
+        _numberedListRegex.hasMatch(textToInsert.trim())) {
+      // Найдем позицию пробела после маркера списка
+      final match = textToInsert.indexOf(' ', textToInsert.indexOf('\n') + 1);
+      if (match > 0) {
+        cursorPosition = start + match + 1;
+      }
+    }
+
+    widget.controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: cursorPosition),
+    );
+
+    if (widget.onChanged != null) {
+      widget.onChanged!(newText);
+    }
+  }
+
+  void _handleFocusChange() {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+
+    // Активируем режим фокусировки только если фокус на редакторе и включена опция в настройках
+    if (_focusNode.hasFocus && appProvider.enableFocusMode && !_isPreviewMode) {
+      _setFocusMode(true);
+    } else {
+      _setFocusMode(false);
+    }
+  }
+
+  void _setFocusMode(bool enabled) {
+    if (_isFocusMode != enabled) {
+      setState(() {
+        _isFocusMode = enabled;
+      });
+
+      if (enabled) {
+        _focusModeController.forward();
+        // Запрашиваем фокус при активации режима
+        if (!_focusNode.hasFocus) {
+          _focusNode.requestFocus();
+        }
+      } else {
+        _focusModeController.reverse();
+      }
+    }
   }
 
   void _showImagePickerOptions(BuildContext context) {
@@ -164,35 +389,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     }
   }
 
-  void _handleFocusChange() {
-    final appProvider = Provider.of<AppProvider>(context, listen: false);
-
-    // Активируем режим фокусировки только если фокус на редакторе и включена опция в настройках
-    if (_focusNode.hasFocus && appProvider.enableFocusMode && !_isPreviewMode) {
-      _setFocusMode(true);
-    } else {
-      _setFocusMode(false);
-    }
-  }
-
-  void _setFocusMode(bool enabled) {
-    if (_isFocusMode != enabled) {
-      setState(() {
-        _isFocusMode = enabled;
-      });
-
-      if (enabled) {
-        _focusModeController.forward();
-        // Запрашиваем фокус при активации режима
-        if (!_focusNode.hasFocus) {
-          _focusNode.requestFocus();
-        }
-      } else {
-        _focusModeController.reverse();
-      }
-    }
-  }
-
   // Вставка голосовой заметки в текст
   void _insertVoiceNote(String audioPath) {
     final TextEditingValue value = widget.controller.value;
@@ -260,13 +456,14 @@ class _MarkdownEditorState extends State<MarkdownEditor>
           markdownSyntax.startsWith(MarkdownSyntax.quote)) {
         // Для элементов, которые добавляются в начало строки
         // Находим начало текущей строки
-        int lineStart = start;
-        while (lineStart > 0 && value.text[lineStart - 1] != '\n') {
-          lineStart--;
+        int lineStartOffset = start;
+        while (lineStartOffset > 0 && value.text[lineStartOffset - 1] != '\n') {
+          lineStartOffset--;
         }
 
         // Вставляем синтаксис в начало строки
-        newText = value.text.replaceRange(lineStart, lineStart, markdownSyntax);
+        newText = value.text
+            .replaceRange(lineStartOffset, lineStartOffset, markdownSyntax);
         newSelection =
             TextSelection.collapsed(offset: start + markdownSyntax.length);
       } else {
@@ -330,219 +527,174 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     return AnimatedBuilder(
       animation: _focusModeAnimation,
       builder: (context, child) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.textBackground,
-            borderRadius: BorderRadius.circular(AppDimens.buttonBorderRadius),
-            boxShadow: [_isFocusMode ? AppShadows.large : AppShadows.small],
-          ),
-          child: Stack(
-            children: [
-              // Затемнение для режима фокусировки
-              if (_isFocusMode)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius:
-                            BorderRadius.circular(AppDimens.buttonBorderRadius),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black
-                                .withOpacity(0.7 * _focusModeAnimation.value),
-                            blurRadius: 15,
-                            spreadRadius: 10,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-              // Основное содержимое
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Основное содержимое - редактор
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.textBackground,
+                borderRadius:
+                    BorderRadius.circular(AppDimens.buttonBorderRadius),
+                boxShadow: [_isFocusMode ? AppShadows.large : AppShadows.small],
+              ),
+              child: Stack(
                 children: [
-                  // Вкладки редактор/предпросмотр и кнопки форматирования
-                  if (markdownEnabled && !widget.readOnly)
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.cardBackground,
-                        borderRadius: BorderRadius.only(
-                          topLeft:
-                              Radius.circular(AppDimens.buttonBorderRadius),
-                          topRight:
-                              Radius.circular(AppDimens.buttonBorderRadius),
+                  // Затемнение для режима фокусировки
+                  if (_isFocusMode)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                                AppDimens.buttonBorderRadius),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(
+                                    0.7 * _focusModeAnimation.value),
+                                blurRadius: 15,
+                                spreadRadius: 10,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TabBar(
-                            controller: _tabController,
-                            labelColor: AppColors.accentSecondary,
-                            unselectedLabelColor:
-                                AppColors.textOnDark.withOpacity(0.7),
-                            indicatorColor: AppColors.accentSecondary,
-                            indicatorSize: TabBarIndicatorSize.label,
-                            tabs: const [
-                              Tab(text: 'Редактор'),
-                              Tab(text: 'Предпросмотр'),
-                            ],
+                    ),
+
+                  // Основное содержимое
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Вкладки редактор/предпросмотр и кнопки форматирования
+                      if (markdownEnabled && !widget.readOnly)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBackground,
+                            borderRadius: BorderRadius.only(
+                              topLeft:
+                                  Radius.circular(AppDimens.buttonBorderRadius),
+                              topRight:
+                                  Radius.circular(AppDimens.buttonBorderRadius),
+                            ),
                           ),
-                          // Обновленная панель инструментов для работы с медиа
-                          if (!_isPreviewMode)
-                            Padding(
-                              padding: const EdgeInsets.all(6.0),
-                              child: Row(
-                                children: [
-                                  // Кнопка для прикрепления изображений
-                                  Material(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(6),
-                                      onTap: () {
-                                        _showImagePickerOptions(context);
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.accentSecondary
-                                              .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                          border: Border.all(
-                                            color: AppColors.accentSecondary
-                                                .withOpacity(0.3),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons
-                                                  .add_photo_alternate_outlined,
-                                              color: AppColors.textOnDark,
-                                              size: 20,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              'Фото',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: AppColors.textOnDark,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(width: 8),
-
-                                  // Кнопка для прикрепления файла
-                                  Material(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(6),
-                                      onTap: () {
-                                        _pickFile();
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.accentSecondary
-                                              .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                          border: Border.all(
-                                            color: AppColors.accentSecondary
-                                                .withOpacity(0.3),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.attachment_outlined,
-                                              color: AppColors.textOnDark,
-                                              size: 20,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              'Файл',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: AppColors.textOnDark,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // Расширитель для создания пространства между группами кнопок
-                                  Expanded(child: Container()),
-
-                                  // Кнопка голосовой записи
-                                  VoiceRecordButton(
-                                    size: 36, // Уменьшен размер с 44
-                                    onRecordComplete: (audioPath) {
-                                      _insertVoiceNote(audioPath);
-                                    },
-                                  ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TabBar(
+                                controller: _tabController,
+                                labelColor: AppColors.accentSecondary,
+                                unselectedLabelColor:
+                                    AppColors.textOnDark.withOpacity(0.7),
+                                indicatorColor: AppColors.accentSecondary,
+                                indicatorSize: TabBarIndicatorSize.label,
+                                tabs: const [
+                                  Tab(text: 'Редактор'),
+                                  Tab(text: 'Предпросмотр'),
                                 ],
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
+                              // Обновленная панель для кнопок прикрепления файлов
+                              if (!_isPreviewMode)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12.0, vertical: 8.0),
+                                  child: Row(
+                                    children: [
+                                      // Иконка для прикрепления фото (без стиля кнопки)
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(18),
+                                        onTap: () {
+                                          _showImagePickerOptions(context);
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            color: AppColors.textOnDark,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ),
 
-                  // Содержимое вкладок
-                  Container(
-                    height: widget.height ?? 300,
-                    constraints: BoxConstraints(
-                      minHeight: 150,
-                      maxHeight: widget.height ?? 500,
-                    ),
-                    child: markdownEnabled
-                        ? TabBarView(
-                            controller: _tabController,
-                            physics: widget.readOnly
-                                ? const NeverScrollableScrollPhysics()
-                                : null,
-                            children: [
-                              // Вкладка редактирования
-                              _buildEditor(),
+                                      const SizedBox(width: 12),
 
-                              // Вкладка предпросмотра
-                              _buildPreview(),
+                                      // Иконка для прикрепления файла (без стиля кнопки)
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(18),
+                                        onTap: () {
+                                          _pickFile();
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Icon(
+                                            Icons.attachment_outlined,
+                                            color: AppColors.textOnDark,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ),
+
+                                      const Spacer(),
+
+                                      // Кнопка голосовой записи
+                                      VoiceRecordButton(
+                                        size: 36, // Уменьшен размер с 44
+                                        onRecordComplete: (audioPath) {
+                                          _insertVoiceNote(audioPath);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
                             ],
-                          )
-                        : _buildEditor(),
+                          ),
+                        ),
+
+                      // Содержимое вкладок
+                      Container(
+                        height:
+                            widget.height ?? 250, // Уменьшаем высоту редактора
+                        constraints: BoxConstraints(
+                          minHeight: 150,
+                          maxHeight: widget.height ??
+                              400, // Уменьшаем максимальную высоту
+                        ),
+                        child: markdownEnabled
+                            ? TabBarView(
+                                controller: _tabController,
+                                physics: widget.readOnly
+                                    ? const NeverScrollableScrollPhysics()
+                                    : null,
+                                children: [
+                                  // Вкладка редактирования
+                                  _buildEditor(),
+
+                                  // Вкладка предпросмотра
+                                  _buildPreview(),
+                                ],
+                              )
+                            : _buildEditor(),
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ),
 
-              // Панель форматирования, которая всегда видна снизу редактора
-              if (!_isPreviewMode && markdownEnabled)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _buildBottomFormattingToolbar(),
+            // Отдельный блок для панели форматирования
+            const SizedBox(height: 8), // Расстояние между блоками
+            if (!_isPreviewMode && markdownEnabled)
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius:
+                      BorderRadius.circular(AppDimens.buttonBorderRadius),
+                  boxShadow: [AppShadows.small],
                 ),
-            ],
-          ),
+                child: _buildFormattingToolbarAsBlock(),
+              ),
+          ],
         );
       },
     );
@@ -552,25 +704,27 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   Widget _buildEditor() {
     return Container(
       padding: const EdgeInsets.all(16.0),
-      // Добавляем отступ снизу для панели форматирования
-      margin:
-          const EdgeInsets.only(bottom: 40.0), // Уменьшенный отступ с 50 до 40
-      child: TextField(
-        controller: widget.controller,
-        focusNode: _focusNode,
-        style: AppTextStyles.bodyMediumLight,
-        decoration: InputDecoration(
-          hintText: widget.placeholder ?? 'Введите текст...',
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
+      child: RawKeyboardListener(
+        // Добавляем обертку для отслеживания нажатий клавиш
+        focusNode: FocusNode(),
+        onKey: _handleKeyEvent,
+        child: TextField(
+          controller: widget.controller,
+          focusNode: _focusNode,
+          style: AppTextStyles.bodyMediumLight,
+          decoration: InputDecoration(
+            hintText: widget.placeholder ?? 'Введите текст...',
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
+          keyboardType: TextInputType.multiline,
+          maxLines: null,
+          expands: true,
+          autofocus: widget.autofocus || _isFocusMode,
+          readOnly: widget.readOnly,
+          onChanged: widget.onChanged,
+          textCapitalization: TextCapitalization.sentences,
         ),
-        keyboardType: TextInputType.multiline,
-        maxLines: null,
-        expands: true,
-        autofocus: widget.autofocus || _isFocusMode,
-        readOnly: widget.readOnly,
-        onChanged: widget.onChanged,
-        textCapitalization: TextCapitalization.sentences,
       ),
     );
   }
@@ -595,34 +749,14 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     );
   }
 
-  // Обновленная панель форматирования, всегда видимая внизу
-  Widget _buildBottomFormattingToolbar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          vertical: 8.0, horizontal: 12.0), // Уменьшенные отступы
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(AppDimens.buttonBorderRadius),
-          bottomRight: Radius.circular(AppDimens.buttonBorderRadius),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-        border: Border.all(
-          color: AppColors.secondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
+  // Форматирование как отдельный блок
+  Widget _buildFormattingToolbarAsBlock() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 12.0),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          mainAxisAlignment:
-              MainAxisAlignment.start, // Изменено с spaceAround на start
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildToolbarButton(
               icon: Icons.format_bold,

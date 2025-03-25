@@ -380,31 +380,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         ),
         body: themesProvider.isLoading
             ? const Center(child: CircularProgressIndicator())
-            : AnimatedBuilder(
-                animation: _modeTransitionAnimation,
-                builder: (context, child) {
-                  return Stack(
-                    children: [
-                      // Режим просмотра
-                      Opacity(
-                        opacity: 1.0 - _modeTransitionAnimation.value,
-                        child: IgnorePointer(
-                          ignoring: _isEditMode,
-                          child: _buildViewMode(),
-                        ),
-                      ),
+            : SizedBox(
+                width: MediaQuery.of(context).size.width,
+                height: MediaQuery.of(context).size.height,
+                child: IndexedStack(
+                  // Используем IndexedStack вместо анимированного переключения
+                  index: _isEditMode ? 1 : 0,
+                  children: [
+                    // Режим просмотра
+                    _buildViewMode(),
 
-                      // Режим редактирования
-                      Opacity(
-                        opacity: _modeTransitionAnimation.value,
-                        child: IgnorePointer(
-                          ignoring: !_isEditMode,
-                          child: _buildEditMode(),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                    // Режим редактирования
+                    _buildEditMode(),
+                  ],
+                ),
               ),
         resizeToAvoidBottomInset: true,
       ),
@@ -764,32 +753,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.mediumPadding,
-          vertical: 8,
-        ),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Редактор Markdown
-            Container(
-              constraints: BoxConstraints(
-                minHeight: 150,
-                maxHeight: MediaQuery.of(context).size.height * 0.4,
-              ),
-              margin: const EdgeInsets.only(bottom: 8.0),
-              child: MarkdownEditor(
-                controller: _contentController,
-                focusNode: _contentFocusNode,
-                placeholder: 'Начните вводить текст заметки...',
-                autofocus: false,
-                onMediaAdded: (mediaPath) {
-                  setState(() {
-                    _mediaFiles.add(mediaPath);
-                    _isSettingsChanged = true;
-                  });
-                },
-              ),
+            MarkdownEditor(
+              controller: _contentController,
+              focusNode: _contentFocusNode,
+              placeholder: 'Начните вводить текст заметки...',
+              autofocus: false,
+              onMediaAdded: (mediaPath) {
+                setState(() {
+                  _mediaFiles.add(mediaPath);
+                  _isSettingsChanged = true;
+                });
+              },
             ),
 
             // Раздел с медиафайлами
@@ -845,11 +824,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                   ),
                 ],
               ),
-            ),
-
-            // Отступ для клавиатуры
-            SizedBox(
-              height: MediaQuery.of(context).viewInsets.bottom > 0 ? 120 : 80,
             ),
           ],
         ),
@@ -1377,21 +1351,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   void _toggleEditMode() {
     setState(() {
       _isEditMode = !_isEditMode;
-      if (_isEditMode) {
-        _modeTransitionController.forward();
-
-        // При переходе в режим редактирования разрешаем фокус, но не запрашиваем его автоматически
-        _contentFocusNode.canRequestFocus = true;
-
-        // Проверяем дату дедлайна при переходе в режим редактирования
-        if (_hasDeadline &&
-            (_deadlineDate == null ||
-                _deadlineDate!.isBefore(DateTime.now()))) {
-          _deadlineDate = DateTime.now().add(const Duration(days: 1));
-        }
-      } else {
-        _modeTransitionController.reverse();
-      }
     });
   }
 
@@ -1413,7 +1372,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           // Если мы редактируем существующую заметку, переходим в режим просмотра
           setState(() {
             _isEditMode = false;
-            _modeTransitionController.reverse();
 
             // Восстанавливаем исходное содержимое
             if (widget.note != null) {
@@ -1541,7 +1499,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         if (_isEditMode) {
           setState(() {
             _isEditMode = false;
-            _modeTransitionController.reverse();
             _isContentChanged = false;
             _isSettingsChanged = false; // Сбрасываем флаг изменений настроек
             isSaving = false;
