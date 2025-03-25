@@ -1,5 +1,3 @@
-// lib/widgets/note_list.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/note.dart';
@@ -309,38 +307,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
     return cleaned.trim();
   }
 
-  Widget _buildNoteContentPreview(Note note) {
-    // Получаем текст для превью из кэша
-    final String previewText =
-        _contentPreviewCache[note.id] ?? _processContentPreview(note.content);
-
-    // Проверяем, не пустой ли текст
-    if (previewText.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Показываем текст с эффектом затухания (используем ShaderMask)
-    return ShaderMask(
-      shaderCallback: (Rect bounds) {
-        return LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.black, Colors.transparent],
-          stops: const [0.7, 1.0],
-        ).createShader(bounds);
-      },
-      blendMode: BlendMode.dstIn,
-      child: Text(
-        previewText,
-        style: TextStyle(
-          fontSize: 14,
-          color: AppColors.textOnLight,
-        ),
-        maxLines: 2, // Увеличиваем до двух строк
-      ),
-    );
-  }
-
   // Инициализация анимаций элементов списка
   void _initializeItemAnimations() {
     if (!widget.useCachedAnimation) return;
@@ -509,7 +475,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
   }
 
   Widget _buildNoteItem(Note note) {
-    // Получаем цвет для заметки
+    // Определяем цвет для заметки
     final Color noteColor = _getNoteStatusColor(note);
 
     // Определяем направления свайпа
@@ -866,13 +832,35 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                 if ((_contentPreviewCache[note.id] ?? '')
                                     .isNotEmpty) ...[
                                   const SizedBox(height: 3),
-                                  // Содержимое заметки с обработкой голосовых заметок
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minHeight: 0,
-                                      maxHeight: 60,
+                                  // Содержимое заметки с эффектом затухания
+                                  Container(
+                                    height:
+                                        40, // Фиксированная высота для двух строк
+                                    child: ShaderMask(
+                                      shaderCallback: (Rect bounds) {
+                                        return LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.black,
+                                            Colors.transparent
+                                          ],
+                                          stops: const [0.7, 1.0],
+                                        ).createShader(bounds);
+                                      },
+                                      blendMode: BlendMode.dstIn,
+                                      child: Text(
+                                        _contentPreviewCache[note.id] ??
+                                            _processContentPreview(
+                                                note.content),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: AppColors.textOnLight
+                                              .withOpacity(0.8),
+                                        ),
+                                        maxLines: 2,
+                                      ),
                                     ),
-                                    child: _buildNoteContentPreview(note),
                                   ),
                                 ],
 
@@ -928,6 +916,39 @@ class _NoteListWidgetState extends State<NoteListWidget>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+// Метод для отображения превью контента с эффектом затухания
+  Widget _buildNoteContentPreview(Note note) {
+    // Получаем текст для превью из кэша
+    final String previewText =
+        _contentPreviewCache[note.id] ?? _processContentPreview(note.content);
+
+    // Проверяем, не пустой ли текст
+    if (previewText.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Показываем текст с эффектом затухания (используем ShaderMask)
+    return ShaderMask(
+      shaderCallback: (Rect bounds) {
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.black, Colors.transparent],
+          stops: const [0.7, 1.0],
+        ).createShader(bounds);
+      },
+      blendMode: BlendMode.dstIn,
+      child: Text(
+        previewText,
+        style: TextStyle(
+          fontSize: 14,
+          color: AppColors.textOnLight,
+        ),
+        maxLines: 2, // Увеличиваем до двух строк
       ),
     );
   }
