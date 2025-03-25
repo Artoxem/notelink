@@ -4,9 +4,7 @@ import '../models/note.dart';
 import '../services/database_service.dart';
 
 class NotesProvider with ChangeNotifier {
-  final DatabaseService _databaseService = DatabaseService();
   List<Note> _notes = [];
-  bool _isLoading = false;
   bool _loadingError = false;
   String _errorMessage = '';
 
@@ -15,10 +13,16 @@ class NotesProvider with ChangeNotifier {
   final Map<String, Note> _noteCache = {};
 
   // Геттеры для состояния
-  List<Note> get notes => _notes;
+  List<Note> get notes => List.unmodifiable(_notes);
+
+  bool _isLoading = false;
   bool get isLoading => _isLoading;
-  bool get hasError => _loadingError;
-  String get errorMessage => _errorMessage;
+
+  // Набор для блокировки повторных операций
+  final Set<String> _operationLock = {};
+
+  // Сервис для работы с базой данных
+  final DatabaseService _databaseService = DatabaseService();
 
   // Очистка кэша при изменении данных
   void _invalidateCache() {
@@ -76,35 +80,42 @@ class NotesProvider with ChangeNotifier {
   }
 
   // Получить все заметки с улучшенной обработкой ошибок
-  Future<void> loadNotes() async {
-    // Если загрузка уже идет, не начинаем новую
-    if (_isLoading) return;
-
-    _isLoading = true;
-    _loadingError = false;
-    _errorMessage = '';
-    notifyListeners();
+  Future<void> loadNotes({bool force = false}) async {
+    // Если уже идёт загрузка и не требуется принудительное обновление, выходим
+    if (_isLoading && !force) return;
 
     try {
-      _notes = await _databaseService.getNotes();
-
-      // Обновляем кэш заметок
-      for (var note in _notes) {
-        _noteCache[note.id] = note;
-      }
-
-      _loadingError = false;
-    } catch (e) {
-      _loadingError = true;
-      _errorMessage = "Ошибка загрузки заметок: ${e.toString()}";
-      // Если у нас есть кэшированные заметки, используем их
-      if (_notes.isEmpty) {
-        // При первой загрузке создаем пустой список вместо null
-        _notes = [];
-      }
-    } finally {
-      _isLoading = false;
+      // Устанавливаем флаг загрузки и уведомляем об изменении состояния
+      _isLoading = true;
       notifyListeners();
+
+      // Запрашиваем заметки из базы данных
+      List<Note> loadedNotes = await _databaseService.getNotes();
+
+      // Сортируем заметки по дате создания (от новых к старым)
+      loadedNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Обновляем список заметок - используем clear() и addAll() вместо прямого присваивания
+      _notes.clear();
+      _notes.addAll(loadedNotes);
+
+      // Сбрасываем флаг загрузки
+      _isLoading = false;
+
+      // Уведомляем слушателей об изменениях
+      notifyListeners();
+    } catch (e) {
+      // В случае ошибки сбрасываем флаг загрузки
+      _isLoading = false;
+
+      // Логируем ошибку
+      print('Ошибка при загрузке заметок: $e');
+
+      // Уведомляем слушателей о завершении загрузки с ошибкой
+      notifyListeners();
+
+      // Пробрасываем ошибку дальше для обработки на уровне UI
+      rethrow;
     }
   }
 
@@ -233,34 +244,109 @@ class NotesProvider with ChangeNotifier {
   }
 
   // Отметить заметку как выполненную
-  Future<bool> completeNote(String id) async {
-    final index = _notes.indexWhere((n) => n.id == id);
-    if (index == -1) return false;
-
-    final note = _notes[index];
-    final updatedNote = note.copyWith(
-      isCompleted: true,
-      updatedAt: DateTime.now(),
-    );
-
+  Future<void> completeNote(String noteId) async {
     try {
-      // Обновляем в БД
+      // Блокируем повторные операции для одного ID
+      if (_operationLock.contains(noteId)) {
+        return;
+      }
+
+      _operationLock.add(noteId);
+
+      // Находим заметку по ID
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) {
+        _operationLock.remove(noteId);
+        throw Exception('Заметка не найдена');
+      }
+
+      // Проверяем наличие дедлайна
+      if (!_notes[noteIndex].hasDeadline) {
+        _operationLock.remove(noteId);
+        throw Exception(
+            'Можно отметить как выполненную только задачу с дедлайном');
+      }
+
+      // Если уже выполнена, ничего не делаем
+      if (_notes[noteIndex].isCompleted) {
+        _operationLock.remove(noteId);
+        return;
+      }
+
+      // Создаем обновленную копию заметки
+      final updatedNote = _notes[noteIndex].copyWith(
+        isCompleted: true,
+        updatedAt: DateTime.now(),
+      );
+
+      // Сохраняем в базу данных
       await _databaseService.updateNote(updatedNote);
 
-      // Обновляем локальное состояние
-      _notes[index] = updatedNote;
+      // Обновляем локальный список
+      _notes[noteIndex] = updatedNote;
 
-      // Обновляем кэш
-      _noteCache[id] = updatedNote;
-      _invalidateCache(); // Инвалидируем фильтрованные списки
-
+      // Уведомляем слушателей
       notifyListeners();
-      return true;
+
+      // Снимаем блокировку
+      _operationLock.remove(noteId);
     } catch (e) {
-      _loadingError = true;
-      _errorMessage = "Ошибка выполнения заметки: ${e.toString()}";
+      _operationLock.remove(noteId);
+      print('Ошибка при отметке задачи как выполненной: $e');
+      rethrow;
+    }
+  }
+
+  // Метод для отметки задачи как невыполненной
+  Future<void> uncompleteNote(String noteId) async {
+    try {
+      // Блокируем повторные операции для одного ID
+      if (_operationLock.contains(noteId)) {
+        return;
+      }
+
+      _operationLock.add(noteId);
+
+      // Находим заметку по ID
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) {
+        _operationLock.remove(noteId);
+        throw Exception('Заметка не найдена');
+      }
+
+      // Проверяем наличие дедлайна
+      if (!_notes[noteIndex].hasDeadline) {
+        _operationLock.remove(noteId);
+        throw Exception('Можно изменить статус только у задачи с дедлайном');
+      }
+
+      // Если уже не выполнена, ничего не делаем
+      if (!_notes[noteIndex].isCompleted) {
+        _operationLock.remove(noteId);
+        return;
+      }
+
+      // Создаем обновленную копию заметки
+      final updatedNote = _notes[noteIndex].copyWith(
+        isCompleted: false,
+        updatedAt: DateTime.now(),
+      );
+
+      // Сохраняем в базу данных
+      await _databaseService.updateNote(updatedNote);
+
+      // Обновляем локальный список
+      _notes[noteIndex] = updatedNote;
+
+      // Уведомляем слушателей
       notifyListeners();
-      return false;
+
+      // Снимаем блокировку
+      _operationLock.remove(noteId);
+    } catch (e) {
+      _operationLock.remove(noteId);
+      print('Ошибка при отметке задачи как невыполненной: $e');
+      rethrow;
     }
   }
 
