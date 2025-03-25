@@ -290,7 +290,8 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
   Color _getFilterColor() {
     switch (_filterMode) {
       case FilterMode.active:
-        return AppColors.accentSecondary; // Оранжевый для активных задач
+        return const Color.fromARGB(
+            255, 164, 50, 24); // Оранжевый для активных задач
       case FilterMode.completed:
         return AppColors.completed; // Зеленый для выполненных задач
       case FilterMode.all:

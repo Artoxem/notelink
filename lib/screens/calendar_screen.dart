@@ -15,108 +15,7 @@ import '../widgets/note_list.dart';
 import 'package:flutter/services.dart';
 import '../widgets/media_badge.dart';
 import 'deadlines_screen.dart';
-
-// Класс для рисования треугольника
-class TrianglePainter extends CustomPainter {
-  final Color color;
-
-  TrianglePainter({this.color = Colors.white});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final Path path = Path();
-    // Рисуем треугольник, повернутый вершиной влево
-    path.moveTo(size.width, 0); // Правый верхний угол
-    path.lineTo(0, size.height / 2); // Левая середина
-    path.lineTo(size.width, size.height); // Правый нижний угол
-    path.close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
-  }
-}
-
-// Кастомный Painter для отрисовки ячейки календаря в стиле "тетрадь в клеточку"
-class GridCellPainter extends CustomPainter {
-  final bool isSelected;
-  final bool isToday;
-  final bool isOutside;
-  final Color heatmapColor;
-
-  GridCellPainter({
-    this.isSelected = false,
-    this.isToday = false,
-    this.isOutside = false,
-    required this.heatmapColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double width = size.width;
-    final double height = size.height;
-
-    // Определяем цвет фона
-    Color backgroundColor;
-    if (isSelected) {
-      backgroundColor = AppColors.accentSecondary;
-    } else if (isToday) {
-      backgroundColor = AppColors.accentPrimary;
-    } else if (isOutside) {
-      backgroundColor = AppColors.primary.withOpacity(0.3);
-    } else {
-      backgroundColor = AppColors.primary;
-    }
-
-    // Рисуем основной фон ячейки
-    final Paint backgroundPaint = Paint()
-      ..color = backgroundColor
-      ..style = PaintingStyle.fill;
-    canvas.drawRect(Rect.fromLTWH(0, 0, width, height), backgroundPaint);
-
-    // Рисуем тепловую карту поверх основного фона
-    if (heatmapColor != Colors.transparent) {
-      final Paint heatmapPaint = Paint()
-        ..color = heatmapColor
-        ..style = PaintingStyle.fill;
-      canvas.drawRect(Rect.fromLTWH(0, 0, width, height), heatmapPaint);
-    }
-
-    // Рисуем границы ячейки
-    final Paint borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.4)
-      ..strokeWidth = 1.0;
-
-    // Если это выбранная ячейка или сегодняшний день, делаем границы более яркими
-    if (isSelected || isToday) {
-      borderPaint.color = Colors.white.withOpacity(0.7);
-      borderPaint.strokeWidth = 1.5;
-    }
-
-    // Внешние границы ячейки
-    canvas.drawLine(Offset(0, 0), Offset(width, 0), borderPaint); // Верхняя
-    canvas.drawLine(
-        Offset(0, height), Offset(width, height), borderPaint); // Нижняя
-    canvas.drawLine(Offset(0, 0), Offset(0, height), borderPaint); // Левая
-    canvas.drawLine(
-        Offset(width, 0), Offset(width, height), borderPaint); // Правая
-  }
-
-  @override
-  bool shouldRepaint(GridCellPainter oldDelegate) {
-    return oldDelegate.isSelected != isSelected ||
-        oldDelegate.isToday != isToday ||
-        oldDelegate.isOutside != isOutside ||
-        oldDelegate.heatmapColor != heatmapColor;
-  }
-}
+import 'unthemed_notes_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -200,9 +99,11 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   Future<void> _loadData() async {
-    if (_isLoading) return; // Предотвращаем параллельную загрузку
+    if (_isLoading) return;
 
-    _isLoading = true;
+    setState(() {
+      _isLoading = true;
+    });
 
     try {
       // Загружаем заметки и темы
@@ -211,90 +112,36 @@ class _CalendarScreenState extends State<CalendarScreen>
           Provider.of<ThemesProvider>(context, listen: false);
 
       await Future.wait([
-        notesProvider.loadNotes(),
+        notesProvider.loadNotes(force: true),
         themesProvider.loadThemes(),
       ]);
 
       if (!mounted) return;
 
-      // Обновляем только события, без вызова setState()
-      _processEventsWithoutUpdate(notesProvider.notes);
-
-      _isLoading = false;
+      setState(() {
+        // Обновляем события и выбранные события
+        _processEvents(notesProvider.notes);
+        _selectedEvents = _getEventsForDay(_selectedDay);
+        _isLoading = false;
+      });
     } catch (e) {
       print('Ошибка при загрузке данных: $e');
       if (mounted) {
-        _isLoading = false;
-      }
-    }
-  }
+        setState(() {
+          _isLoading = false;
+        });
 
-  // Добавьте новый метод для обработки событий без обновления UI
-  void _processEventsWithoutUpdate(List<Note> notes) {
-    if (!mounted) return;
-
-    final Map<DateTime, List<Note>> events = {};
-
-    for (final note in notes) {
-      // Заметки с дедлайном
-      if (note.hasDeadline && note.deadlineDate != null) {
-        final normalizedDate = DateTime(
-          note.deadlineDate!.year,
-          note.deadlineDate!.month,
-          note.deadlineDate!.day,
+        // Показываем сообщение об ошибке
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при загрузке данных: $e'),
+            action: SnackBarAction(
+              label: 'Повторить',
+              onPressed: _loadData,
+            ),
+          ),
         );
-
-        events[normalizedDate] ??= [];
-        if (!events[normalizedDate]!.any((n) => n.id == note.id)) {
-          events[normalizedDate]!.add(note);
-        }
       }
-
-      // Заметки, привязанные к дате
-      if (note.hasDateLink && note.linkedDate != null) {
-        final normalizedDate = DateTime(
-          note.linkedDate!.year,
-          note.linkedDate!.month,
-          note.linkedDate!.day,
-        );
-
-        events[normalizedDate] ??= [];
-        if (!events[normalizedDate]!.any((n) => n.id == note.id)) {
-          events[normalizedDate]!.add(note);
-        }
-      } else {
-        // Если заметка НЕ привязана к дате и НЕ имеет дедлайн,
-        // только тогда добавляем её по дате создания
-        final creationDate = DateTime(
-          note.createdAt.year,
-          note.createdAt.month,
-          note.createdAt.day,
-        );
-
-        events[creationDate] ??= [];
-        if (!events[creationDate]!.any((n) => n.id == note.id)) {
-          events[creationDate]!.add(note);
-        }
-      }
-    }
-
-    // Сортировка заметок для каждого дня (от новых к старым)
-    events.forEach((date, dateNotes) {
-      dateNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    });
-
-    // Обновляем данные без вызова setState
-    _events = events;
-    _selectedEvents = _getEventsForDay(_selectedDay);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    final notesProvider = Provider.of<NotesProvider>(context);
-    if (!notesProvider.isLoading && notesProvider.notes.isNotEmpty) {
-      _processEvents(notesProvider.notes);
     }
   }
 
@@ -361,7 +208,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     // Нормализуем дату (без времени) для корректного сравнения
     final normalizedDay = DateTime(day.year, day.month, day.day);
 
-    // Используем текущий кэш событий
+    // Безопасно возвращаем события или пустой список, если их нет
     return _events[normalizedDay] ?? [];
   }
 
@@ -616,52 +463,49 @@ class _CalendarScreenState extends State<CalendarScreen>
 
           // Список заметок - занимает всё оставшееся пространство
           Expanded(
-            child: _selectedEvents.isEmpty
-                ? _buildEmptyDateView()
-                : NoteListWidget(
-                    key: PageStorageKey<String>(
-                        'notes_for_${_selectedDay.toString()}'),
-                    notes: _selectedEvents,
-                    emptyMessage: 'Нет заметок на выбранный день',
-                    showThemeBadges: true,
-                    useCachedAnimation: false,
-                    swipeDirection: SwipeDirection.both,
-                    onNoteTap: _viewNoteDetails,
-                    onNoteDeleted: (note) async {
-                      final notesProvider =
-                          Provider.of<NotesProvider>(context, listen: false);
-                      await notesProvider.deleteNote(note.id);
-                      _loadData();
-                    },
-                  ),
+            child: Consumer<NotesProvider>(
+              builder: (context, notesProvider, _) {
+                // Проверяем, не изменились ли заметки
+                // и обновляем список выбранных заметок
+                _selectedEvents = _getEventsForDay(_selectedDay);
+
+                // Показываем пустое состояние, если заметок нет
+                if (_selectedEvents.isEmpty) {
+                  return _buildEmptyDateView();
+                }
+
+                // Иначе показываем список заметок
+                return NoteListWidget(
+                  key: PageStorageKey<String>(
+                      'notes_for_${_selectedDay.toString()}'),
+                  notes: _selectedEvents,
+                  emptyMessage: 'Нет заметок на выбранный день',
+                  showThemeBadges: true,
+                  useCachedAnimation: false,
+                  swipeDirection: SwipeDirection.both,
+                  onNoteTap: _viewNoteDetails,
+                  onNoteDeleted: (note) async {
+                    // Удаляем заметку
+                    await notesProvider.deleteNote(note.id);
+
+                    // После удаления обновляем данные
+                    if (mounted) {
+                      // Перезагружаем все заметки
+                      await _loadData();
+
+                      // Обновляем UI с новым списком выбранных заметок
+                      setState(() {
+                        _selectedEvents = _getEventsForDay(_selectedDay);
+                      });
+                    }
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
       floatingActionButton: _buildAddNoteButton(),
-    );
-  }
-
-  // Новый метод для кнопки сворачивания/разворачивания календаря
-  Widget _buildExpandCollapseButton() {
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _isCalendarExpanded = !_isCalendarExpanded;
-        });
-      },
-      child: Container(
-        width: double.infinity,
-        height: 24,
-        color: AppColors.accentSecondary.withOpacity(0.2),
-        child: Center(
-          child: Icon(
-            _isCalendarExpanded
-                ? Icons.keyboard_arrow_up
-                : Icons.keyboard_arrow_down,
-            color: AppColors.accentSecondary,
-          ),
-        ),
-      ),
     );
   }
 
@@ -703,10 +547,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                   duration: const Duration(milliseconds: 100),
                   child: Text(
                     DateFormat('MMMM yyyy').format(_focusedDay),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF213E60),
+                      color: Color(0xFF213E60),
                     ),
                   ),
                 ),
@@ -935,7 +779,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
-  // счетчики под календарем - уменьшены на 60% (35% + 25%) по высоте
+  // счетчики под календарем
   Widget _buildMonthStats() {
     final notesProvider = Provider.of<NotesProvider>(context);
     final notes = notesProvider.notes;
@@ -950,13 +794,16 @@ class _CalendarScreenState extends State<CalendarScreen>
     final tasksNotes =
         currentMonthNotes.where((note) => note.hasDeadline).toList();
 
+    // Считаем количество заметок без темы
+    final unthemedNotes =
+        currentMonthNotes.where((note) => note.themeIds.isEmpty).toList();
+
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: 16, vertical: 2), // Уменьшено с 4 до 2
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       height: 48, // Явно задаем высоту контейнера
       child: Row(
         children: [
-          // Все заметки месяца - стильная карточка (уменьшенная на 60% по высоте)
+          // Все заметки месяца - стильная карточка
           Expanded(
             child: Card(
               margin: EdgeInsets.zero, // Убираем отступ карточки
@@ -966,8 +813,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                     BorderRadius.circular(12), // Уменьшен радиус скругления
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 6, horizontal: 6), // Уменьшено с 10,8 до 6,6
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -1010,7 +856,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           ),
                         ),
                         Text(
-                          'in this month',
+                          'в этом месяце',
                           style: TextStyle(
                             fontSize: 10, // Уменьшено с 12 до 10
                             color: Colors.white.withOpacity(0.9),
@@ -1026,7 +872,94 @@ class _CalendarScreenState extends State<CalendarScreen>
 
           SizedBox(width: 6), // Уменьшено с 8 до 6
 
-          // Задачи с дедлайном - стильная карточка (уменьшенная на 60% по высоте)
+          // Заметки без темы - новая стильная карточка
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                // Переходим на экран заметок без темы
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const UnthemedNotesScreen(),
+                  ),
+                ).then((_) {
+                  // Обновляем данные после возврата
+                  if (mounted) {
+                    _loadData();
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Card(
+                margin: EdgeInsets.zero, // Убираем отступ карточки
+                elevation: 2, // Уменьшена тень
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(12), // Уменьшен радиус скругления
+                ),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color.fromARGB(255, 150, 150, 150).withOpacity(0.8),
+                        Color.fromARGB(255, 150, 150, 150).withOpacity(0.5),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(12), // Уменьшен радиус скругления
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 20, // Уменьшено с 26 до 20
+                        height: 20, // Уменьшено с 26 до 20
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.layers_clear,
+                          color: Colors.white,
+                          size: 12, // Уменьшено с 14 до 12
+                        ),
+                      ),
+                      SizedBox(width: 6), // Уменьшено с 8 до 6
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            unthemedNotes.length.toString(),
+                            style: TextStyle(
+                              fontSize: 14, // Уменьшено с 16 до 14
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            'Без темы',
+                            style: TextStyle(
+                              fontSize: 10, // Уменьшено с 12 до 10
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          SizedBox(width: 6), // Уменьшено с 8 до 6
+
+          // Задачи с дедлайном - стильная карточка
           Expanded(
             child: InkWell(
               onTap: () {
@@ -1052,8 +985,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                       BorderRadius.circular(12), // Уменьшен радиус скругления
                 ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 6, horizontal: 6), // Уменьшено с 10,8 до 6,6
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1063,14 +996,13 @@ class _CalendarScreenState extends State<CalendarScreen>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius:
-                        BorderRadius.circular(12), // Уменьшен радиус скругления
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 20, // Уменьшено с 26 до 20
-                        height: 20, // Уменьшено с 26 до 20
+                        width: 20,
+                        height: 20,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
@@ -1078,10 +1010,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                         child: Icon(
                           Icons.timer,
                           color: Colors.white,
-                          size: 12, // Уменьшено с 14 до 12
+                          size: 12,
                         ),
                       ),
-                      SizedBox(width: 6), // Уменьшено с 8 до 6
+                      SizedBox(width: 6),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -1090,15 +1022,15 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             tasksNotes.length.toString(),
                             style: TextStyle(
-                              fontSize: 14, // Уменьшено с 16 до 14
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
                           ),
                           Text(
-                            'Deadlines',
+                            'Дедлайны',
                             style: TextStyle(
-                              fontSize: 10, // Уменьшено с 12 до 10
+                              fontSize: 10,
                               color: Colors.white.withOpacity(0.9),
                             ),
                           ),
@@ -1115,7 +1047,30 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
-  // Виджет для отображения "пустого" состояния выбранной даты
+  // Новый метод для кнопки сворачивания/разворачивания календаря
+  Widget _buildExpandCollapseButton() {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _isCalendarExpanded = !_isCalendarExpanded;
+        });
+      },
+      child: Container(
+        width: double.infinity,
+        height: 24,
+        color: AppColors.accentSecondary.withOpacity(0.2),
+        child: Center(
+          child: Icon(
+            _isCalendarExpanded
+                ? Icons.keyboard_arrow_up
+                : Icons.keyboard_arrow_down,
+            color: AppColors.accentSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyDateView() {
     return Center(
       child: Column(
@@ -1144,7 +1099,6 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
             textAlign: TextAlign.center,
           ),
-          // Кнопка "Создать заметку" удалена, т.к. дублирует функционал кнопки "+"
         ],
       ),
     );
@@ -1203,134 +1157,110 @@ class _CalendarScreenState extends State<CalendarScreen>
     ).then((_) {
       // После возврата с экрана добавления заметки, обновляем события
       if (mounted) {
-        final notesProvider =
-            Provider.of<NotesProvider>(context, listen: false);
-        // Загружаем заметки без обновления UI
-        notesProvider.loadNotes().then((_) {
-          if (mounted) {
-            _processEventsWithoutUpdate(notesProvider.notes);
-            setState(() {
-              _selectedEvents = _getEventsForDay(_selectedDay);
-            });
-          }
-        });
+        _loadData();
       }
     });
   }
 }
 
-class SelectedDayNotesList extends StatefulWidget {
-  final DateTime selectedDay;
-  final List<Note> notes;
+// Класс для рисования треугольника
+class TrianglePainter extends CustomPainter {
+  final Color color;
 
-  const SelectedDayNotesList({
-    Key? key,
-    required this.selectedDay,
-    required this.notes,
-  }) : super(key: key);
+  TrianglePainter({this.color = Colors.white});
 
   @override
-  State<SelectedDayNotesList> createState() => _SelectedDayNotesListState();
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final Path path = Path();
+    // Рисуем треугольник, повернутый вершиной влево
+    path.moveTo(size.width, 0); // Правый верхний угол
+    path.lineTo(0, size.height / 2); // Левая середина
+    path.lineTo(size.width, size.height); // Правый нижний угол
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return false;
+  }
 }
 
-class _SelectedDayNotesListState extends State<SelectedDayNotesList> {
+// Кастомный Painter для отрисовки ячейки календаря в стиле "тетрадь в клеточку"
+class GridCellPainter extends CustomPainter {
+  final bool isSelected;
+  final bool isToday;
+  final bool isOutside;
+  final Color heatmapColor;
+
+  GridCellPainter({
+    this.isSelected = false,
+    this.isToday = false,
+    this.isOutside = false,
+    required this.heatmapColor,
+  });
+
   @override
-  Widget build(BuildContext context) {
-    if (widget.notes.isEmpty) {
-      // Оставляем существующую реализацию для пустого состояния
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.event_note,
-              size: 80,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Нет заметок на ${DateFormat('d MMMM yyyy').format(widget.selectedDay)}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Создайте заметку, чтобы она появилась здесь',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF213E60),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
+  void paint(Canvas canvas, Size size) {
+    final double width = size.width;
+    final double height = size.height;
+
+    // Определяем цвет фона
+    Color backgroundColor;
+    if (isSelected) {
+      backgroundColor = AppColors.accentSecondary;
+    } else if (isToday) {
+      backgroundColor = AppColors.accentPrimary;
+    } else if (isOutside) {
+      backgroundColor = AppColors.primary.withOpacity(0.3);
+    } else {
+      backgroundColor = AppColors.primary;
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Заголовок с количеством заметок
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Заметки на ${DateFormat('d MMMM').format(widget.selectedDay)}',
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.accentSecondary.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${widget.notes.length}',
-                  style: const TextStyle(
-                    color: AppColors.accentSecondary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+    // Рисуем основной фон ячейки
+    final Paint backgroundPaint = Paint()
+      ..color = backgroundColor
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(Rect.fromLTWH(0, 0, width, height), backgroundPaint);
 
-        // Используем обновленный NoteListWidget
-        Expanded(
-          child: NoteListWidget(
-            key: PageStorageKey<String>(
-                'notes_for_${widget.selectedDay.toString()}'),
-            notes: widget.notes,
-            emptyMessage: 'Нет заметок на выбранный день',
-            showThemeBadges: true,
-            useCachedAnimation: false,
-            onNoteTap: (note) => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => NoteDetailScreen(note: note),
-              ),
-            ),
-            // Убираем вызов полного обновления
-            onNoteDeleted: (note) async {
-              final notesProvider =
-                  Provider.of<NotesProvider>(context, listen: false);
-              await notesProvider.deleteNote(note.id);
-              // Не вызываем метод _refreshNotes(), так как обновление происходит локально
-            },
-            onNoteFavoriteToggled: (note) async {
-              // Обработка переключения избранного теперь происходит внутри NoteListWidget
-              // и не требует внешнего обновления
-            },
-          ),
-        ),
-      ],
-    );
+    // Рисуем тепловую карту поверх основного фона
+    if (heatmapColor != Colors.transparent) {
+      final Paint heatmapPaint = Paint()
+        ..color = heatmapColor
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(Rect.fromLTWH(0, 0, width, height), heatmapPaint);
+    }
+
+    // Рисуем границы ячейки
+    final Paint borderPaint = Paint()
+      ..color = Colors.white.withOpacity(0.4)
+      ..strokeWidth = 1.0;
+
+    // Если это выбранная ячейка или сегодняшний день, делаем границы более яркими
+    if (isSelected || isToday) {
+      borderPaint.color = Colors.white.withOpacity(0.7);
+      borderPaint.strokeWidth = 1.5;
+    }
+
+    // Внешние границы ячейки
+    canvas.drawLine(Offset(0, 0), Offset(width, 0), borderPaint); // Верхняя
+    canvas.drawLine(
+        Offset(0, height), Offset(width, height), borderPaint); // Нижняя
+    canvas.drawLine(Offset(0, 0), Offset(0, height), borderPaint); // Левая
+    canvas.drawLine(
+        Offset(width, 0), Offset(width, height), borderPaint); // Правая
+  }
+
+  @override
+  bool shouldRepaint(GridCellPainter oldDelegate) {
+    return oldDelegate.isSelected != isSelected ||
+        oldDelegate.isToday != isToday ||
+        oldDelegate.isOutside != isOutside ||
+        oldDelegate.heatmapColor != heatmapColor;
   }
 }
