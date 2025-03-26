@@ -824,41 +824,32 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
                                 const SizedBox(height: 6),
 
-                                // Добавляем проверку на наличие контента
-                                if ((_contentPreviewCache[note.id] ?? '')
-                                    .isNotEmpty) ...[
-                                  const SizedBox(height: 3),
-                                  // Содержимое заметки с эффектом затухания
-                                  Container(
-                                    height:
-                                        40, // Фиксированная высота для двух строк
-                                    child: ShaderMask(
-                                      shaderCallback: (Rect bounds) {
-                                        return LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                            Colors.black,
-                                            Colors.transparent
-                                          ],
-                                          stops: const [0.7, 1.0],
-                                        ).createShader(bounds);
-                                      },
-                                      blendMode: BlendMode.dstIn,
-                                      child: Text(
-                                        _contentPreviewCache[note.id] ??
-                                            _processContentPreview(
-                                                note.content),
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: AppColors.textOnLight
-                                              .withOpacity(0.8),
-                                        ),
-                                        maxLines: 2,
+                                // Содержимое заметки с эффектом затухания
+                                Expanded(
+                                  child: ShaderMask(
+                                    shaderCallback: (Rect bounds) {
+                                      return LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.black,
+                                          Colors.transparent
+                                        ],
+                                        stops: const [0.8, 1.0],
+                                      ).createShader(bounds);
+                                    },
+                                    blendMode: BlendMode.dstIn,
+                                    child: Text(
+                                      note.content,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: AppColors.textOnLight
+                                            .withOpacity(0.8),
                                       ),
+                                      maxLines: 5,
                                     ),
                                   ),
-                                ],
+                                ),
 
                                 // Индикаторы медиа и темы
                                 const SizedBox(height: 6),
