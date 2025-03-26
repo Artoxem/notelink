@@ -453,7 +453,7 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Оптимизированное получение цвета индикатора заметки
+// Оптимизированное получение цвета индикатора заметки
   Color _getNoteStatusColor(Note note) {
     // Проверяем кэш
     if (_noteColorCache.containsKey(note.id)) {
@@ -463,8 +463,12 @@ class _NotesScreenState extends State<NotesScreen>
     // Вычисляем цвет
     Color color = NoteStatusUtils.getNoteStatusColor(note);
 
+    // Для заметок без темы используем серый цвет
+    if (note.themeIds.isEmpty) {
+      color = Colors.grey;
+    }
     // Если у заметки есть темы, используем цвет первой темы
-    if (note.themeIds.isNotEmpty) {
+    else if (note.themeIds.isNotEmpty) {
       final themeId = note.themeIds.first;
       color = _getThemeColor(themeId, defaultColor: color);
     }

@@ -237,15 +237,10 @@ class _NoteListWidgetState extends State<NoteListWidget>
     super.dispose();
   }
 
-  // Метод для извлечения и форматирования контента без первой строки
+  // Метод для извлечения и форматирования контента
   String _processContentPreview(String content) {
-    // Удаляем все медиа-ссылки (не только голосовые)
+    // Удаляем только медиа-ссылки, сохраняя при этом форматирование
     String cleanContent = content.replaceAll(_mediaRegex, '');
-
-    // Убираем лишние пробелы, которые могли остаться после удаления голосовых меток
-    cleanContent = cleanContent.replaceAll(RegExp(r'\s+'), ' ').trim();
-
-    // Для отображения в заметке нам нужно сохранить исходное форматирование
     return cleanContent;
   }
 
@@ -771,63 +766,85 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                     },
                                     blendMode: BlendMode.dstIn,
                                     child: ClipRect(
-                                      child: SizedBox(
-                                        height:
-                                            42, // Примерная высота для 2 строк текста
+                                      child: Container(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        constraints: const BoxConstraints(
+                                          minHeight: 20,
+                                          maxHeight:
+                                              60, // Ограничение высоты до 60px
+                                        ),
                                         child: MarkdownBody(
                                           data: _contentPreviewCache[note.id] ??
                                               _processContentPreview(
                                                   note.content),
                                           selectable: false,
+                                          softLineBreak: true,
                                           styleSheet: MarkdownStyleSheet(
                                             p: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.normal,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
+                                              height: 1.1,
                                             ),
                                             a: TextStyle(
                                               color: AppColors.accentSecondary,
                                               fontSize: 14,
                                               fontWeight: FontWeight.normal,
+                                              height: 1.1,
                                             ),
                                             h1: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
+                                              height: 1.1,
                                             ),
                                             h2: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
+                                              height: 1.1,
                                             ),
                                             h3: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
+                                              height: 1.1,
                                             ),
                                             em: TextStyle(
                                               fontStyle: FontStyle.italic,
                                               fontWeight: FontWeight.normal,
                                               fontSize: 14,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
+                                              height: 1.1,
                                             ),
                                             strong: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 14,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
+                                              height: 1.1,
                                             ),
                                             blockquote: TextStyle(
                                               fontStyle: FontStyle.italic,
                                               fontWeight: FontWeight.normal,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
                                               fontSize: 14,
+                                              height: 1.1,
                                             ),
                                             code: TextStyle(
                                               fontFamily: 'monospace',
                                               fontWeight: FontWeight.normal,
                                               fontSize: 14,
-                                              color: AppColors.textOnLight,
+                                              color: Colors.black87,
+                                              height: 1.1,
                                             ),
+                                            listBullet: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.black87,
+                                              height: 1.1,
+                                            ),
+                                            listIndent: 8.0,
+                                            listBulletPadding:
+                                                const EdgeInsets.only(right: 4),
                                           ),
                                         ),
                                       ),
@@ -865,14 +882,13 @@ class _NoteListWidgetState extends State<NoteListWidget>
               // Индикатор избранного с отрицательным смещением
               if (note.isFavorite)
                 Positioned(
-                  top: -2, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение вверх
-                  left: -2, // ВАЖНОЕ ИЗМЕНЕНИЕ: отрицательное смещение влево
+                  top: -2, // Отрицательное смещение вверх
+                  left: -2, // Отрицательное смещение влево
                   child: Material(
                     color: Colors.amber,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(AppDimens.cardBorderRadius),
-                      bottomRight: Radius.circular(
-                          8), // Фиксированное значение для углового скругления
+                      bottomRight: Radius.circular(8),
                     ),
                     child: const Padding(
                       padding: EdgeInsets.all(3.0),
@@ -999,6 +1015,11 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
     // Базовый цвет на основе статуса заметки (дедлайн, завершено и т.д.)
     Color color = NoteStatusUtils.getNoteStatusColor(note);
+
+    // Для заметок без темы используем серый цвет
+    if (note.themeIds.isEmpty) {
+      color = Colors.grey;
+    }
 
     // В режиме просмотра темы проверяем, привязана ли заметка к текущей теме
     if (widget.isInThemeView && widget.themeId != null) {
@@ -1158,7 +1179,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 },
               ),
 
-            // Опция отметки о выполнении - ИСПРАВЛЕНО
+            // Опция отметки о выполнении
             if (widget.availableActions.contains(NoteListAction.complete) &&
                 note.hasDeadline)
               ListTile(
@@ -1196,7 +1217,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                       // Отмечаем как выполненное
                       await notesProvider.completeNote(noteId);
                     } else {
-                      // Отмечаем как невыполненное - этот метод нужно реализовать в NotesProvider
+                      // Отмечаем как невыполненное
                       await notesProvider.uncompleteNote(noteId);
                     }
 
