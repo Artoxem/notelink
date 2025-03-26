@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import '../widgets/media_badge.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 enum NoteListAction {
   edit,
@@ -73,7 +74,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
   // Кэш для оптимизации производительности
   final Map<String, Color> _noteColorCache = {};
   // Кэш для обработанных текстов - добавляем для оптимизации
-  final Map<String, String> _firstLineCache = {};
   final Map<String, String> _contentPreviewCache = {};
 
   // Контроллер прокрутки для сохранения позиции
@@ -94,6 +94,8 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   // Обновленное регулярное выражение для полного удаления голосовых заметок
   static final RegExp _voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
+  // Регулярное выражение для удаления всех медиа-ссылок
+  static final RegExp _mediaRegex = RegExp(r'!\[[^\]]*\]\([^)]+\)');
 
   @override
   void initState() {
@@ -120,9 +122,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
   // Новый метод для предварительной обработки текстов
   void _precacheNoteTexts() {
     for (final note in _localNotes) {
-      if (!_firstLineCache.containsKey(note.id)) {
-        _firstLineCache[note.id] = _processFirstLine(note.content);
-      }
       if (!_contentPreviewCache.containsKey(note.id)) {
         _contentPreviewCache[note.id] = _processContentPreview(note.content);
       }
@@ -159,7 +158,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
             // Очищаем кэши
             _noteColorCache.remove(removedId);
-            _firstLineCache.remove(removedId);
             _contentPreviewCache.remove(removedId);
           }
         }
@@ -170,7 +168,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
           updatedLocalNotes.add(note);
 
           // Предварительно кэшируем данные для новых заметок
-          _firstLineCache[addedId] = _processFirstLine(note.content);
           _contentPreviewCache[addedId] = _processContentPreview(note.content);
         }
 
@@ -191,8 +188,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 updatedNote.isFavorite != updatedLocalNotes[i].isFavorite) {
               // Обновляем кэш только при изменении содержимого
               if (updatedNote.content != updatedLocalNotes[i].content) {
-                _firstLineCache[noteId] =
-                    _processFirstLine(updatedNote.content);
                 _contentPreviewCache[noteId] =
                     _processContentPreview(updatedNote.content);
               }
@@ -237,84 +232,21 @@ class _NoteListWidgetState extends State<NoteListWidget>
       _animationController.dispose();
     }
     _noteColorCache.clear();
-    _firstLineCache.clear();
     _contentPreviewCache.clear();
     _scrollController.dispose();
     super.dispose();
   }
 
-  // Оптимизированные методы для обработки текста
-  // Метод для извлечения и форматирования первой строки
-  String _processFirstLine(String content) {
-    // Полностью удаляем голосовые метки (не оставляем никаких заменителей)
-    String cleanContent = content.replaceAll(_voiceRegex, '');
-
-    // Убираем лишние пробелы, которые могли остаться после удаления голосовых меток
-    cleanContent = cleanContent.replaceAll(RegExp(r'\s+'), ' ').trim();
-
-    final firstLineEnd = cleanContent.indexOf('\n');
-    if (firstLineEnd == -1) {
-      // Удаляем markdown разметку из всего текста
-      return _cleanMarkdown(cleanContent);
-    }
-
-    // Очищаем только первую строку
-    String firstLine = cleanContent.substring(0, firstLineEnd).trim();
-    return _cleanMarkdown(firstLine);
-  }
-
   // Метод для извлечения и форматирования контента без первой строки
   String _processContentPreview(String content) {
-    // Полностью удаляем голосовые метки (не оставляем никаких заменителей)
-    String cleanContent = content.replaceAll(_voiceRegex, '');
+    // Удаляем все медиа-ссылки (не только голосовые)
+    String cleanContent = content.replaceAll(_mediaRegex, '');
 
     // Убираем лишние пробелы, которые могли остаться после удаления голосовых меток
     cleanContent = cleanContent.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-    final firstLineEnd = cleanContent.indexOf('\n');
-
-    // Изменение здесь: если нет символа новой строки, возвращаем сам контент
-    // чтобы превью всегда содержало текст
-    if (firstLineEnd == -1) {
-      // Если содержимое достаточно длинное, возвращаем его часть
-      if (cleanContent.length > 30) {
-        return _cleanMarkdown(cleanContent);
-      }
-      // Если слишком короткое, возвращаем пустую строку
-      return '';
-    }
-
-    // Берем только контент после первой строки
-    String restContent = cleanContent.substring(firstLineEnd + 1).trim();
-    // Очищаем markdown
-    return _cleanMarkdown(restContent);
-  }
-
-  // Упрощенный метод очистки markdown (без частых регулярных выражений)
-  String _cleanMarkdown(String text) {
-    if (text.isEmpty) return '';
-
-    // Последовательно удаляем разметку наиболее распространенных элементов
-    String cleaned = text;
-
-    // Удаляем заголовки
-    cleaned = cleaned.replaceAll(_headingsRegex, '');
-
-    // Удаляем жирный и курсив
-    cleaned = cleaned.replaceAll(_boldRegex, '');
-    cleaned = cleaned.replaceAll(_italicRegex, '');
-
-    // Заменяем ссылки только текстом
-    cleaned =
-        cleaned.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
-
-    // Удаляем код - используем replaceAllMapped вместо replaceAll с функцией
-    cleaned = cleaned.replaceAllMapped(_codeRegex, (match) {
-      final code = match.group(0) ?? '';
-      return code.length > 2 ? code.substring(1, code.length - 1) : '';
-    });
-
-    return cleaned.trim();
+    // Для отображения в заметке нам нужно сохранить исходное форматирование
+    return cleanContent;
   }
 
   // Инициализация анимаций элементов списка
@@ -393,7 +325,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
       // Очищаем кэши для удаленной заметки
       _noteColorCache.remove(noteId);
-      _firstLineCache.remove(noteId);
       _contentPreviewCache.remove(noteId);
     } catch (e) {
       print('Ошибка при локальном удалении заметки: $e');
@@ -824,7 +755,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
                                 const SizedBox(height: 6),
 
-                                // Содержимое заметки с эффектом затухания
+                                // Содержимое заметки с поддержкой форматирования Markdown
                                 Expanded(
                                   child: ShaderMask(
                                     shaderCallback: (Rect bounds) {
@@ -839,14 +770,67 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                       ).createShader(bounds);
                                     },
                                     blendMode: BlendMode.dstIn,
-                                    child: Text(
-                                      note.content,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: AppColors.textOnLight
-                                            .withOpacity(0.8),
+                                    child: ClipRect(
+                                      child: SizedBox(
+                                        height:
+                                            42, // Примерная высота для 2 строк текста
+                                        child: MarkdownBody(
+                                          data: _contentPreviewCache[note.id] ??
+                                              _processContentPreview(
+                                                  note.content),
+                                          selectable: false,
+                                          styleSheet: MarkdownStyleSheet(
+                                            p: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.normal,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            a: TextStyle(
+                                              color: AppColors.accentSecondary,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.normal,
+                                            ),
+                                            h1: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            h2: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            h3: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            em: TextStyle(
+                                              fontStyle: FontStyle.italic,
+                                              fontWeight: FontWeight.normal,
+                                              fontSize: 14,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            strong: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                            blockquote: TextStyle(
+                                              fontStyle: FontStyle.italic,
+                                              fontWeight: FontWeight.normal,
+                                              color: AppColors.textOnLight,
+                                              fontSize: 14,
+                                            ),
+                                            code: TextStyle(
+                                              fontFamily: 'monospace',
+                                              fontWeight: FontWeight.normal,
+                                              fontSize: 14,
+                                              color: AppColors.textOnLight,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                      maxLines: 5,
                                     ),
                                   ),
                                 ),
@@ -903,39 +887,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  // Метод для отображения превью контента с эффектом затухания
-  Widget _buildNoteContentPreview(Note note) {
-    // Получаем текст для превью из кэша
-    final String previewText =
-        _contentPreviewCache[note.id] ?? _processContentPreview(note.content);
-
-    // Проверяем, не пустой ли текст
-    if (previewText.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Показываем текст с эффектом затухания (используем ShaderMask)
-    return ShaderMask(
-      shaderCallback: (Rect bounds) {
-        return LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.black, Colors.transparent],
-          stops: const [0.7, 1.0],
-        ).createShader(bounds);
-      },
-      blendMode: BlendMode.dstIn,
-      child: Text(
-        previewText,
-        style: TextStyle(
-          fontSize: 14,
-          color: AppColors.textOnLight,
-        ),
-        maxLines: 2, // Увеличиваем до двух строк
       ),
     );
   }

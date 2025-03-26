@@ -818,7 +818,7 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
-  // счетчики под календарем с адаптивными размерами
+// Адаптивные счетчики под календарем
   Widget _buildMonthStats(bool isSmallScreen) {
     final notesProvider = Provider.of<NotesProvider>(context);
     final notes = notesProvider.notes;
