@@ -33,8 +33,11 @@ class DatabaseService {
 
     try {
       _database = await _initDatabase();
+      // Проверяем и модифицируем таблицу themes при необходимости
+      await ensureThemesTableHasLogoType();
       newLock.complete();
     } catch (e) {
+      print('Критическая ошибка при инициализации базы данных: $e');
       newLock.complete();
       rethrow;
     }
@@ -47,7 +50,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3, // Увеличиваем версию базы данных
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -60,17 +63,17 @@ class DatabaseService {
       if (oldVersion < 2) {
         // Создаем таблицу note_links если она не существует
         await db.execute('''
-        CREATE TABLE IF NOT EXISTS note_links(
-          id TEXT PRIMARY KEY,
-          sourceNoteId TEXT,
-          targetNoteId TEXT,
-          themeId TEXT,
-          createdAt INTEGER NOT NULL,
-          FOREIGN KEY (sourceNoteId) REFERENCES notes(id) ON DELETE CASCADE,
-          FOREIGN KEY (targetNoteId) REFERENCES notes(id) ON DELETE CASCADE,
-          FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE SET NULL
-        )
-        ''');
+      CREATE TABLE IF NOT EXISTS note_links(
+        id TEXT PRIMARY KEY,
+        sourceNoteId TEXT,
+        targetNoteId TEXT,
+        themeId TEXT,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (sourceNoteId) REFERENCES notes(id) ON DELETE CASCADE,
+        FOREIGN KEY (targetNoteId) REFERENCES notes(id) ON DELETE CASCADE,
+        FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE SET NULL
+      )
+      ''');
 
         // Добавляем индексы для улучшения производительности
         await db.execute(
@@ -92,6 +95,7 @@ class DatabaseService {
         await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_notes_deadlineDate ON notes(deadlineDate);');
       }
+
       // Добавляем поддержку для голосовых заметок, если обновляемся до версии 3
       if (oldVersion < 3) {
         // Проверяем, есть ли уже колонка voiceNotes
@@ -102,6 +106,16 @@ class DatabaseService {
         if (!hasVoiceNotes) {
           await db.execute(
               "ALTER TABLE notes ADD COLUMN voiceNotes TEXT DEFAULT '[]'");
+        }
+
+        // Добавляем колонку logoType для таблицы themes
+        var themesTableInfo = await db.rawQuery("PRAGMA table_info(themes)");
+        bool hasLogoType =
+            themesTableInfo.any((column) => column['name'] == 'logoType');
+
+        if (!hasLogoType) {
+          await db.execute(
+              "ALTER TABLE themes ADD COLUMN logoType INTEGER DEFAULT 0");
         }
       }
     } catch (e) {
@@ -114,56 +128,57 @@ class DatabaseService {
     try {
       // Создаем таблицу заметок
       await db.execute('''
-      CREATE TABLE notes(
-        id TEXT PRIMARY KEY,
-        content TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        hasDeadline INTEGER NOT NULL,
-        deadlineDate INTEGER,
-        hasDateLink INTEGER NOT NULL,
-        linkedDate INTEGER,
-        isCompleted INTEGER NOT NULL,
-        isFavorite INTEGER NOT NULL,
-        mediaUrls TEXT NOT NULL,
-        emoji TEXT,
-        reminderDates TEXT,
-        reminderSound TEXT,
-        deadlineExtensions TEXT
-      )
-      ''');
+    CREATE TABLE notes(
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      hasDeadline INTEGER NOT NULL,
+      deadlineDate INTEGER,
+      hasDateLink INTEGER NOT NULL,
+      linkedDate INTEGER,
+      isCompleted INTEGER NOT NULL,
+      isFavorite INTEGER NOT NULL,
+      mediaUrls TEXT NOT NULL,
+      emoji TEXT,
+      reminderDates TEXT,
+      reminderSound TEXT,
+      deadlineExtensions TEXT
+    )
+    ''');
 
-      // Создаем таблицу тем
+      // Создаем таблицу тем с колонкой logoType
       await db.execute('''
-      CREATE TABLE themes(
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        color TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
-      )
-      ''');
+    CREATE TABLE themes(
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      color TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      logoType INTEGER DEFAULT 0
+    )
+    ''');
 
       // Создаем таблицу для связей заметок с темами
       await db.execute('''
-      CREATE TABLE note_theme(
-        noteId TEXT,
-        themeId TEXT,
-        PRIMARY KEY (noteId, themeId),
-        FOREIGN KEY (noteId) REFERENCES notes(id) ON DELETE CASCADE,
-        FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE CASCADE
-      )
-      ''');
+    CREATE TABLE note_theme(
+      noteId TEXT,
+      themeId TEXT,
+      PRIMARY KEY (noteId, themeId),
+      FOREIGN KEY (noteId) REFERENCES notes(id) ON DELETE CASCADE,
+      FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE CASCADE
+    )
+    ''');
 
       // Таблица для истории поиска
       await db.execute('''
-      CREATE TABLE search_history(
-        id TEXT PRIMARY KEY,
-        query TEXT NOT NULL,
-        createdAt INTEGER NOT NULL
-      )
-      ''');
+    CREATE TABLE search_history(
+      id TEXT PRIMARY KEY,
+      query TEXT NOT NULL,
+      createdAt INTEGER NOT NULL
+    )
+    ''');
 
       // Создаем индексы для улучшения производительности
       await db
@@ -669,23 +684,34 @@ class DatabaseService {
     }
   }
 
-  // CRUD операции для Theme с оптимизированными транзакциями
+  // Вставка темы
   Future<String> insertTheme(NoteTheme theme) async {
     final db = await database;
 
     try {
       await db.transaction((txn) async {
+        // Подготовка данных с безопасной обработкой logoType
+        Map<String, dynamic> themeData = {
+          'id': theme.id,
+          'name': theme.name,
+          'description': theme.description,
+          'color': theme.color,
+          'createdAt': theme.createdAt.millisecondsSinceEpoch,
+          'updatedAt': theme.updatedAt.millisecondsSinceEpoch,
+        };
+
+        // Добавляем logoType, только если колонка существует
+        try {
+          themeData['logoType'] = theme.logoType.index;
+        } catch (e) {
+          print('Предупреждение при обработке logoType: $e');
+          themeData['logoType'] = 0; // Значение по умолчанию в случае ошибки
+        }
+
         // Вставляем тему
         await txn.insert(
           'themes',
-          {
-            'id': theme.id,
-            'name': theme.name,
-            'description': theme.description,
-            'color': theme.color,
-            'createdAt': theme.createdAt.millisecondsSinceEpoch,
-            'updatedAt': theme.updatedAt.millisecondsSinceEpoch,
-          },
+          themeData,
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
 
@@ -708,7 +734,7 @@ class DatabaseService {
 
       return theme.id;
     } catch (e) {
-      print('Ошибка при вставке темы: $e');
+      print('Критическая ошибка при вставке темы: $e');
       rethrow;
     }
   }
@@ -751,7 +777,7 @@ class DatabaseService {
         themeNoteMap[themeId]!.add(noteId);
       }
 
-      // Формируем список тем со связями
+      // Формируем список тем со связями и учитываем logoType
       return themeMaps.map((map) {
         final themeId = map['id'] as String;
         final noteIds = themeNoteMap[themeId] ?? [];
@@ -766,6 +792,10 @@ class DatabaseService {
           updatedAt:
               DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
           noteIds: noteIds,
+          logoType: map['logoType'] != null
+              ? ThemeLogoType.values[map['logoType'] as int]
+              : ThemeLogoType
+                  .book, // Загружаем тип логотипа или используем книгу по умолчанию
         );
       }).toList();
     } catch (e) {
@@ -800,6 +830,10 @@ class DatabaseService {
         createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
         updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
         noteIds: noteIds,
+        logoType: map['logoType'] != null
+            ? ThemeLogoType.values[map['logoType'] as int]
+            : ThemeLogoType
+                .book, // Загружаем тип логотипа или используем книгу по умолчанию
       );
     } catch (e) {
       print('Ошибка при получении темы: $e');
@@ -832,15 +866,26 @@ class DatabaseService {
 
     try {
       return await db.transaction((txn) async {
+        // Подготовка данных с безопасной обработкой logoType
+        Map<String, dynamic> themeData = {
+          'name': theme.name,
+          'description': theme.description,
+          'color': theme.color,
+          'updatedAt': theme.updatedAt.millisecondsSinceEpoch,
+        };
+
+        // Добавляем logoType, только если колонка существует
+        try {
+          themeData['logoType'] = theme.logoType.index;
+        } catch (e) {
+          print('Предупреждение при обработке logoType: $e');
+          // Не добавляем logoType, если произошла ошибка
+        }
+
         // Обновляем тему
         final result = await txn.update(
           'themes',
-          {
-            'name': theme.name,
-            'description': theme.description,
-            'color': theme.color,
-            'updatedAt': theme.updatedAt.millisecondsSinceEpoch,
-          },
+          themeData,
           where: 'id = ?',
           whereArgs: [theme.id],
         );
@@ -893,8 +938,29 @@ class DatabaseService {
         return result;
       });
     } catch (e) {
-      print('Ошибка при обновлении темы: $e');
+      print('Критическая ошибка при обновлении темы: $e');
       rethrow;
+    }
+  }
+
+  // Метод проверки и модификации таблицы themes
+  Future<void> ensureThemesTableHasLogoType() async {
+    final db = await database;
+
+    try {
+      // Проверяем, есть ли колонка logoType в таблице themes
+      var tableInfo = await db.rawQuery("PRAGMA table_info(themes)");
+      bool hasLogoType =
+          tableInfo.any((column) => column['name'] == 'logoType');
+
+      if (!hasLogoType) {
+        print('Добавление колонки logoType в таблицу themes...');
+        await db.execute(
+            "ALTER TABLE themes ADD COLUMN logoType INTEGER DEFAULT 0");
+        print('Колонка logoType успешно добавлена');
+      }
+    } catch (e) {
+      print('Ошибка при проверке/добавлении колонки logoType: $e');
     }
   }
 
