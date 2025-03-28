@@ -28,6 +28,12 @@ class ThemesScreen extends StatefulWidget {
 
 class _ThemesScreenState extends State<ThemesScreen> {
   bool _isLoading = true;
+  bool _isColorDark(Color color) {
+    // Формула для вычисления яркости (0-1)
+    double brightness =
+        (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
+    return brightness < 0.3; // Если яркость < 0.3, считаем цвет тёмным
+  }
 
   @override
   void initState() {
@@ -398,18 +404,12 @@ class _ThemesScreenState extends State<ThemesScreen> {
 
 // Метод для создания логотипа темы
   Widget _buildThemeLogo(NoteTheme theme, Color themeColor) {
-    // Определяем номер иконки из типа логотипа
-    String iconNumber;
+    // Получаем номер иконки (от 01 до 55)
+    String iconNumber = (theme.logoType.index + 1).toString().padLeft(2, '0');
+    String assetName = 'assets/icons/$iconNumber.png';
 
-    if (theme.logoType.index <= 11) {
-      // Для старых названий используем смещение
-      iconNumber = (theme.logoType.index + 1).toString().padLeft(2, '0');
-    } else {
-      // Для новых типов используем номер из названия
-      iconNumber = (theme.logoType.index - 11 + 13).toString().padLeft(2, '0');
-    }
-
-    String assetName = 'assets/icons/aztec$iconNumber.png';
+    // Проверяем, является ли цвет темы темным
+    bool isDark = _isColorDark(themeColor);
 
     // Создаем круглую форму с иконкой внутри
     return Material(
@@ -423,17 +423,33 @@ class _ThemesScreenState extends State<ThemesScreen> {
         child: Padding(
           padding: const EdgeInsets.all(6.0), // Отступ для иконки
           child: ClipOval(
-            child: Image.asset(
-              assetName,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(
-                  Icons.image_not_supported,
-                  color: Colors.white,
-                  size: 24,
-                );
-              },
-            ),
+            child: isDark
+                ? ColorFiltered(
+                    colorFilter:
+                        const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    child: Image.asset(
+                      assetName,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.image_not_supported,
+                          color: Colors.white,
+                          size: 24,
+                        );
+                      },
+                    ),
+                  )
+                : Image.asset(
+                    assetName,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.image_not_supported,
+                        color: Colors.white,
+                        size: 24,
+                      );
+                    },
+                  ),
           ),
         ),
       ),

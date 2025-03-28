@@ -1,31 +1,62 @@
-// lib/models/theme.dart - использование только ацтекских иконок
-
 import 'dart:convert';
 
-// Перечисление только для ацтекских иконок
+// Перечисление для всех 55 доступных иконок
 enum ThemeLogoType {
-  // Сохраняем старые названия для совместимости с базой данных
-  // но все они будут отображаться как ацтекские иконки
-  book, // будет отображаться как aztec01
-  shapes, // будет отображаться как aztec02
-  feather, // будет отображаться как aztec03
-  scroll, // будет отображаться как aztec04
-  microphone, // будет отображаться как aztec05
-  code, // будет отображаться как aztec06
-  graduation, // будет отображаться как aztec07
-  beach, // будет отображаться как aztec08
-  party, // будет отображаться как aztec09
-  home, // будет отображаться как aztec10
-  business, // будет отображаться как aztec11
-  fitness, // будет отображаться как aztec12
-
-  // Дополнительные ацтекские иконки
-  aztec13,
-  aztec14,
-  aztec15,
-  aztec16,
-  aztec17,
-  aztec18,
+  icon01,
+  icon02,
+  icon03,
+  icon04,
+  icon05,
+  icon06,
+  icon07,
+  icon08,
+  icon09,
+  icon10,
+  icon11,
+  icon12,
+  icon13,
+  icon14,
+  icon15,
+  icon16,
+  icon17,
+  icon18,
+  icon19,
+  icon20,
+  icon21,
+  icon22,
+  icon23,
+  icon24,
+  icon25,
+  icon26,
+  icon27,
+  icon28,
+  icon29,
+  icon30,
+  icon31,
+  icon32,
+  icon33,
+  icon34,
+  icon35,
+  icon36,
+  icon37,
+  icon38,
+  icon39,
+  icon40,
+  icon41,
+  icon42,
+  icon43,
+  icon44,
+  icon45,
+  icon46,
+  icon47,
+  icon48,
+  icon49,
+  icon50,
+  icon51,
+  icon52,
+  icon53,
+  icon54,
+  icon55,
 }
 
 class NoteTheme {
@@ -46,7 +77,7 @@ class NoteTheme {
     required this.createdAt,
     required this.updatedAt,
     required this.noteIds,
-    this.logoType = ThemeLogoType.book,
+    this.logoType = ThemeLogoType.icon01,
   });
 
   NoteTheme copyWith({
@@ -93,10 +124,10 @@ class NoteTheme {
           map['logoType'] < ThemeLogoType.values.length) {
         parsedLogoType = ThemeLogoType.values[map['logoType']];
       } else {
-        parsedLogoType = ThemeLogoType.book;
+        parsedLogoType = ThemeLogoType.icon01;
       }
     } catch (e) {
-      parsedLogoType = ThemeLogoType.book;
+      parsedLogoType = ThemeLogoType.icon01;
     }
 
     return NoteTheme(

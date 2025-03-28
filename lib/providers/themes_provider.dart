@@ -49,42 +49,38 @@ class ThemesProvider with ChangeNotifier {
   }
 
   // Создание новой темы
-  Future<NoteTheme?> createTheme(
-      String name, String? description, String color, List<String> noteIds,
-      [ThemeLogoType logoType = ThemeLogoType
-          .book] // Добавлен опциональный параметр с дефолтным значением
-      ) async {
-    _isLoading = true;
-    notifyListeners();
-
+  Future<String> createTheme(
+    String name,
+    String? description,
+    String color,
+    List<String> noteIds,
+    ThemeLogoType logoType, // Используем переданный параметр logoType
+  ) async {
     try {
+      final id = const Uuid().v4();
+      final now = DateTime.now();
+
       final theme = NoteTheme(
-        id: const Uuid().v4(),
+        id: id,
         name: name,
         description: description,
         color: color,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        createdAt: now,
+        updatedAt: now,
         noteIds: noteIds,
-        logoType: logoType, // Используем переданный тип логотипа
+        logoType: logoType, // Используем переданный параметр logoType
       );
 
       await _databaseService.insertTheme(theme);
+
+      // Добавляем тему в список и обновляем UI
       _themes.add(theme);
-
-      // Обновляем кэш
-      _themeCache[theme.id] = theme;
-      _invalidateNotesCache(noteIds);
-
-      _isLoading = false;
       notifyListeners();
-      return theme;
+
+      return id;
     } catch (e) {
-      _hasError = true;
-      _errorMessage = "Ошибка создания темы: ${e.toString()}";
-      _isLoading = false;
-      notifyListeners();
-      return null;
+      print('Ошибка при создании темы: $e');
+      rethrow;
     }
   }
 

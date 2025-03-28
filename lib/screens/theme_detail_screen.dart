@@ -7,7 +7,6 @@ import '../providers/notes_provider.dart';
 import '../utils/constants.dart';
 import 'note_detail_screen.dart';
 import '../widgets/note_list.dart';
-import '../models/theme.dart';
 
 class ThemeDetailScreen extends StatefulWidget {
   final NoteTheme? theme; // Null если создаем новую тему
@@ -28,9 +27,16 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   List<Note> _themeNotes = [];
   bool _isEditing = false;
   bool _isLoading = false;
-  ThemeLogoType _selectedLogoType = ThemeLogoType.book;
+  ThemeLogoType _selectedLogoType = ThemeLogoType.icon01;
   bool _isSettingsChanged = false;
-  ThemeLogoType _defaultLogoType = ThemeLogoType.values[0];
+
+  // Метод для определения, является ли цвет темным
+  bool _isColorDark(Color color) {
+    // Формула для вычисления яркости (0-1)
+    double brightness =
+        (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
+    return brightness < 0.3; // Если яркость < 0.3, считаем цвет тёмным
+  }
 
   @override
   void initState() {
@@ -52,10 +58,6 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
 
       // Безопасное присваивание типа логотипа
       _selectedLogoType = widget.theme!.logoType;
-    } else {
-      // Для новой темы используем безопасное значение
-      _selectedLogoType =
-          ThemeLogoType.values[0]; // Первое значение из перечисления
     }
 
     _loadNotes();
@@ -102,8 +104,72 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
     super.dispose();
   }
 
-  // Упрощенный метод для построения селектора логотипа
+// Обновленный метод для построения полей ввода в стиле приложения
+  Widget _buildInputFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Поле ввода названия темы
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.white, // Белый цвет для полей ввода как на скриншоте
+            borderRadius: BorderRadius.circular(12), // Скругленные углы
+          ),
+          child: TextField(
+            controller: _nameController,
+            autofocus: false,
+            decoration: const InputDecoration(
+              hintText: 'Введите название темы',
+              contentPadding: EdgeInsets.all(16),
+              border: InputBorder.none,
+              hintStyle: TextStyle(color: Colors.grey),
+            ),
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+
+        // Поле ввода описания темы (с тем же стилем)
+        Container(
+          margin: const EdgeInsets.only(bottom: 24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: TextField(
+            controller: _descriptionController,
+            decoration: const InputDecoration(
+              hintText: 'Введите описание темы (необязательно)',
+              contentPadding: EdgeInsets.all(16),
+              border: InputBorder.none,
+              hintStyle: TextStyle(color: Colors.grey),
+            ),
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Метод для отображения сетки с выбором иконок (5x11)
   Widget _buildLogoTypeSelector() {
+    // Используем медиа-запрос для адаптации к размеру экрана
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Вычисляем сколько иконок в ряду для разных размеров экрана
+    int crossAxisCount = 5; // По умолчанию 5 в ряду
+    if (screenWidth < 320) {
+      crossAxisCount = 4; // Для очень маленьких экранов
+    } else if (screenWidth > 600) {
+      crossAxisCount = 6; // Для больших экранов
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -118,18 +184,18 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           ),
         ),
 
-        // Показываем все иконки в более компактной сетке
+        // Показываем все 55 иконок в сетке с адаптивным числом колонок
         GridView.builder(
           padding: EdgeInsets.zero,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5, // Увеличиваем количество колонок с 4 до 5
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
             childAspectRatio: 1.0,
-            crossAxisSpacing: 8, // Уменьшаем отступы
+            crossAxisSpacing: 8,
             mainAxisSpacing: 8,
           ),
-          itemCount: ThemeLogoType.values.length,
+          itemCount: ThemeLogoType.values.length, // 55 иконок
           itemBuilder: (context, index) {
             final logoType = ThemeLogoType.values[index];
             return _buildCircleLogoOption(
@@ -142,37 +208,150 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
     );
   }
 
-  // Метод для получения PNG-иконки в зависимости от типа
-  Widget _getLogoIcon(ThemeLogoType type) {
-    // Получаем номер иконки на основе индекса перечисления
-    String iconNumber;
+  // Обновленный метод для отображения выбора цветов с оптимальным распределением
+  Widget _buildColorSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 4.0, bottom: 12.0),
+          child: Text(
+            'Цвет темы',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
 
-    if (type.index <= 11) {
-      // Для старых названий используем смещение
-      iconNumber = (type.index + 1).toString().padLeft(2, '0');
-    } else {
-      // Для новых типов используем номер из названия
-      iconNumber = (type.index - 11 + 13).toString().padLeft(2, '0');
-    }
-
-    String assetName = 'assets/icons/aztec$iconNumber.png';
-
-    return Image.asset(
-      assetName,
-      width: 32,
-      height: 32,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        return Icon(
-          Icons.image_not_supported,
-          size: 20,
-          color: Colors.white,
-        );
-      },
+        // Используем оптимальное распределение цветов
+        _buildOptimizedColorGrid(),
+      ],
     );
   }
 
-  // Обновлённый метод для создания круглого логотипа с PNG-иконкой
+  // Новый метод для оптимального распределения цветов
+  Widget _buildOptimizedColorGrid() {
+    final totalColors = AppColors.themeColors.length;
+
+    // Рассчитываем оптимальное количество цветов в строке (от 5 до 7)
+    int optimalColorsPerRow = 6; // По умолчанию
+    int minRowCount = (totalColors / 7)
+        .ceil(); // Минимальное кол-во строк при 7 цветах в строке
+
+    // Проверяем варианты с 5, 6 и 7 цветами в строке, выбираем оптимальный
+    for (int i = 5; i <= 7; i++) {
+      int rows = (totalColors / i).ceil();
+      // Если последняя строка заполнена более чем на 70% или количество строк меньше
+      if (rows < minRowCount || (totalColors % i) / i > 0.7) {
+        optimalColorsPerRow = i;
+        minRowCount = rows;
+      }
+    }
+
+    // Количество строк
+    int rowCount = (totalColors / optimalColorsPerRow).ceil();
+
+    // Строим сетку
+    return Column(
+      children: List.generate(rowCount, (rowIndex) {
+        // Вычисляем количество цветов в текущей строке
+        int startIndex = rowIndex * optimalColorsPerRow;
+        int endIndex = (startIndex + optimalColorsPerRow <= totalColors)
+            ? startIndex + optimalColorsPerRow
+            : totalColors;
+        int colorsInThisRow = endIndex - startIndex;
+
+        // Создаем подлист цветов для этой строки
+        List<Color> rowColors =
+            AppColors.themeColors.sublist(startIndex, endIndex);
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: Row(
+            mainAxisAlignment:
+                MainAxisAlignment.spaceBetween, // Распределяем равномерно
+            children: List.generate(colorsInThisRow, (colIndex) {
+              final color = rowColors[colIndex];
+              final isSelected = _selectedColor.value == color.value;
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedColor = color;
+                    _isSettingsChanged = true;
+                  });
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: isSelected
+                        ? Border.all(color: Colors.white, width: 3)
+                        : null,
+                  ),
+                  child: isSelected
+                      ? const Center(
+                          child: Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        )
+                      : null,
+                ),
+              );
+            }),
+          ),
+        );
+      }),
+    );
+  }
+
+  // Метод для получения PNG-иконки в зависимости от типа
+  Widget _getLogoIcon(ThemeLogoType type) {
+    // Получаем номер иконки (от 01 до 55)
+    String iconNumber = (type.index + 1).toString().padLeft(2, '0');
+    String assetName = 'assets/icons/$iconNumber.png';
+
+    // Проверяем, является ли цвет темы темным
+    bool isDark = _isColorDark(_selectedColor);
+
+    return isDark
+        ? ColorFiltered(
+            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+            child: Image.asset(
+              assetName,
+              width: 32,
+              height: 32,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(
+                  Icons.image_not_supported,
+                  size: 20,
+                  color: Colors.white,
+                );
+              },
+            ),
+          )
+        : Image.asset(
+            assetName,
+            width: 32,
+            height: 32,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(
+                Icons.image_not_supported,
+                size: 20,
+                color: Colors.black45,
+              );
+            },
+          );
+  }
+
+  // Метод для создания круглого логотипа с PNG-иконкой
   Widget _buildCircleLogoOption(ThemeLogoType type, Widget icon) {
     final isSelected = _selectedLogoType == type;
 
@@ -191,8 +370,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           color: _selectedColor,
           border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
         ),
-        padding: const EdgeInsets.all(
-            8), // Увеличено с 4 до 8 для пропорционального уменьшения иконки
+        padding: const EdgeInsets.all(8),
         child: ClipOval(
           child: icon,
         ),
@@ -200,111 +378,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
     );
   }
 
-  // Упрощенный метод для отображения выбора цветов
-  Widget _buildColorSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 4.0, bottom: 12.0),
-          child: Text(
-            'Цвет темы',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: AppColors.themeColors.map((color) {
-            final isSelected = _selectedColor.value == color.value;
-
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedColor = color;
-                  _isSettingsChanged = true;
-                });
-              },
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: isSelected
-                      ? Border.all(color: Colors.white, width: 3)
-                      : null,
-                ),
-                child: isSelected
-                    ? const Center(
-                        child: Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      )
-                    : null,
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  // Упрощенный метод для построения полей ввода
-  Widget _buildInputFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Поле ввода названия темы
-        Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: TextField(
-            controller: _nameController,
-            autofocus: false,
-            decoration: InputDecoration(
-              hintText: 'Введите название темы',
-              contentPadding: const EdgeInsets.all(16),
-              border: InputBorder.none,
-            ),
-            style: const TextStyle(
-              fontSize: 16,
-            ),
-          ),
-        ),
-
-        // Поле ввода описания темы (с тем же стилем)
-        Container(
-          margin: const EdgeInsets.only(bottom: 24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: TextField(
-            controller: _descriptionController,
-            decoration: InputDecoration(
-              hintText: 'Введите описание темы (необязательно)',
-              contentPadding: const EdgeInsets.all(16),
-              border: InputBorder.none,
-            ),
-            style: const TextStyle(
-              fontSize: 16,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Упрощенный метод для списка заметок
+  // Обновленный метод для списка заметок - адаптивный для разных экранов
   Widget _buildNoteSelector() {
     if (_notes.isEmpty) {
       return const SizedBox.shrink();
@@ -324,77 +398,88 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           ),
         ),
 
-        // Карточки заметок в простом стиле
-        ListView.builder(
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          physics:
-              const NeverScrollableScrollPhysics(), // Отключаем отдельную прокрутку
-          itemCount: _notes.length,
-          itemBuilder: (context, index) {
-            final note = _notes[index];
-            final isSelected = _selectedNoteIds.contains(note.id);
+        // Адаптивные карточки заметок с ограничением высоты
+        Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height *
+                0.35, // Ограничиваем максимальную высоту
+          ),
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            itemCount: _notes.length,
+            itemBuilder: (context, index) {
+              final note = _notes[index];
+              final isSelected = _selectedNoteIds.contains(note.id);
 
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: CheckboxListTile(
-                title: Text(
-                  _getNoteTitleFromContent(note.content),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                subtitle: Text(
-                  _getNotePreviewFromContent(note.content),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: CheckboxListTile(
+                  title: Text(
+                    _getNoteTitleFromContent(note.content),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    _getNotePreviewFromContent(note.content),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  value: isSelected,
+                  activeColor: _selectedColor,
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _selectedNoteIds.add(note.id);
+                      } else {
+                        _selectedNoteIds.remove(note.id);
+                      }
+                      _isSettingsChanged = true;
+                    });
+                  },
                 ),
-                value: isSelected,
-                activeColor: _selectedColor,
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedNoteIds.add(note.id);
-                    } else {
-                      _selectedNoteIds.remove(note.id);
-                    }
-                    _isSettingsChanged = true;
-                  });
-                },
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ],
     );
   }
 
-  // Упрощенный метод построения формы
+  // Обновленный метод построения формы с адаптивной прокруткой
   Widget _buildEditForm() {
+    // Используем медиа-запрос для адаптации под разные экраны
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenHeight < 600; // Для компактных экранов
+
     return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Основные поля ввода
-            _buildInputFields(),
+      padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Основные поля ввода
+          _buildInputFields(),
 
-            // Выбор цвета
-            _buildColorSelector(),
+          // Выбор цвета
+          _buildColorSelector(),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-            // Выбор логотипа
-            _buildLogoTypeSelector(),
+          // Выбор логотипа
+          _buildLogoTypeSelector(),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-            // Выбор заметок
-            if (!_isEditing) _buildNoteSelector(),
+          // Выбор заметок
+          if (!_isEditing) _buildNoteSelector(),
 
-            const SizedBox(height: 20),
-          ],
-        ),
+          // Обеспечиваем отступ внизу для плавающей кнопки
+          const SizedBox(height: 30),
+        ],
       ),
     );
   }
@@ -403,7 +488,56 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Редактирование темы' : 'Новая тема'),
+        title: Row(
+          children: [
+            // Отображаем выбранный логотип
+            Container(
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _selectedColor,
+              ),
+              width: 36,
+              height: 36,
+              child: Padding(
+                padding: const EdgeInsets.all(6.0),
+                child: ClipOval(
+                  child: _isColorDark(_selectedColor)
+                      ? ColorFiltered(
+                          colorFilter: const ColorFilter.mode(
+                              Colors.white, BlendMode.srcIn),
+                          child: Image.asset(
+                            'assets/icons/${(_selectedLogoType.index + 1).toString().padLeft(2, '0')}.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.image_not_supported,
+                                size: 18,
+                                color: Colors.white,
+                              );
+                            },
+                          ),
+                        )
+                      : Image.asset(
+                          'assets/icons/${(_selectedLogoType.index + 1).toString().padLeft(2, '0')}.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              Icons.image_not_supported,
+                              size: 18,
+                              color: Colors.black45,
+                            );
+                          },
+                        ),
+                ),
+              ),
+            ),
+            // Отображаем заголовок
+            Expanded(
+              child: Text(_isEditing ? 'Редактирование темы' : 'Новая тема'),
+            ),
+          ],
+        ),
         actions: [
           if (_isEditing)
             IconButton(
@@ -417,12 +551,14 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
-          : _buildEditForm(),
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: _buildEditForm(),
+            ),
     );
   }
 
-  // Методы для работы с контентом заметок (оставлены без изменений)
+  // Методы для работы с контентом заметок
   String _getNoteTitleFromContent(String content) {
     String cleanContent =
         content.replaceAll(RegExp(r'!\[voice\]\(voice:[^)]+\)'), '');

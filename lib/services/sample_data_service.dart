@@ -26,7 +26,7 @@ class SampleDataService {
       'Рабочие задачи и проекты',
       '0xFF4CAF50', // Зеленый
       [],
-      ThemeLogoType.scroll,
+      ThemeLogoType.icon01,
     );
 
     await themesProvider.createTheme(
@@ -34,7 +34,7 @@ class SampleDataService {
       'Личные заметки и задачи',
       '0xFF2196F3', // Синий
       [],
-      ThemeLogoType.feather,
+      ThemeLogoType.icon02,
     );
   }
 

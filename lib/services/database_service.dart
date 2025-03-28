@@ -50,7 +50,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3, // Увеличиваем версию базы данных
+      version: 3, // Версия базы данных
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -63,17 +63,17 @@ class DatabaseService {
       if (oldVersion < 2) {
         // Создаем таблицу note_links если она не существует
         await db.execute('''
-      CREATE TABLE IF NOT EXISTS note_links(
-        id TEXT PRIMARY KEY,
-        sourceNoteId TEXT,
-        targetNoteId TEXT,
-        themeId TEXT,
-        createdAt INTEGER NOT NULL,
-        FOREIGN KEY (sourceNoteId) REFERENCES notes(id) ON DELETE CASCADE,
-        FOREIGN KEY (targetNoteId) REFERENCES notes(id) ON DELETE CASCADE,
-        FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE SET NULL
-      )
-      ''');
+        CREATE TABLE IF NOT EXISTS note_links(
+          id TEXT PRIMARY KEY,
+          sourceNoteId TEXT,
+          targetNoteId TEXT,
+          themeId TEXT,
+          createdAt INTEGER NOT NULL,
+          FOREIGN KEY (sourceNoteId) REFERENCES notes(id) ON DELETE CASCADE,
+          FOREIGN KEY (targetNoteId) REFERENCES notes(id) ON DELETE CASCADE,
+          FOREIGN KEY (themeId) REFERENCES themes(id) ON DELETE SET NULL
+        )
+        ''');
 
         // Добавляем индексы для улучшения производительности
         await db.execute(
@@ -117,6 +117,12 @@ class DatabaseService {
           await db.execute(
               "ALTER TABLE themes ADD COLUMN logoType INTEGER DEFAULT 0");
         }
+
+        // После добавления колонки logoType нужно проверить все существующие темы
+        // Миграцию данных (из старого формата иконок в новый) лучше выполнить
+        // в ThemesProvider после инициализации
+        print(
+            'База данных обновлена до версии 3. Требуется миграция логотипов тем.');
       }
     } catch (e) {
       print('Ошибка обновления базы данных: $e');
@@ -201,6 +207,27 @@ class DatabaseService {
     }
   }
 
+  // Метод проверки и модификации таблицы themes
+  Future<void> ensureThemesTableHasLogoType() async {
+    final db = await database;
+
+    try {
+      // Проверяем, есть ли колонка logoType в таблице themes
+      var tableInfo = await db.rawQuery("PRAGMA table_info(themes)");
+      bool hasLogoType =
+          tableInfo.any((column) => column['name'] == 'logoType');
+
+      if (!hasLogoType) {
+        print('Добавление колонки logoType в таблицу themes...');
+        await db.execute(
+            "ALTER TABLE themes ADD COLUMN logoType INTEGER DEFAULT 0");
+        print('Колонка logoType успешно добавлена');
+      }
+    } catch (e) {
+      print('Ошибка при проверке/добавлении колонки logoType: $e');
+    }
+  }
+
   // CRUD операции для Note с транзакциями и обработкой ошибок
   Future<String> insertNote(Note note) async {
     final db = await database;
@@ -233,6 +260,7 @@ class DatabaseService {
                 ? json.encode(
                     note.deadlineExtensions!.map((x) => x.toMap()).toList())
                 : null,
+            'voiceNotes': json.encode(note.voiceNotes),
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -337,6 +365,9 @@ class DatabaseService {
                       .map((x) => DeadlineExtension.fromMap(
                           Map<String, dynamic>.from(x as Map))))
               : null,
+          voiceNotes: map['voiceNotes'] != null
+              ? List<String>.from(json.decode(map['voiceNotes'] as String))
+              : [],
         );
       }).toList();
     } catch (e) {
@@ -486,6 +517,9 @@ class DatabaseService {
                       .map((x) => DeadlineExtension.fromMap(
                           Map<String, dynamic>.from(x as Map))))
               : null,
+          voiceNotes: map['voiceNotes'] != null
+              ? List<String>.from(json.decode(map['voiceNotes'] as String))
+              : [],
         );
       }).toList();
     } catch (e) {
@@ -542,6 +576,9 @@ class DatabaseService {
                     (x) => DeadlineExtension.fromMap(
                         Map<String, dynamic>.from(x as Map))))
             : null,
+        voiceNotes: map['voiceNotes'] != null
+            ? List<String>.from(json.decode(map['voiceNotes'] as String))
+            : [],
       );
     } catch (e) {
       print('Ошибка при получении заметки: $e');
@@ -599,6 +636,7 @@ class DatabaseService {
                 ? json.encode(
                     note.deadlineExtensions!.map((x) => x.toMap()).toList())
                 : null,
+            'voiceNotes': json.encode(note.voiceNotes),
           },
           where: 'id = ?',
           whereArgs: [note.id],
@@ -700,13 +738,8 @@ class DatabaseService {
           'updatedAt': theme.updatedAt.millisecondsSinceEpoch,
         };
 
-        // Добавляем logoType, только если колонка существует
-        try {
-          themeData['logoType'] = theme.logoType.index;
-        } catch (e) {
-          print('Предупреждение при обработке logoType: $e');
-          themeData['logoType'] = 0; // Значение по умолчанию в случае ошибки
-        }
+        // Добавляем logoType, используя новое перечисление ThemeLogoType с icon01-icon55
+        themeData['logoType'] = theme.logoType.index;
 
         // Вставляем тему
         await txn.insert(
@@ -777,10 +810,27 @@ class DatabaseService {
         themeNoteMap[themeId]!.add(noteId);
       }
 
-      // Формируем список тем со связями и учитываем logoType
+      // Формируем список тем со связями и учитываем logoType с новыми иконками
       return themeMaps.map((map) {
         final themeId = map['id'] as String;
         final noteIds = themeNoteMap[themeId] ?? [];
+
+        // Проверяем и корректируем logoType, используя новое перечисление
+        ThemeLogoType logoType;
+        try {
+          int logoTypeIndex = map['logoType'] as int? ?? 0;
+          // Убедимся, что logoType в допустимом диапазоне
+          if (logoTypeIndex >= 0 &&
+              logoTypeIndex < ThemeLogoType.values.length) {
+            logoType = ThemeLogoType.values[logoTypeIndex];
+          } else {
+            // Если значение вне диапазона, используем первую иконку
+            logoType = ThemeLogoType.icon01;
+          }
+        } catch (e) {
+          // В случае любой ошибки используем первую иконку
+          logoType = ThemeLogoType.icon01;
+        }
 
         return NoteTheme(
           id: themeId,
@@ -792,10 +842,7 @@ class DatabaseService {
           updatedAt:
               DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
           noteIds: noteIds,
-          logoType: map['logoType'] != null
-              ? ThemeLogoType.values[map['logoType'] as int]
-              : ThemeLogoType
-                  .book, // Загружаем тип логотипа или используем книгу по умолчанию
+          logoType: logoType,
         );
       }).toList();
     } catch (e) {
@@ -822,6 +869,22 @@ class DatabaseService {
       // Получаем связи с заметками для конкретной темы
       final noteIds = await getNoteIdsForTheme(id);
 
+      // Проверяем и корректируем logoType, используя новое перечисление
+      ThemeLogoType logoType;
+      try {
+        int logoTypeIndex = map['logoType'] as int? ?? 0;
+        // Убедимся, что logoType в допустимом диапазоне
+        if (logoTypeIndex >= 0 && logoTypeIndex < ThemeLogoType.values.length) {
+          logoType = ThemeLogoType.values[logoTypeIndex];
+        } else {
+          // Если значение вне диапазона, используем первую иконку
+          logoType = ThemeLogoType.icon01;
+        }
+      } catch (e) {
+        // В случае любой ошибки используем первую иконку
+        logoType = ThemeLogoType.icon01;
+      }
+
       return NoteTheme(
         id: map['id'] as String,
         name: map['name'] as String,
@@ -830,10 +893,7 @@ class DatabaseService {
         createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
         updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
         noteIds: noteIds,
-        logoType: map['logoType'] != null
-            ? ThemeLogoType.values[map['logoType'] as int]
-            : ThemeLogoType
-                .book, // Загружаем тип логотипа или используем книгу по умолчанию
+        logoType: logoType,
       );
     } catch (e) {
       print('Ошибка при получении темы: $e');
@@ -866,7 +926,7 @@ class DatabaseService {
 
     try {
       return await db.transaction((txn) async {
-        // Подготовка данных с безопасной обработкой logoType
+        // Подготовка данных обновления
         Map<String, dynamic> themeData = {
           'name': theme.name,
           'description': theme.description,
@@ -874,13 +934,8 @@ class DatabaseService {
           'updatedAt': theme.updatedAt.millisecondsSinceEpoch,
         };
 
-        // Добавляем logoType, только если колонка существует
-        try {
-          themeData['logoType'] = theme.logoType.index;
-        } catch (e) {
-          print('Предупреждение при обработке logoType: $e');
-          // Не добавляем logoType, если произошла ошибка
-        }
+        // Добавляем logoType, используя новое перечисление ThemeLogoType с icon01-icon55
+        themeData['logoType'] = theme.logoType.index;
 
         // Обновляем тему
         final result = await txn.update(
@@ -940,27 +995,6 @@ class DatabaseService {
     } catch (e) {
       print('Критическая ошибка при обновлении темы: $e');
       rethrow;
-    }
-  }
-
-  // Метод проверки и модификации таблицы themes
-  Future<void> ensureThemesTableHasLogoType() async {
-    final db = await database;
-
-    try {
-      // Проверяем, есть ли колонка logoType в таблице themes
-      var tableInfo = await db.rawQuery("PRAGMA table_info(themes)");
-      bool hasLogoType =
-          tableInfo.any((column) => column['name'] == 'logoType');
-
-      if (!hasLogoType) {
-        print('Добавление колонки logoType в таблицу themes...');
-        await db.execute(
-            "ALTER TABLE themes ADD COLUMN logoType INTEGER DEFAULT 0");
-        print('Колонка logoType успешно добавлена');
-      }
-    } catch (e) {
-      print('Ошибка при проверке/добавлении колонки logoType: $e');
     }
   }
 
@@ -1064,6 +1098,9 @@ class DatabaseService {
                       .map((x) => DeadlineExtension.fromMap(
                           Map<String, dynamic>.from(x as Map))))
               : null,
+          voiceNotes: map['voiceNotes'] != null
+              ? List<String>.from(json.decode(map['voiceNotes'] as String))
+              : [],
         );
       }).toList();
     } catch (e) {
@@ -1112,6 +1149,7 @@ class DatabaseService {
                     ? json.encode(
                         note.deadlineExtensions!.map((x) => x.toMap()).toList())
                     : null,
+                'voiceNotes': json.encode(note.voiceNotes),
               },
               where: 'id = ?',
               whereArgs: [note.id],
