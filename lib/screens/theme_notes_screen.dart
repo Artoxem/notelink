@@ -152,244 +152,76 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
 
   // Добавляем метод для отображения логотипа темы
   Widget _buildThemeLogo(NoteTheme theme, Color themeColor) {
-    // Определяем форму и содержимое логотипа в зависимости от типа
-    Widget icon;
-    ShapeBorder? shape;
-    Widget? customShape;
+    // Определяем номер иконки из типа логотипа
+    String iconNumber;
 
-    switch (theme.logoType) {
-      case ThemeLogoType.book:
-        // Круглая форма с иконкой книги
-        icon = const Icon(
-          Icons.book,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
-        break;
-
-      case ThemeLogoType.shapes:
-        // Квадратная форма с иконкой геометрических фигур
-        icon = const Icon(
-          Icons.category,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
-        break;
-
-      case ThemeLogoType.feather:
-        // Треугольная форма с иконкой пера
-        icon = const Icon(
-          Icons.edit,
-          color: Colors.white,
-          size: 24,
-        );
-        // Треугольная форма реализована через ClipPath
-        customShape = ClipPath(
-          clipper: TriangleClipper(),
-          child: Container(
-            width: 48,
-            height: 48,
-            color: themeColor,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: icon,
-              ),
-            ),
-          ),
-        );
-        break;
-
-      case ThemeLogoType.scroll:
-        // Пятиугольная форма с иконкой свитка
-        icon = const Icon(
-          Icons.description,
-          color: Colors.white,
-          size: 24,
-        );
-        // Пятиугольная форма реализована через ClipPath
-        customShape = ClipPath(
-          clipper: PentagonClipper(),
-          child: Container(
-            width: 48,
-            height: 48,
-            color: themeColor,
-            child: Center(child: icon),
-          ),
-        );
-        break;
-
-      case ThemeLogoType.microphone:
-        // Микрофон - добавляем новые типы
-        icon = const Icon(
-          Icons.mic,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
-        break;
-
-      case ThemeLogoType.code:
-        // Программирование
-        icon = const Icon(
-          Icons.code,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
-        break;
-
-      case ThemeLogoType.graduation:
-        // Образование
-        icon = const Icon(
-          Icons.school,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
-        break;
-
-      case ThemeLogoType.beach:
-        // Отдых
-        icon = const Icon(
-          Icons.beach_access,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
-        break;
-
-      case ThemeLogoType.party:
-        // Праздники
-        icon = const Icon(
-          Icons.celebration,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
-        break;
-
-      case ThemeLogoType.home:
-        // Дом
-        icon = const Icon(
-          Icons.home,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
-        break;
-
-      case ThemeLogoType.business:
-        // Бизнес
-        icon = const Icon(
-          Icons.business_center,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
-        break;
-
-      case ThemeLogoType.fitness:
-        // Фитнес
-        icon = const Icon(
-          Icons.fitness_center,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        );
-        break;
-
-      default:
-        // По умолчанию - круглая форма с иконкой книги
-        icon = const Icon(
-          Icons.book,
-          color: Colors.white,
-          size: 24,
-        );
-        shape = const CircleBorder();
+    if (theme.logoType.index <= 11) {
+      // Для старых названий используем смещение
+      iconNumber = (theme.logoType.index + 1).toString().padLeft(2, '0');
+    } else {
+      // Для новых типов используем номер из названия
+      iconNumber = (theme.logoType.index - 11 + 13).toString().padLeft(2, '0');
     }
 
-    // Если есть кастомная форма, возвращаем ее
-    if (customShape != null) {
-      return customShape;
-    }
+    String assetName = 'assets/icons/aztec$iconNumber.png';
 
-    // Стандартная реализация для круглой и квадратной форм
+    // Создаем круглую форму с иконкой внутри
     return Material(
-      shape: shape,
-      color: themeColor,
+      shape: const CircleBorder(),
+      color: themeColor, // Используем цвет темы как фон
       elevation: 4,
       shadowColor: themeColor.withOpacity(0.3),
       child: SizedBox(
         width: 48,
         height: 48,
-        child: Center(child: icon),
+        child: Padding(
+          padding: const EdgeInsets.all(6.0), // Отступ для иконки
+          child: ClipOval(
+            child: Image.asset(
+              assetName,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(
+                  Icons.image_not_supported,
+                  color: Colors.white,
+                  size: 24,
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  // Добавляем метод для отображения правильной иконки в зависимости от типа логотипа
   Widget _buildThemeLogoIcon(ThemeLogoType logoType) {
-    // Определяем иконку в зависимости от типа логотипа
-    IconData iconData;
-
-    switch (logoType) {
-      case ThemeLogoType.book:
-        iconData = Icons.auto_stories;
-        break;
-      case ThemeLogoType.shapes:
-        iconData = Icons.category;
-        break;
-      case ThemeLogoType.feather:
-        iconData = Icons.brush;
-        break;
-      case ThemeLogoType.scroll:
-        iconData = Icons.description;
-        break;
-      case ThemeLogoType.microphone:
-        iconData = Icons.mic;
-        break;
-      case ThemeLogoType.code:
-        iconData = Icons.code;
-        break;
-      case ThemeLogoType.graduation:
-        iconData = Icons.school;
-        break;
-      case ThemeLogoType.beach:
-        iconData = Icons.beach_access;
-        break;
-      case ThemeLogoType.party:
-        iconData = Icons.celebration;
-        break;
-      case ThemeLogoType.home:
-        iconData = Icons.home;
-        break;
-      case ThemeLogoType.business:
-        iconData = Icons.business_center;
-        break;
-      case ThemeLogoType.fitness:
-        iconData = Icons.fitness_center;
-        break;
-      default:
-        iconData = Icons.auto_stories; // Значение по умолчанию
-    }
-
-    return Icon(
-      iconData,
-      color: Colors.white,
-      size: 18,
-    );
+  // Определяем номер иконки из типа логотипа
+  String iconNumber;
+  
+  if (logoType.index <= 11) {
+    // Для старых названий используем смещение
+    iconNumber = (logoType.index + 1).toString().padLeft(2, '0');
+  } else {
+    // Для новых типов используем номер из названия
+    iconNumber = (logoType.index - 11 + 13).toString().padLeft(2, '0');
   }
+  
+  String assetName = 'assets/icons/aztec$iconNumber.png';
+  
+  return Image.asset(
+    assetName,
+    width: 18,
+    height: 18,
+    fit: BoxFit.cover,
+    errorBuilder: (context, error, stackTrace) {
+      return Icon(
+        Icons.image_not_supported,
+        color: Colors.white,
+        size: 18,
+      );
+    },
+  );
+}
 
   @override
   Widget build(BuildContext context) {

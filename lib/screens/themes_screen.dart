@@ -398,64 +398,42 @@ class _ThemesScreenState extends State<ThemesScreen> {
 
 // Метод для создания логотипа темы
   Widget _buildThemeLogo(NoteTheme theme, Color themeColor) {
-    // Определяем иконку в зависимости от типа
-    IconData iconData;
+    // Определяем номер иконки из типа логотипа
+    String iconNumber;
 
-    switch (theme.logoType) {
-      case ThemeLogoType.book:
-        iconData = Icons.book;
-        break;
-      case ThemeLogoType.shapes:
-        iconData = Icons.category;
-        break;
-      case ThemeLogoType.feather:
-        iconData = Icons.edit;
-        break;
-      case ThemeLogoType.scroll:
-        iconData = Icons.description;
-        break;
-      case ThemeLogoType.microphone:
-        iconData = Icons.mic;
-        break;
-      case ThemeLogoType.code:
-        iconData = Icons.code;
-        break;
-      case ThemeLogoType.graduation:
-        iconData = Icons.school;
-        break;
-      case ThemeLogoType.beach:
-        iconData = Icons.beach_access;
-        break;
-      case ThemeLogoType.party:
-        iconData = Icons.celebration;
-        break;
-      case ThemeLogoType.home:
-        iconData = Icons.home;
-        break;
-      case ThemeLogoType.business:
-        iconData = Icons.business_center;
-        break;
-      case ThemeLogoType.fitness:
-        iconData = Icons.fitness_center;
-        break;
-      default:
-        iconData = Icons.book;
+    if (theme.logoType.index <= 11) {
+      // Для старых названий используем смещение
+      iconNumber = (theme.logoType.index + 1).toString().padLeft(2, '0');
+    } else {
+      // Для новых типов используем номер из названия
+      iconNumber = (theme.logoType.index - 11 + 13).toString().padLeft(2, '0');
     }
 
-    // Используем круглую форму для всех иконок
+    String assetName = 'assets/icons/aztec$iconNumber.png';
+
+    // Создаем круглую форму с иконкой внутри
     return Material(
       shape: const CircleBorder(),
-      color: themeColor,
+      color: themeColor, // Используем цвет темы как фон
       elevation: 4,
       shadowColor: themeColor.withOpacity(0.3),
       child: SizedBox(
         width: 48,
         height: 48,
-        child: Center(
-          child: Icon(
-            iconData,
-            color: Colors.white,
-            size: 24,
+        child: Padding(
+          padding: const EdgeInsets.all(6.0), // Отступ для иконки
+          child: ClipOval(
+            child: Image.asset(
+              assetName,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(
+                  Icons.image_not_supported,
+                  color: Colors.white,
+                  size: 24,
+                );
+              },
+            ),
           ),
         ),
       ),

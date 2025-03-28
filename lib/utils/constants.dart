@@ -42,7 +42,7 @@ class AppColors {
     Color.fromARGB(255, 187, 162, 0),
     Color(0xFFFF4500),
     Color(0xFF27AE60),
-    Color(0xFF8B0000),
+    Color.fromARGB(255, 179, 0, 0),
     Color(0xFF30336B),
     Color.fromARGB(255, 99, 0, 102),
     Color.fromARGB(255, 125, 73, 41),
@@ -51,6 +51,8 @@ class AppColors {
     Color.fromARGB(255, 0, 0, 0),
     Color.fromARGB(255, 192, 60, 126),
     Color(0xFF0B4619),
+    Color.fromARGB(255, 92, 11, 39),
+    Color.fromARGB(255, 75, 173, 0),
   ];
 
   // Системные цвета для интерфейса
