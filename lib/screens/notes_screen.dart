@@ -278,51 +278,68 @@ class _NotesScreenState extends State<NotesScreen>
   Future<void> _loadData() async {
     if (_isRefreshing) return; // Предотвращаем параллельные запросы загрузки
 
-    _isRefreshing = true;
-
-    // Загружаем заметки, темы и связи между ними
-    final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
+    setState(() {
+      _isRefreshing = true;
+    });
 
     try {
-      // Используем Future.wait для параллельной загрузки
-      await Future.wait(
-          [notesProvider.loadNotes(), themesProvider.loadThemes()],
-          eagerError: true);
+      // Загружаем заметки, темы и связи между ними
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+      final themesProvider =
+          Provider.of<ThemesProvider>(context, listen: false);
 
-      // Продолжаем только если компонент все еще в дереве
-      if (!mounted) return;
+      try {
+        // Используем Future.wait для параллельной загрузки
+        await Future.wait(
+            [notesProvider.loadNotes(), themesProvider.loadThemes()],
+            eagerError: true);
 
-      // Очищаем кэши после обновления данных
-      _clearCaches();
+        // Продолжаем только если компонент все еще в дереве
+        if (!mounted) return;
 
-      // Инициализируем анимации для каждой заметки
-      _initializeItemAnimations(notesProvider.notes);
+        // Очищаем кэши после обновления данных
+        _clearCaches();
 
-      // Обновляем время последнего обновления
-      _lastCacheUpdate = DateTime.now();
-    } catch (e) {
-      // Обработка ошибок загрузки
-      if (!mounted) return;
+        // Инициализируем анимации для каждой заметки
+        _initializeItemAnimations(notesProvider.notes);
 
-      // Показываем пользователю ошибку с возможностью повторить
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Ошибка загрузки данных'),
-          action: SnackBarAction(
-            label: 'Повторить',
-            onPressed: _loadData,
+        // Обновляем время последнего обновления
+        _lastCacheUpdate = DateTime.now();
+
+        // Явно обновляем UI
+        setState(() {});
+      } catch (e) {
+        // Обработка ошибок загрузки
+        if (!mounted) return;
+
+        // Показываем пользователю ошибку с возможностью повторить
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Ошибка загрузки данных'),
+            action: SnackBarAction(
+              label: 'Повторить',
+              onPressed: _loadData,
+            ),
+            duration: const Duration(seconds: 5),
           ),
-          duration: const Duration(seconds: 5),
-        ),
-      );
+        );
 
-      // Логируем ошибку для отладки
-      print('Ошибка загрузки данных: $e');
-    } finally {
-      // Сбрасываем флаг загрузки, только если компонент все еще в дереве
+        // Логируем ошибку для отладки
+        print('Ошибка загрузки данных: $e');
+      } finally {
+        // Сбрасываем флаг загрузки, только если компонент все еще в дереве
+        if (mounted) {
+          setState(() {
+            _isRefreshing = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Ошибка при получении провайдеров: $e');
       if (mounted) {
-        _isRefreshing = false;
+        setState(() {
+          _isRefreshing = false;
+        });
       }
     }
   }

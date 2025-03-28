@@ -39,6 +39,7 @@ class AppColors {
 
   // Цвета для тем (категорий) - цветные точки
   static const List<Color> themeColors = [
+    Color.fromARGB(255, 75, 173, 0),
     Color.fromARGB(255, 187, 162, 0),
     Color(0xFFFF4500),
     Color(0xFF27AE60),
@@ -52,7 +53,6 @@ class AppColors {
     Color.fromARGB(255, 192, 60, 126),
     Color(0xFF0B4619),
     Color.fromARGB(255, 92, 11, 39),
-    Color.fromARGB(255, 75, 173, 0),
   ];
 
   // Системные цвета для интерфейса

@@ -51,16 +51,17 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen>
     with TickerProviderStateMixin {
+  // Переменные состояния
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   bool _isLoading = false;
-  bool _isCalendarExpanded = true;
+  bool _isCalendarExpanded = true; // Эту переменную оставляем
 
   Map<DateTime, List<Note>> _events = {};
   List<Note> _selectedEvents = [];
 
-  // Анимация для перехода между месяцами
+// Анимация для перехода между месяцами
   late AnimationController _pageChangeController;
   late Animation<double> _pageChangeAnimation;
 
@@ -425,23 +426,27 @@ class _CalendarScreenState extends State<CalendarScreen>
     final isSmallScreen = screenHeight < 600;
 
     // Адаптивно рассчитываем высоту компонентов
-    final calendarHeight = _isCalendarExpanded
-        ? screenHeight * (isSmallScreen ? 0.35 : 0.45)
-        : 0.0;
-
-    // Расчет высоты статистики - адаптивный
-    final statsHeight =
-        _isCalendarExpanded ? (isSmallScreen ? 40.0 : 50.0) : 0.0;
+    final calendarHeight = screenHeight * (isSmallScreen ? 0.35 : 0.45);
+    final statsHeight = isSmallScreen ? 40.0 : 50.0;
+    final toggleButtonHeight = 24.0;
 
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          // Раздел с календарем (динамическая высота)
-          AnimatedContainer(
+          // Основной контент: календарь с анимацией смещения
+          AnimatedPositioned(
             duration: AppAnimations.mediumDuration,
-            height: calendarHeight,
-            child: _isCalendarExpanded
-                ? Column(
+            curve: Curves.easeInOut,
+            top: _isCalendarExpanded ? 0 : -(calendarHeight + statsHeight),
+            left: 0,
+            right: 0,
+            height: calendarHeight + statsHeight,
+            child: Column(
+              children: [
+                // Календарь
+                SizedBox(
+                  height: calendarHeight,
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Заголовок месяца
@@ -458,88 +463,131 @@ class _CalendarScreenState extends State<CalendarScreen>
                         ),
                       ),
                     ],
-                  )
-                : const SizedBox.shrink(),
-          ),
-
-          // Счетчики месяца - с адаптивной высотой
-          AnimatedContainer(
-            duration: AppAnimations.mediumDuration,
-            height: statsHeight,
-            child: _isCalendarExpanded
-                ? _buildMonthStats(isSmallScreen)
-                : const SizedBox.shrink(),
-          ),
-
-          // Кнопка свернуть/развернуть
-          _buildExpandCollapseButton(),
-
-          // Заголовок с заметками для выбранного дня
-          Padding(
-            padding: EdgeInsets.symmetric(
-                horizontal: screenWidth * 0.04,
-                vertical: isSmallScreen ? 4.0 : 6.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                  style: TextStyle(
-                      fontSize: isSmallScreen ? 14 : 16,
-                      fontWeight: FontWeight.w500),
+                  ),
                 ),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: isSmallScreen ? 6 : 8,
-                      vertical: isSmallScreen ? 1 : 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentSecondary.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${_selectedEvents.length}',
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 12 : 14,
-                      color: AppColors.accentSecondary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+
+                // Счетчики месяца
+                SizedBox(
+                  height: statsHeight,
+                  child: _buildMonthStats(isSmallScreen),
                 ),
               ],
             ),
           ),
 
-          // Список заметок с автоматическим обновлением
-          Expanded(
-            child: Consumer<NotesProvider>(
-              builder: (context, notesProvider, _) {
-                // Обновляем выбранные события при изменении данных в провайдере
-                _selectedEvents = _getEventsForDay(_selectedDay);
+          // Фиксированный контейнер с кнопкой свертывания и списком заметок
+          Column(
+            children: [
+              // Пустое пространство с высотой, равной высоте календаря и счетчиков
+              SizedBox(
+                  height:
+                      _isCalendarExpanded ? calendarHeight + statsHeight : 0),
 
-                return _selectedEvents.isEmpty
-                    ? _buildEmptyDateView()
-                    : NoteListWidget(
-                        key: PageStorageKey<String>(
-                            'notes_for_${_selectedDay.toString()}'),
-                        notes: _selectedEvents,
-                        emptyMessage: 'Нет заметок на выбранный день',
-                        showThemeBadges: true,
-                        useCachedAnimation: false,
-                        swipeDirection: SwipeDirection.both,
-                        onNoteTap: _viewNoteDetails,
-                        onNoteDeleted: (note) async {
-                          await notesProvider.deleteNote(note.id);
+              // Кнопка свертывания/развертывания - фиксированная позиция
+              Container(
+                width: double.infinity,
+                height: toggleButtonHeight,
+                color: AppColors.accentSecondary.withOpacity(0.2),
+                child: Center(
+                  child: Icon(
+                    _isCalendarExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: AppColors.accentSecondary,
+                  ),
+                ),
+              ),
 
-                          if (mounted) {
-                            // Обновляем интерфейс после удаления
-                            setState(() {
-                              _processEvents(notesProvider.notes);
-                              _selectedEvents = _getEventsForDay(_selectedDay);
-                            });
-                          }
-                        },
-                      );
+              // Заголовок с заметками для выбранного дня
+              Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: screenWidth * 0.04,
+                    vertical: isSmallScreen ? 4.0 : 6.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                      style: TextStyle(
+                          fontSize: isSmallScreen ? 14 : 16,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: isSmallScreen ? 6 : 8,
+                          vertical: isSmallScreen ? 1 : 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentSecondary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_selectedEvents.length}',
+                        style: TextStyle(
+                          fontSize: isSmallScreen ? 12 : 14,
+                          color: AppColors.accentSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Список заметок с автоматическим обновлением
+              Expanded(
+                child: Consumer<NotesProvider>(
+                  builder: (context, notesProvider, _) {
+                    // Обновляем выбранные события при изменении данных в провайдере
+                    _selectedEvents = _getEventsForDay(_selectedDay);
+
+                    // Используем новый ключ каждый раз при обновлении для принудительной перерисовки
+                    final noteListKey = ValueKey<String>(
+                        'notes_for_${_selectedDay.toString()}_${notesProvider.notes.length}');
+
+                    return _selectedEvents.isEmpty
+                        ? _buildEmptyDateView()
+                        : NoteListWidget(
+                            key: noteListKey,
+                            notes: _selectedEvents,
+                            emptyMessage: 'Нет заметок на выбранный день',
+                            showThemeBadges: true,
+                            useCachedAnimation: false,
+                            swipeDirection: SwipeDirection.both,
+                            onNoteTap: _viewNoteDetails,
+                            onNoteDeleted: (note) async {
+                              await notesProvider.deleteNote(note.id);
+
+                              if (mounted) {
+                                // Обновляем интерфейс после удаления
+                                setState(() {
+                                  _processEvents(notesProvider.notes);
+                                  _selectedEvents =
+                                      _getEventsForDay(_selectedDay);
+                                });
+                              }
+                            },
+                          );
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          // Обработчик нажатия для кнопки свертывания
+          Positioned(
+            top: _isCalendarExpanded ? calendarHeight + statsHeight : 0,
+            left: 0,
+            right: 0,
+            height: toggleButtonHeight,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isCalendarExpanded = !_isCalendarExpanded;
+                });
               },
+              child: Container(
+                color: Colors.transparent,
+              ),
             ),
           ),
         ],
@@ -1097,30 +1145,6 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
-  // Новый метод для кнопки сворачивания/разворачивания календаря
-  Widget _buildExpandCollapseButton() {
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _isCalendarExpanded = !_isCalendarExpanded;
-        });
-      },
-      child: Container(
-        width: double.infinity,
-        height: 24,
-        color: AppColors.accentSecondary.withOpacity(0.2),
-        child: Center(
-          child: Icon(
-            _isCalendarExpanded
-                ? Icons.keyboard_arrow_up
-                : Icons.keyboard_arrow_down,
-            color: AppColors.accentSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyDateView() {
     return Center(
       child: Column(
@@ -1210,6 +1234,9 @@ class _CalendarScreenState extends State<CalendarScreen>
       if (mounted) {
         // Сначала перезагружаем данные
         await _loadData();
+
+        // Добавляем небольшую задержку для гарантии получения данных из БД
+        await Future.delayed(const Duration(milliseconds: 100));
 
         // Затем обновляем UI и список выбранных заметок
         setState(() {
