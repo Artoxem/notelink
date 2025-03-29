@@ -91,12 +91,17 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
     try {
       final themesProvider =
           Provider.of<ThemesProvider>(context, listen: false);
-      // Добавление отладочной информации
-      print(
-          'Загружаем заметки для темы: ${widget.theme.id}, ${widget.theme.name}');
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
 
-      final notesList = await themesProvider.getNotesForTheme(widget.theme.id);
-      print('Загружено ${notesList.length} заметок');
+      // Сначала обновляем все заметки
+      await notesProvider.loadNotes(force: true);
+
+      // Затем обновляем все темы, чтобы обновились связи
+      await themesProvider.loadThemes(force: true);
+
+      // После обновления данных, запрашиваем заметки для конкретной темы с принудительным обновлением
+      final notesList = await themesProvider.getNotesForTheme(widget.theme.id,
+          forceRefresh: true);
 
       // Сортировка и установка заметок
       notesList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -106,6 +111,10 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
           _themeNotes = notesList;
           _isLoading = false;
         });
+
+        // Уведомляем об успешном обновлении
+        print(
+            'Загружено ${notesList.length} заметок для темы: ${widget.theme.name}');
       }
     } catch (e) {
       print('Критическая ошибка при загрузке заметок темы: $e');
@@ -115,6 +124,7 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
           _hasError = true;
           _errorMessage = 'Не удалось загрузить заметки: $e';
         });
+
         // Показываем сообщение об ошибке пользователю
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

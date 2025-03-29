@@ -42,27 +42,35 @@ class ThemesProvider with ChangeNotifier {
   Future<void> loadThemes({bool force = false}) async {
     if (_isLoading && !force) return;
 
-    _isLoading = true;
-    notifyListeners();
-
     try {
+      _isLoading = true;
+      _loadingError = false;
+      notifyListeners();
+
       List<NoteTheme> loadedThemes = await _databaseService.getThemes();
 
-      // Сортируем темы по имени
+      // Сортируем темы по названию (по алфавиту)
       loadedThemes.sort((a, b) => a.name.compareTo(b.name));
 
+      // Очищаем и обновляем список тем
       _themes.clear();
       _themes.addAll(loadedThemes);
 
+      // Очищаем кэши
+      _themesByIdCache.clear();
+      _notesByThemeCache.clear();
+
       _isLoading = false;
-      _loadingError = false;
       notifyListeners();
     } catch (e) {
+      print('Ошибка при загрузке тем: $e');
       _isLoading = false;
       _loadingError = true;
       _errorMessage = "Ошибка при загрузке тем: ${e.toString()}";
       notifyListeners();
-      print('Ошибка при загрузке тем: $e');
+
+      // Пробрасываем ошибку дальше для обработки на уровне UI
+      rethrow;
     }
   }
 
@@ -179,21 +187,47 @@ class ThemesProvider with ChangeNotifier {
   }
 
   // Получение заметок для темы с кэшированием
-  Future<List<Note>> getNotesForTheme(String themeId) async {
-    // Проверяем кэш
-    if (_themeNoteCache.containsKey(themeId)) {
-      return _themeNoteCache[themeId]!;
+  // Получение заметок для конкретной темы
+  Future<List<Note>> getNotesForTheme(String themeId,
+      {bool forceRefresh = false}) async {
+    // Если требуется принудительное обновление, не используем кэш
+    if (!forceRefresh && _notesByThemeCache.containsKey(themeId)) {
+      return _notesByThemeCache[themeId]!;
     }
 
     try {
-      final notes = await _databaseService.getNotesForTheme(themeId);
+      // Находим тему в локальном списке
+      final themeIndex = _themes.indexWhere((theme) => theme.id == themeId);
+      if (themeIndex == -1) {
+        throw Exception('Тема не найдена');
+      }
 
-      // Сохраняем в кэш
-      _themeNoteCache[themeId] = notes;
+      final theme = _themes[themeIndex];
 
+      // Получаем список ID заметок, связанных с темой
+      final noteIds = theme.noteIds;
+      if (noteIds.isEmpty) {
+        return [];
+      }
+
+      final List<Note> notes = [];
+
+      // Загружаем актуальные заметки из провайдера заметок
+      for (final noteId in noteIds) {
+        final note = await _notesProvider!.getNoteById(noteId);
+        if (note != null) {
+          notes.add(note);
+        }
+      }
+
+      // Сохраняем в кэш и возвращаем результат
+      _notesByThemeCache[themeId] = notes;
       return notes;
     } catch (e) {
       print('Ошибка при получении заметок для темы: $e');
+      _loadingError = true;
+      _errorMessage = "Ошибка при получении заметок для темы: ${e.toString()}";
+      notifyListeners();
       return [];
     }
   }
