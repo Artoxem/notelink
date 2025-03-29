@@ -56,6 +56,27 @@ class DatabaseService {
     );
   }
 
+  // Метод проверки и модификации таблицы notes
+  Future<void> ensureNotesTableHasVoiceNotes() async {
+    final db = await database;
+
+    try {
+      // Проверяем, есть ли колонка voiceNotes в таблице notes
+      var tableInfo = await db.rawQuery("PRAGMA table_info(notes)");
+      bool hasVoiceNotes =
+          tableInfo.any((column) => column['name'] == 'voiceNotes');
+
+      if (!hasVoiceNotes) {
+        print('Добавление колонки voiceNotes в таблицу notes...');
+        await db.execute(
+            "ALTER TABLE notes ADD COLUMN voiceNotes TEXT DEFAULT '[]'");
+        print('Колонка voiceNotes успешно добавлена');
+      }
+    } catch (e) {
+      print('Ошибка при проверке/добавлении колонки voiceNotes: $e');
+    }
+  }
+
   // Обновление БД до новой версии с детальным логированием
   Future<void> _upgradeDatabase(
       Database db, int oldVersion, int newVersion) async {
