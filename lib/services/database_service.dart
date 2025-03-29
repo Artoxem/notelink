@@ -33,8 +33,9 @@ class DatabaseService {
 
     try {
       _database = await _initDatabase();
-      // Проверяем и модифицируем таблицу themes при необходимости
+      // Проверяем и модифицируем таблицы при необходимости
       await ensureThemesTableHasLogoType();
+      await ensureNotesTableHasVoiceNotes(); // Добавляем проверку колонки voiceNotes
       newLock.complete();
     } catch (e) {
       print('Критическая ошибка при инициализации базы данных: $e');
@@ -153,7 +154,7 @@ class DatabaseService {
 
   Future<void> _createDatabase(Database db, int version) async {
     try {
-      // Создаем таблицу заметок
+      // Создаем таблицу заметок с колонкой voiceNotes
       await db.execute('''
     CREATE TABLE notes(
       id TEXT PRIMARY KEY,
@@ -170,7 +171,8 @@ class DatabaseService {
       emoji TEXT,
       reminderDates TEXT,
       reminderSound TEXT,
-      deadlineExtensions TEXT
+      deadlineExtensions TEXT,
+      voiceNotes TEXT DEFAULT '[]'
     )
     ''');
 

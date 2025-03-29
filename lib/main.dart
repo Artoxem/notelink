@@ -30,12 +30,16 @@ void main() async {
   // Инициализируем настройки
   await appProvider.initSettings();
 
+  // Настраиваем синхронизацию между провайдерами
+  themesProvider.initSync(notesProvider);
+
   // Запускаем приложение с готовыми провайдерами
   runApp(MyApp(
     appProvider: appProvider,
     notesProvider: notesProvider,
     themesProvider: themesProvider,
   ));
+
   // Проверяем, загружены ли sample data
   final prefs = await SharedPreferences.getInstance();
   final sampleDataLoaded = prefs.getBool('sample_data_loaded') ?? false;

@@ -262,12 +262,10 @@ class _NoteListWidgetState extends State<NoteListWidget>
   }
 
   // Метод для локального удаления заметки с анимацией
-  void _removeNoteLocally(int index) {
+  void _removeNoteLocally(int index) async {
     if (index < 0 || index >= _localNotes.length) return;
 
     final note = _localNotes[index];
-
-    // Сохраняем копию ID для безопасного доступа
     final noteId = note.id;
 
     // Предварительная проверка состояния
@@ -278,35 +276,39 @@ class _NoteListWidgetState extends State<NoteListWidget>
         _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
 
     try {
-      // Удаляем из локального списка, обернув в try-catch для защиты от ошибок
+      // Удаляем из локального списка с обновлением UI
       setState(() {
         _localNotes.removeAt(index);
       });
 
-      // Если используем AnimatedList, анимируем удаление
-      if (_listKey.currentState != null) {
-        // Безопасно вызываем removeItem, обрабатывая возможный случай,
-        // когда индекс уже недействителен
-        try {
-          _listKey.currentState!.removeItem(
-            index,
-            (context, animation) =>
-                _buildNoteItemWithAnimation(note, animation),
-            duration: AppAnimations.mediumDuration,
-          );
-        } catch (e) {
-          print('Ошибка при анимации удаления: $e');
-          // В случае ошибки просто обновляем состояние
-          if (mounted) {
-            setState(() {});
-          }
-        }
+      // Удаляем заметку через провайдер
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+      // Важно! Ждем завершения операции удаления
+      final success = await notesProvider.deleteNote(noteId);
+
+      if (!success && mounted) {
+        // В случае ошибки показываем сообщение
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ошибка при удалении заметки'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
 
-      // Восстанавливаем позицию прокрутки после анимации
+      // Очищаем кэши для удаленной заметки
+      _noteColorCache.remove(noteId);
+      _contentPreviewCache.remove(noteId);
+
+      // Принудительно обновляем списки
+      if (widget.onNoteDeleted != null) {
+        widget.onNoteDeleted!(note);
+      }
+
+      // Восстанавливаем позицию прокрутки
       Future.delayed(AppAnimations.mediumDuration, () {
         if (mounted && _scrollController.hasClients) {
-          // Проверяем, что контроллер все еще доступен и прикреплен
           try {
             final maxScroll = _scrollController.position.maxScrollExtent;
             _scrollController.jumpTo(currentScrollPosition > maxScroll
@@ -317,10 +319,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
           }
         }
       });
-
-      // Очищаем кэши для удаленной заметки
-      _noteColorCache.remove(noteId);
-      _contentPreviewCache.remove(noteId);
     } catch (e) {
       print('Ошибка при локальном удалении заметки: $e');
       // В случае ошибки пытаемся восстановить состояние списка

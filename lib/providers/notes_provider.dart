@@ -3,6 +3,10 @@ import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../services/database_service.dart';
 
+// Определяем тип коллбэка для синхронизации
+typedef NoteDeletedCallback = void Function(
+    String noteId, List<String> themeIds);
+
 class NotesProvider with ChangeNotifier {
   List<Note> _notes = [];
   bool _loadingError = false;
@@ -11,6 +15,9 @@ class NotesProvider with ChangeNotifier {
   // Кэширование частых запросов
   final Map<String, List<Note>> _filteredNotesCache = {};
   final Map<String, Note> _noteCache = {};
+
+  // Добавляем список подписчиков на удаление заметок
+  final List<NoteDeletedCallback> _onDeleteCallbacks = [];
 
   // Геттеры для состояния
   List<Note> get notes => List.unmodifiable(_notes);
@@ -23,6 +30,18 @@ class NotesProvider with ChangeNotifier {
 
   // Сервис для работы с базой данных
   final DatabaseService _databaseService = DatabaseService();
+
+  // Метод для регистрации коллбэка удаления
+  void registerDeleteCallback(NoteDeletedCallback callback) {
+    if (!_onDeleteCallbacks.contains(callback)) {
+      _onDeleteCallbacks.add(callback);
+    }
+  }
+
+  // Метод для удаления коллбэка
+  void unregisterDeleteCallback(NoteDeletedCallback callback) {
+    _onDeleteCallbacks.remove(callback);
+  }
 
   // Очистка кэша при изменении данных
   void _invalidateCache() {
@@ -102,6 +121,9 @@ class NotesProvider with ChangeNotifier {
       // Сбрасываем флаг загрузки
       _isLoading = false;
 
+      // Очищаем кэши
+      _invalidateCache();
+
       // Уведомляем слушателей об изменениях
       notifyListeners();
     } catch (e) {
@@ -111,12 +133,22 @@ class NotesProvider with ChangeNotifier {
       // Логируем ошибку
       print('Ошибка при загрузке заметок: $e');
 
+      // Устанавливаем флаг ошибки и сообщение
+      _loadingError = true;
+      _errorMessage = "Ошибка при загрузке заметок: ${e.toString()}";
+
       // Уведомляем слушателей о завершении загрузки с ошибкой
       notifyListeners();
 
       // Пробрасываем ошибку дальше для обработки на уровне UI
       rethrow;
     }
+  }
+
+  // Принудительное обновление данных
+  Future<void> forceRefresh() async {
+    _invalidateCache();
+    await loadNotes(force: true);
   }
 
   // Получить заметки с дедлайном с кэшированием
@@ -191,6 +223,7 @@ class NotesProvider with ChangeNotifier {
         emoji: emoji,
         reminderDates: reminderDates,
         reminderSound: reminderSound,
+        voiceNotes: [], // Инициализируем пустым списком
       );
 
       // Сначала добавляем в БД
@@ -285,6 +318,10 @@ class NotesProvider with ChangeNotifier {
       // Обновляем локальный список
       _notes[noteIndex] = updatedNote;
 
+      // Инвалидируем кэш
+      _noteCache[noteId] = updatedNote;
+      _invalidateCache();
+
       // Уведомляем слушателей
       notifyListeners();
 
@@ -337,6 +374,10 @@ class NotesProvider with ChangeNotifier {
 
       // Обновляем локальный список
       _notes[noteIndex] = updatedNote;
+
+      // Инвалидируем кэш
+      _noteCache[noteId] = updatedNote;
+      _invalidateCache();
 
       // Уведомляем слушателей
       notifyListeners();
@@ -395,20 +436,37 @@ class NotesProvider with ChangeNotifier {
     }
   }
 
-  // Удалить заметку
+  // Улучшенный метод deleteNote с синхронизацией
   Future<bool> deleteNote(String id) async {
     try {
+      // Находим заметку перед удалением, чтобы получить её темы
+      Note? noteToDelete;
+      List<String> themeIds = [];
+
+      int index = _notes.indexWhere((note) => note.id == id);
+      if (index != -1) {
+        noteToDelete = _notes[index];
+        themeIds = List.from(noteToDelete.themeIds);
+      }
+
       // Удаляем из БД
       await _databaseService.deleteNote(id);
 
       // Удаляем из локального состояния
       _notes.removeWhere((n) => n.id == id);
 
-      // Удаляем из кэша
+      // Удаляем из кэшей
       _noteCache.remove(id);
-      _invalidateCache(); // Инвалидируем фильтрованные списки
+      _invalidateCache();
 
+      // Уведомляем слушателей
       notifyListeners();
+
+      // Вызываем коллбэки для синхронизации с другими провайдерами
+      for (final callback in _onDeleteCallbacks) {
+        callback(id, themeIds);
+      }
+
       return true;
     } catch (e) {
       _loadingError = true;

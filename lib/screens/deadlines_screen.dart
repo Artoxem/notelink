@@ -89,22 +89,11 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
   }
 
   // Переключение режима фильтрации
-  Future<void> _toggleFilterMode() async {
-    if (!mounted) return;
+  Future<void> _setFilterMode(FilterMode mode) async {
+    if (!mounted || _filterMode == mode) return;
 
     setState(() {
-      // Циклически переключаем режимы: активные -> выполненные -> все -> активные
-      switch (_filterMode) {
-        case FilterMode.active:
-          _filterMode = FilterMode.completed;
-          break;
-        case FilterMode.completed:
-          _filterMode = FilterMode.all;
-          break;
-        case FilterMode.all:
-          _filterMode = FilterMode.active;
-          break;
-      }
+      _filterMode = mode;
       _isLoading = true; // Показываем индикатор загрузки при смене режима
     });
 
@@ -114,25 +103,11 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
   }
 
   // Переключение типа сортировки
-  Future<void> _toggleSortType() async {
-    if (!mounted) return;
+  Future<void> _setSortType(SortType type) async {
+    if (!mounted || _sortType == type) return;
 
     setState(() {
-      // Циклически переключаем типы сортировки
-      switch (_sortType) {
-        case SortType.deadlineAsc:
-          _sortType = SortType.deadlineDesc;
-          break;
-        case SortType.deadlineDesc:
-          _sortType = SortType.creationAsc;
-          break;
-        case SortType.creationAsc:
-          _sortType = SortType.creationDesc;
-          break;
-        case SortType.creationDesc:
-          _sortType = SortType.deadlineAsc;
-          break;
-      }
+      _sortType = type;
       _isLoading = true; // Показываем индикатор загрузки при смене сортировки
     });
 
@@ -337,54 +312,155 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
       appBar: AppBar(
         title: const Text('Deadlines'),
         actions: [
-          // Стильная кнопка сортировки, открывающая контекстное меню
-          PopupMenuButton<SortType>(
-            tooltip: 'Сортировка задач',
-            icon: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  Icons.sort,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.accentPrimary,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 2,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    padding: EdgeInsets.all(2),
-                    child: Icon(
-                      _getSortIcon(),
-                      size: 10,
+          // Стильная кнопка фильтра, открывающая контекстное меню
+          PopupMenuButton<FilterMode>(
+            tooltip: 'Фильтр задач',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: _getFilterColor().withOpacity(0.8),
+                borderRadius:
+                    BorderRadius.circular(8), // Менее скругленные углы
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _getFilterIcon(),
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _getFilterText(),
+                    style: const TextStyle(
                       color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            onSelected: (FilterMode filterMode) async {
+              await _setFilterMode(filterMode);
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<FilterMode>>[
+              PopupMenuItem<FilterMode>(
+                value: FilterMode.active,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.radio_button_unchecked,
+                    color: _filterMode == FilterMode.active
+                        ? const Color.fromARGB(255, 164, 50, 24)
+                        : null,
+                  ),
+                  title: Text(
+                    'Активные',
+                    style: TextStyle(
+                      color: _filterMode == FilterMode.active
+                          ? const Color.fromARGB(255, 164, 50, 24)
+                          : null,
+                      fontWeight: _filterMode == FilterMode.active
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem<FilterMode>(
+                value: FilterMode.completed,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.check_circle,
+                    color: _filterMode == FilterMode.completed
+                        ? AppColors.completed
+                        : null,
+                  ),
+                  title: Text(
+                    'Выполненные',
+                    style: TextStyle(
+                      color: _filterMode == FilterMode.completed
+                          ? AppColors.completed
+                          : null,
+                      fontWeight: _filterMode == FilterMode.completed
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem<FilterMode>(
+                value: FilterMode.all,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.list,
+                    color: _filterMode == FilterMode.all
+                        ? Colors.purpleAccent
+                        : null,
+                  ),
+                  title: Text(
+                    'Все задачи',
+                    style: TextStyle(
+                      color: _filterMode == FilterMode.all
+                          ? Colors.purpleAccent
+                          : null,
+                      fontWeight: _filterMode == FilterMode.all
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+
+          // Стильная кнопка сортировки, в том же стиле, но меньше
+          PopupMenuButton<SortType>(
+            tooltip: 'Сортировка задач',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              margin: const EdgeInsets.only(right: 16),
+              decoration: BoxDecoration(
+                color: AppColors.accentSecondary.withOpacity(0.8),
+                borderRadius:
+                    BorderRadius.circular(8), // Менее скругленные углы
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Icon(
+                _getSortIcon(),
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
             onSelected: (SortType sortType) async {
-              if (sortType != _sortType) {
-                setState(() {
-                  _sortType = sortType;
-                  _isLoading = true;
-                });
-                await _saveSettings();
-                await _loadDeadlines();
-              }
+              await _setSortType(sortType);
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<SortType>>[
               PopupMenuItem<SortType>(
@@ -485,30 +561,6 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
                 ),
               ),
             ],
-          ),
-
-          // Кнопка фильтра с динамическим цветом и текстом
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0, right: 16.0),
-            child: TextButton.icon(
-              icon: Icon(
-                _getFilterIcon(),
-                color: Colors.white,
-              ),
-              label: Text(
-                _getFilterText(),
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-              style: TextButton.styleFrom(
-                backgroundColor: _getFilterColor().withOpacity(0.7),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              onPressed: _toggleFilterMode,
-            ),
           ),
         ],
       ),

@@ -289,10 +289,10 @@ class _NotesScreenState extends State<NotesScreen>
           Provider.of<ThemesProvider>(context, listen: false);
 
       try {
-        // Используем Future.wait для параллельной загрузки
-        await Future.wait(
-            [notesProvider.loadNotes(), themesProvider.loadThemes()],
-            eagerError: true);
+        // Используем принудительную перезагрузку данных
+        await notesProvider
+            .forceRefresh(); // Обновляем метод для принудительной перезагрузки
+        await themesProvider.loadThemes();
 
         // Продолжаем только если компонент все еще в дереве
         if (!mounted) return;

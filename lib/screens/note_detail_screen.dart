@@ -51,6 +51,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   bool _isEditMode = false;
   bool _isContentChanged = false;
   bool _isFocusMode = false;
+  bool _isLoading = false;
   List<String> _mediaFiles = []; // Новое поле для медиафайлов
 
   // Для перехода между режимами
@@ -1454,10 +1455,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   }
 
   Future<void> _saveNote() async {
-    // Добавляем индикатор состояния сохранения
-    bool isSaving = false;
     setState(() {
-      isSaving = true;
+      // Используем поле класса вместо локальной переменной
+      _isLoading = true;
     });
 
     final content = _contentController.text.trim();
@@ -1469,7 +1469,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             content: Text('Содержимое заметки не может быть пустым')),
       );
       setState(() {
-        isSaving = false;
+        _isLoading = false;
       });
       return;
     }
@@ -1487,10 +1487,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           hasDateLink: true,
           linkedDate: _linkedDate ?? DateTime.now(),
           emoji: _emoji,
-          mediaUrls: _mediaFiles, // Добавляем медиафайлы в обновленную заметку
+          mediaUrls: _mediaFiles,
+          voiceNotes: widget.note!.voiceNotes, // Сохраняем голосовые заметки
         );
 
-        await notesProvider.updateNote(updatedNote);
+        final success = await notesProvider.updateNote(updatedNote);
+
+        // Добавляем проверку успешности операции
+        if (!success) {
+          throw Exception('Не удалось обновить заметку');
+        }
 
         // Обновляем состояние только если виджет все еще в дереве
         if (!mounted) return;
@@ -1500,8 +1506,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           setState(() {
             _isEditMode = false;
             _isContentChanged = false;
-            _isSettingsChanged = false; // Сбрасываем флаг изменений настроек
-            isSaving = false;
+            _isSettingsChanged = false;
+            _isLoading = false;
           });
         }
 
@@ -1518,11 +1524,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           hasDateLink: true,
           linkedDate: _linkedDate ?? DateTime.now(),
           emoji: _emoji,
-          mediaUrls: _mediaFiles, // Добавляем медиафайлы в новую заметку
+          mediaUrls: _mediaFiles,
         );
+
+        // Добавляем проверку результата
+        if (newNote == null) {
+          throw Exception('Не удалось создать заметку');
+        }
 
         // После создания новой заметки закрываем экран создания
         if (!mounted) return;
+
+        setState(() {
+          _isLoading = false;
+        });
+
         Navigator.pop(context);
       }
     } catch (e) {
@@ -1530,7 +1546,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       if (!mounted) return;
 
       setState(() {
-        isSaving = false;
+        _isLoading = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(

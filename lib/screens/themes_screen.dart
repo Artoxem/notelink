@@ -26,22 +26,136 @@ class ThemesScreen extends StatefulWidget {
   State<ThemesScreen> createState() => _ThemesScreenState();
 }
 
-class _ThemesScreenState extends State<ThemesScreen> {
+class _ThemesScreenState extends State<ThemesScreen>
+    with WidgetsBindingObserver {
   bool _isLoading = true;
+  bool _isVisible = true;
   bool _isColorDark(Color color) {
     // Формула для вычисления яркости (0-1)
+    // Используется стандартная формула, где компоненты RGB имеют разный вес
+    // согласно восприятию яркости человеческим глазом
     double brightness =
         (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
-    return brightness < 0.3; // Если яркость < 0.3, считаем цвет тёмным
+
+    // Если яркость < 0.3, считаем цвет тёмным
+    return brightness < 0.3;
+  }
+
+  final ScrollController _scrollController = ScrollController();
+  List<NoteTheme> _displayedThemes = [];
+
+  // Определим недостающие методы
+
+  void _handleScroll() {
+    // Обработка скролла
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      // Загрузка дополнительных элементов при необходимости
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    // Загружаем темы при инициализации
+
+    // Регистрируем наблюдателя жизненного цикла
+    WidgetsBinding.instance.addObserver(this);
+
+    // Добавляем слушателя для прокрутки
+    _scrollController.addListener(_handleScroll);
+
+    // Загружаем данные при инициализации
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
+      _refreshData();
     });
+  }
+
+  @override
+  void dispose() {
+    // Удаляем наблюдателя жизненного цикла
+    WidgetsBinding.instance.removeObserver(this);
+
+    // Удаляем слушателя прокрутки
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+
+    super.dispose();
+  }
+
+  // Метод для отслеживания изменений в жизненном цикле приложения
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // Если возвращаемся из фонового режима
+    if (state == AppLifecycleState.resumed && _isVisible) {
+      // Обновляем данные с небольшой задержкой для обеспечения устойчивости
+      Future.delayed(Duration(milliseconds: 300), () {
+        if (mounted) {
+          _refreshData();
+        }
+      });
+    }
+  }
+
+  // Отслеживаем видимость экрана
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Используем ModalRoute для определения, является ли этот экран текущим
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      // Подписываемся на изменения видимости маршрута
+      route.removeScopedWillPopCallback(_willPopCallback);
+      route.addScopedWillPopCallback(_willPopCallback);
+    }
+  }
+
+  // Метод, вызываемый перед возвратом с экрана
+  Future<bool> _willPopCallback() async {
+    // Устанавливаем флаг видимости
+    _isVisible = false;
+    return true;
+  }
+
+  // Метод для принудительного обновления данных
+  Future<void> _refreshData() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Принудительно обновляем данные в обоих провайдерах
+      final themesProvider =
+          Provider.of<ThemesProvider>(context, listen: false);
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+      // Сначала обновляем заметки, затем темы для обеспечения согласованности
+      await notesProvider.forceRefresh();
+      await themesProvider.forceRefresh();
+
+      // Сортируем и обновляем локальный список тем
+      _processThemes();
+    } catch (e) {
+      print('Ошибка при обновлении данных: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при обновлении данных'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -68,53 +182,78 @@ class _ThemesScreenState extends State<ThemesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: _buildContent(),
+      ),
+      floatingActionButton: _buildAddThemeFab(),
+    );
+  }
+
+  // Метод для кнопки добавления темы
+  Widget _buildAddThemeFab() {
+    return FloatingActionButton(
+      onPressed: () {
+        ThemesScreen.showAddThemeDialog(context);
+      },
+      backgroundColor: AppColors.accentSecondary,
+      child: const Icon(Icons.add),
+    );
+  }
+
+// Метод для построения основного содержимого
+  Widget _buildContent() {
     return Consumer<ThemesProvider>(
       builder: (context, themesProvider, _) {
-        if (_isLoading || themesProvider.isLoading) {
-          return const Center(child: CircularProgressIndicator());
+        // Обновляем локальный список при изменении данных в провайдере
+        if (!_isLoading) {
+          _processThemes();
         }
 
-        if (themesProvider.themes.isEmpty) {
+        if (_isLoading && _displayedThemes.isEmpty) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        if (_displayedThemes.isEmpty) {
           return _buildEmptyState();
         }
 
-        return RefreshIndicator(
-          onRefresh: _loadData,
-          child: CustomScrollView(
-            slivers: [
-              // Верхний блок с темами для быстрой навигации
-              SliverToBoxAdapter(
-                child: _buildThemeFilters(themesProvider),
-              ),
-
-              // Разделитель
-              const SliverToBoxAdapter(
-                child: Divider(
-                  height: 1,
-                  thickness: 1,
-                ),
-              ),
-
-              // Список тем (карточки)
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      // Фильтрация тем, если выбрана конкретная
-                      final themes = themesProvider.themes;
-                      if (index >= themes.length) return null;
-                      final theme = themes[index];
-                      return _buildThemeCard(theme, themesProvider);
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
+        return _buildThemesList();
       },
     );
+  }
+
+  // Метод для построения списка тем
+  Widget _buildThemesList() {
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      itemCount: _displayedThemes.length,
+      itemBuilder: (context, index) {
+        final theme = _displayedThemes[index];
+        final themesProvider =
+            Provider.of<ThemesProvider>(context, listen: false);
+        return _buildThemeCard(theme, themesProvider);
+      },
+    );
+  }
+
+// Метод для обработки и сортировки тем
+  void _processThemes() {
+    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
+    final themes = themesProvider.themes;
+
+    // Применяем сортировку и фильтрацию
+    _displayedThemes = List.from(themes);
+    // Применяем текущие настройки сортировки
+    _applySort();
+  }
+
+  // Метод для сортировки тем
+  void _applySort() {
+    // Базовая сортировка по имени
+    _displayedThemes.sort((a, b) => a.name.compareTo(b.name));
   }
 
   // Виджет для фильтров тем в виде горизонтальной ленты
