@@ -33,32 +33,70 @@ void main() async {
   // Настраиваем синхронизацию между провайдерами
   themesProvider.initSync(notesProvider);
 
+  // Подготавливаем данные для первого запуска
+  final prefs = await SharedPreferences.getInstance();
+
+  // ДЛЯ ТЕСТИРОВАНИЯ: сбросить флаг если нужно
+  // await prefs.setBool('sample_data_loaded', false);
+
+  // Сначала загружаем существующие данные
+  print('Загружаем существующие данные...');
+  await notesProvider.loadNotes(force: true);
+  await themesProvider.loadThemes();
+
+  print('Количество существующих заметок: ${notesProvider.notes.length}');
+  print('Количество существующих тем: ${themesProvider.themes.length}');
+
+  // Проверяем, нужно ли загружать демо-данные
+  bool needSampleData = false;
+
+  // Загружаем демо-данные если:
+  // 1. Это первый запуск (флаг еще не установлен)
+  // 2. В базе нет ни заметок, ни тем
+  final sampleDataLoaded = prefs.getBool('sample_data_loaded') ?? false;
+  if (!sampleDataLoaded ||
+      (notesProvider.notes.isEmpty && themesProvider.themes.isEmpty)) {
+    needSampleData = true;
+  }
+
+  if (needSampleData) {
+    print('Загружаем демо-данные при первом запуске...');
+    try {
+      // Загружаем sample data
+      final sampleDataService = SampleDataService(
+        notesProvider: notesProvider,
+        themesProvider: themesProvider,
+      );
+      await sampleDataService.loadSampleData();
+      print('Демо-данные успешно загружены');
+
+      // Проверяем, действительно ли данные загрузились
+      await notesProvider.loadNotes(force: true);
+      await themesProvider.loadThemes();
+
+      print('После загрузки демо-данных:');
+      print('Количество заметок: ${notesProvider.notes.length}');
+      print('Количество тем: ${themesProvider.themes.length}');
+
+      // Устанавливаем флаг только если данные действительно появились
+      if (notesProvider.notes.isNotEmpty || themesProvider.themes.isNotEmpty) {
+        await prefs.setBool('sample_data_loaded', true);
+        print('Флаг sample_data_loaded установлен');
+      }
+    } catch (e) {
+      print('Ошибка при загрузке демо-данных: $e');
+      // Не останавливаем приложение из-за ошибки в демо-данных
+    }
+  } else {
+    print('Демо-данные уже загружены или не требуются');
+  }
+
   // Запускаем приложение с готовыми провайдерами
   runApp(MyApp(
     appProvider: appProvider,
     notesProvider: notesProvider,
     themesProvider: themesProvider,
   ));
-
-  // Проверяем, загружены ли sample data
-  final prefs = await SharedPreferences.getInstance();
-  final sampleDataLoaded = prefs.getBool('sample_data_loaded') ?? false;
-
-  if (!sampleDataLoaded) {
-    // Загружаем данные из базы (если этого еще нет)
-    await notesProvider.loadNotes();
-    await themesProvider.loadThemes();
-
-    // Загружаем sample data только при первом запуске
-    final sampleDataService = SampleDataService(
-      notesProvider: notesProvider,
-      themesProvider: themesProvider,
-    );
-    await sampleDataService.loadSampleData();
-
-    // Устанавливаем флаг
-    await prefs.setBool('sample_data_loaded', true);
-  }
 }
 
 class MyApp extends StatelessWidget {

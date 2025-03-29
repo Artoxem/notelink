@@ -661,9 +661,9 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
   String _getEmptyStateMessage() {
     switch (_filterMode) {
       case FilterMode.active:
-        return 'Нет активных задач с дедлайном';
+        return 'Нет активных задач';
       case FilterMode.completed:
-        return 'Нет выполненных задач с дедлайном';
+        return 'Нет выполненных задач';
       case FilterMode.all:
         return 'Нет задач с дедлайном';
     }

@@ -17,6 +17,43 @@ import '../widgets/media_badge.dart';
 import 'deadlines_screen.dart';
 import 'unthemed_notes_screen.dart';
 
+// Класс для адаптивных размеров в зависимости от размера экрана
+class ResponsiveValues {
+  final BuildContext context;
+
+  ResponsiveValues(this.context);
+
+  // Проверка на маленький экран
+  bool get isSmallScreen {
+    final height = MediaQuery.of(context).size.height;
+    return height < 600;
+  }
+
+  // Высота календаря
+  double get calendarHeight => isSmallScreen ? 320.0 : 360.0;
+
+  // Высота статистики
+  double get statsHeight => isSmallScreen ? 40.0 : 50.0;
+
+  // Высота переключателя сворачивания
+  double get toggleHeight => 24.0;
+
+  // Отступы
+  double get horizontalPadding => MediaQuery.of(context).size.width * 0.04;
+  double get itemSpacing => MediaQuery.of(context).size.width * 0.015;
+
+  // Размеры шрифтов
+  double get primaryFontSize => isSmallScreen ? 12.0 : 14.0;
+  double get secondaryFontSize => isSmallScreen ? 9.0 : 10.0;
+
+  // Вертикальные отступы
+  double get verticalPadding => isSmallScreen ? 4.0 : 6.0;
+  double get horizontalPadding2 => isSmallScreen ? 4.0 : 6.0;
+
+  // Размеры иконок
+  double get iconSize => isSmallScreen ? 16.0 : 20.0;
+}
+
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -56,12 +93,12 @@ class _CalendarScreenState extends State<CalendarScreen>
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   bool _isLoading = false;
-  bool _isCalendarExpanded = true; // Эту переменную оставляем
+  bool _isCalendarExpanded = true;
 
   Map<DateTime, List<Note>> _events = {};
   List<Note> _selectedEvents = [];
 
-// Анимация для перехода между месяцами
+  // Анимация для перехода между месяцами
   late AnimationController _pageChangeController;
   late Animation<double> _pageChangeAnimation;
 
@@ -419,178 +456,161 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Получаем информацию о размере экрана
-    final mediaQuery = MediaQuery.of(context);
-    final screenHeight = mediaQuery.size.height;
-    final screenWidth = mediaQuery.size.width;
-    final isSmallScreen = screenHeight < 600;
-
-    // Адаптивно рассчитываем высоту компонентов
-    final calendarHeight = screenHeight * (isSmallScreen ? 0.35 : 0.45);
-    final statsHeight = isSmallScreen ? 40.0 : 50.0;
-    final toggleButtonHeight = 24.0;
+    // Получаем адаптивные значения
+    final responsive = ResponsiveValues(context);
 
     return Scaffold(
-      body: Stack(
-        children: [
-          // Основной контент: календарь с анимацией смещения
-          AnimatedPositioned(
-            duration: AppAnimations.mediumDuration,
-            curve: Curves.easeInOut,
-            top: _isCalendarExpanded ? 0 : -(calendarHeight + statsHeight),
-            left: 0,
-            right: 0,
-            height: calendarHeight + statsHeight,
-            child: Column(
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Column(
               children: [
-                // Календарь
-                SizedBox(
-                  height: calendarHeight,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                // Анимируемый контейнер с календарем и статистикой
+                AnimatedContainer(
+                  duration: AppAnimations.mediumDuration,
+                  curve: Curves.easeInOut,
+                  height: _isCalendarExpanded
+                      ? responsive.calendarHeight + responsive.statsHeight
+                      : 0,
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Календарь
+                        SizedBox(
+                          height: responsive.calendarHeight,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Заголовок месяца
+                              _buildMonthHeader(),
+                              // Календарь с автоматическим обновлением
+                              Expanded(
+                                child: Consumer<NotesProvider>(
+                                  builder: (context, notesProvider, _) {
+                                    // Обновляем события при изменении данных в провайдере
+                                    _processEvents(notesProvider.notes);
+                                    _selectedEvents =
+                                        _getEventsForDay(_selectedDay);
+                                    return _buildGridCalendar(notesProvider);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Счетчики месяца
+                        SizedBox(
+                          height: responsive.statsHeight,
+                          child: _buildMonthStats(responsive),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Кнопка свертывания/развертывания
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isCalendarExpanded = !_isCalendarExpanded;
+                    });
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    height: responsive.toggleHeight,
+                    color: AppColors.accentSecondary.withOpacity(0.2),
+                    child: Center(
+                      child: Icon(
+                        _isCalendarExpanded
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        color: AppColors.accentSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Заголовок с заметками для выбранного дня
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: responsive.horizontalPadding,
+                    vertical: responsive.verticalPadding,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Заголовок месяца
-                      _buildMonthHeader(),
-                      // Календарь с автоматическим обновлением
-                      Expanded(
-                        child: Consumer<NotesProvider>(
-                          builder: (context, notesProvider, _) {
-                            // Обновляем события при изменении данных в провайдере
-                            _processEvents(notesProvider.notes);
-                            _selectedEvents = _getEventsForDay(_selectedDay);
-                            return _buildGridCalendar(notesProvider);
-                          },
+                      Text(
+                        'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
+                        style: TextStyle(
+                            fontSize: responsive.isSmallScreen ? 14 : 16,
+                            fontWeight: FontWeight.w500),
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: responsive.isSmallScreen ? 6 : 8,
+                            vertical: responsive.isSmallScreen ? 1 : 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentSecondary.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${_selectedEvents.length}',
+                          style: TextStyle(
+                            fontSize: responsive.isSmallScreen ? 12 : 14,
+                            color: AppColors.accentSecondary,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                // Счетчики месяца
-                SizedBox(
-                  height: statsHeight,
-                  child: _buildMonthStats(isSmallScreen),
+                // Список заметок для выбранного дня
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Consumer<NotesProvider>(
+                          builder: (context, notesProvider, _) {
+                            // Обновляем выбранные события при изменении данных
+                            _selectedEvents = _getEventsForDay(_selectedDay);
+                            final noteListKey = ValueKey<String>(
+                                'notes_for_${_selectedDay.toString()}_${notesProvider.notes.length}');
+
+                            return _selectedEvents.isEmpty
+                                ? _buildEmptyDateView()
+                                : NoteListWidget(
+                                    key: noteListKey,
+                                    notes: _selectedEvents,
+                                    emptyMessage:
+                                        'Нет заметок на выбранный день',
+                                    showThemeBadges: true,
+                                    useCachedAnimation: false,
+                                    swipeDirection: SwipeDirection.both,
+                                    onNoteTap: _viewNoteDetails,
+                                    onNoteDeleted: (note) async {
+                                      await notesProvider.deleteNote(note.id);
+
+                                      if (mounted) {
+                                        setState(() {
+                                          _processEvents(notesProvider.notes);
+                                          _selectedEvents =
+                                              _getEventsForDay(_selectedDay);
+                                        });
+                                      }
+                                    },
+                                  );
+                          },
+                        ),
                 ),
               ],
-            ),
-          ),
-
-          // Фиксированный контейнер с кнопкой свертывания и списком заметок
-          Column(
-            children: [
-              // Пустое пространство с высотой, равной высоте календаря и счетчиков
-              SizedBox(
-                  height:
-                      _isCalendarExpanded ? calendarHeight + statsHeight : 0),
-
-              // Кнопка свертывания/развертывания - фиксированная позиция
-              Container(
-                width: double.infinity,
-                height: toggleButtonHeight,
-                color: AppColors.accentSecondary.withOpacity(0.2),
-                child: Center(
-                  child: Icon(
-                    _isCalendarExpanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: AppColors.accentSecondary,
-                  ),
-                ),
-              ),
-
-              // Заголовок с заметками для выбранного дня
-              Padding(
-                padding: EdgeInsets.symmetric(
-                    horizontal: screenWidth * 0.04,
-                    vertical: isSmallScreen ? 4.0 : 6.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
-                      style: TextStyle(
-                          fontSize: isSmallScreen ? 14 : 16,
-                          fontWeight: FontWeight.w500),
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 6 : 8,
-                          vertical: isSmallScreen ? 1 : 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentSecondary.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_selectedEvents.length}',
-                        style: TextStyle(
-                          fontSize: isSmallScreen ? 12 : 14,
-                          color: AppColors.accentSecondary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Список заметок с автоматическим обновлением
-              Expanded(
-                child: Consumer<NotesProvider>(
-                  builder: (context, notesProvider, _) {
-                    // Обновляем выбранные события при изменении данных в провайдере
-                    _selectedEvents = _getEventsForDay(_selectedDay);
-
-                    // Используем новый ключ каждый раз при обновлении для принудительной перерисовки
-                    final noteListKey = ValueKey<String>(
-                        'notes_for_${_selectedDay.toString()}_${notesProvider.notes.length}');
-
-                    return _selectedEvents.isEmpty
-                        ? _buildEmptyDateView()
-                        : NoteListWidget(
-                            key: noteListKey,
-                            notes: _selectedEvents,
-                            emptyMessage: 'Нет заметок на выбранный день',
-                            showThemeBadges: true,
-                            useCachedAnimation: false,
-                            swipeDirection: SwipeDirection.both,
-                            onNoteTap: _viewNoteDetails,
-                            onNoteDeleted: (note) async {
-                              await notesProvider.deleteNote(note.id);
-
-                              if (mounted) {
-                                // Обновляем интерфейс после удаления
-                                setState(() {
-                                  _processEvents(notesProvider.notes);
-                                  _selectedEvents =
-                                      _getEventsForDay(_selectedDay);
-                                });
-                              }
-                            },
-                          );
-                  },
-                ),
-              ),
-            ],
-          ),
-
-          // Обработчик нажатия для кнопки свертывания
-          Positioned(
-            top: _isCalendarExpanded ? calendarHeight + statsHeight : 0,
-            left: 0,
-            right: 0,
-            height: toggleButtonHeight,
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _isCalendarExpanded = !_isCalendarExpanded;
-                });
-              },
-              child: Container(
-                color: Colors.transparent,
-              ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
       floatingActionButton: _buildAddNoteButton(),
     );
@@ -866,15 +886,10 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
-// Адаптивные счетчики под календарем
-  Widget _buildMonthStats(bool isSmallScreen) {
+  // Адаптивные счетчики под календарем
+  Widget _buildMonthStats(ResponsiveValues responsive) {
     final notesProvider = Provider.of<NotesProvider>(context);
     final notes = notesProvider.notes;
-
-    // Получаем размер экрана для адаптивных расчетов
-    final screenWidth = MediaQuery.of(context).size.width;
-    final horizontalPadding = screenWidth * 0.04; // 4% от ширины экрана
-    final itemSpacing = screenWidth * 0.015; // 1.5% от ширины экрана
 
     // Фильтруем заметки по текущему месяцу
     final currentMonthNotes = notes.where((note) {
@@ -890,17 +905,11 @@ class _CalendarScreenState extends State<CalendarScreen>
     final unthemedNotes =
         currentMonthNotes.where((note) => note.themeIds.isEmpty).toList();
 
-    // Адаптивные размеры для иконок и текста
-    final iconSize = isSmallScreen ? 16.0 : 20.0;
-    final primaryFontSize = isSmallScreen ? 12.0 : 14.0;
-    final secondaryFontSize = isSmallScreen ? 9.0 : 10.0;
-    final verticalPadding = isSmallScreen ? 4.0 : 6.0;
-    final horizontalPadding2 = isSmallScreen ? 4.0 : 6.0;
-
     return Container(
       margin: EdgeInsets.symmetric(
-          horizontal: horizontalPadding, vertical: isSmallScreen ? 1.0 : 2.0),
-      height: isSmallScreen ? 35.0 : 40.0, // Фиксированная высота
+          horizontal: responsive.horizontalPadding,
+          vertical: responsive.isSmallScreen ? 1.0 : 2.0),
+      height: responsive.isSmallScreen ? 35.0 : 40.0, // Фиксированная высота
       child: Row(
         children: [
           // Все заметки месяца - стильная карточка с адаптивными размерами
@@ -913,7 +922,8 @@ class _CalendarScreenState extends State<CalendarScreen>
               ),
               child: Container(
                 padding: EdgeInsets.symmetric(
-                    vertical: verticalPadding, horizontal: horizontalPadding2),
+                    vertical: responsive.verticalPadding,
+                    horizontal: responsive.horizontalPadding2),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -928,8 +938,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                 child: Row(
                   children: [
                     Container(
-                      width: iconSize,
-                      height: iconSize,
+                      width: responsive.iconSize,
+                      height: responsive.iconSize,
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
@@ -937,10 +947,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                       child: Icon(
                         Icons.note_alt,
                         color: Colors.white,
-                        size: iconSize * 0.6,
+                        size: responsive.iconSize * 0.6,
                       ),
                     ),
-                    SizedBox(width: itemSpacing),
+                    SizedBox(width: responsive.itemSpacing),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -949,7 +959,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           currentMonthNotes.length.toString(),
                           style: TextStyle(
-                            fontSize: primaryFontSize,
+                            fontSize: responsive.primaryFontSize,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -957,7 +967,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         Text(
                           'в этом месяце',
                           style: TextStyle(
-                            fontSize: secondaryFontSize,
+                            fontSize: responsive.secondaryFontSize,
                             color: Colors.white.withOpacity(0.9),
                           ),
                         ),
@@ -969,7 +979,7 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
           ),
 
-          SizedBox(width: itemSpacing),
+          SizedBox(width: responsive.itemSpacing),
 
           // Заметки без темы - адаптивная карточка
           Expanded(
@@ -997,8 +1007,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                 ),
                 child: Container(
                   padding: EdgeInsets.symmetric(
-                      vertical: verticalPadding,
-                      horizontal: horizontalPadding2),
+                      vertical: responsive.verticalPadding,
+                      horizontal: responsive.horizontalPadding2),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1013,8 +1023,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                   child: Row(
                     children: [
                       Container(
-                        width: iconSize,
-                        height: iconSize,
+                        width: responsive.iconSize,
+                        height: responsive.iconSize,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
@@ -1022,10 +1032,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                         child: Icon(
                           Icons.layers_clear,
                           color: Colors.white,
-                          size: iconSize * 0.6,
+                          size: responsive.iconSize * 0.6,
                         ),
                       ),
-                      SizedBox(width: itemSpacing),
+                      SizedBox(width: responsive.itemSpacing),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -1034,7 +1044,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             unthemedNotes.length.toString(),
                             style: TextStyle(
-                              fontSize: primaryFontSize,
+                              fontSize: responsive.primaryFontSize,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
@@ -1042,7 +1052,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             'Без темы',
                             style: TextStyle(
-                              fontSize: secondaryFontSize,
+                              fontSize: responsive.secondaryFontSize,
                               color: Colors.white.withOpacity(0.9),
                             ),
                           ),
@@ -1055,7 +1065,7 @@ class _CalendarScreenState extends State<CalendarScreen>
             ),
           ),
 
-          SizedBox(width: itemSpacing),
+          SizedBox(width: responsive.itemSpacing),
 
           // Задачи с дедлайном - адаптивная карточка
           Expanded(
@@ -1083,8 +1093,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                 ),
                 child: Container(
                   padding: EdgeInsets.symmetric(
-                      vertical: verticalPadding,
-                      horizontal: horizontalPadding2),
+                      vertical: responsive.verticalPadding,
+                      horizontal: responsive.horizontalPadding2),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1099,8 +1109,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                   child: Row(
                     children: [
                       Container(
-                        width: iconSize,
-                        height: iconSize,
+                        width: responsive.iconSize,
+                        height: responsive.iconSize,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
@@ -1108,10 +1118,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                         child: Icon(
                           Icons.timer,
                           color: Colors.white,
-                          size: iconSize * 0.6,
+                          size: responsive.iconSize * 0.6,
                         ),
                       ),
-                      SizedBox(width: itemSpacing),
+                      SizedBox(width: responsive.itemSpacing),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -1120,7 +1130,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             tasksNotes.length.toString(),
                             style: TextStyle(
-                              fontSize: primaryFontSize,
+                              fontSize: responsive.primaryFontSize,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
@@ -1128,7 +1138,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           Text(
                             'Дедлайны',
                             style: TextStyle(
-                              fontSize: secondaryFontSize,
+                              fontSize: responsive.secondaryFontSize,
                               color: Colors.white.withOpacity(0.9),
                             ),
                           ),
