@@ -23,6 +23,13 @@ enum NoteListAction {
 
 enum SwipeDirection { none, left, right, both }
 
+// Действия для отвязки заметки от темы
+enum UnlinkAction {
+  unlink, // Отвязать от темы
+  delete, // Удалить заметку полностью
+  cancel // Отмена
+}
+
 class NoteListWidget extends StatefulWidget {
   final List<Note> notes;
   final String? emptyMessage;
@@ -493,123 +500,14 @@ class _NoteListWidgetState extends State<NoteListWidget>
         ),
       ),
 
+      // Используем новый метод обработки свайпа
       confirmDismiss: (direction) async {
-        if (!mounted) return false;
-
-        try {
-          if (direction == DismissDirection.endToStart) {
-            // Свайп влево - удаление или отвязка от темы
-            if (widget.isInThemeView && widget.themeId != null) {
-              // Отвязка от темы, если мы находимся внутри темы
-              final result = await _showUnlinkConfirmationDialog(note);
-              if (result && widget.onNoteUnlinked != null) {
-                widget.onNoteUnlinked!(note);
-              }
-              return result;
-            } else {
-              // Удаление заметки в других случаях
-              final result = await _showDeleteConfirmationDialog(note);
-              if (result) {
-                // Находим индекс заметки в локальном списке
-                final index = _localNotes.indexWhere((n) => n.id == note.id);
-                if (index != -1) {
-                  // Локально удаляем заметку с анимацией
-                  _removeNoteLocally(index);
-
-                  // Вызываем обработчик удаления из родительского виджета
-                  if (widget.onNoteDeleted != null) {
-                    widget.onNoteDeleted!(note);
-                  }
-
-                  // Дополнительно оповещаем через общий обработчик действий
-                  if (widget.onActionSelected != null) {
-                    widget.onActionSelected!(note, NoteListAction.delete);
-                  }
-                }
-              }
-              return false; // Не позволяем Dismissible обрабатывать удаление
-            }
-          } else if (direction == DismissDirection.startToEnd) {
-            // Свайп вправо - обработка в зависимости от типа заметки
-            if (note.hasDeadline &&
-                widget.availableActions.contains(NoteListAction.complete)) {
-              // Для задач с дедлайном - переключение статуса выполнения
-              final noteId = note.id; // Сохраняем ID для безопасного доступа
-              final newStatus = !note.isCompleted;
-
-              try {
-                final notesProvider =
-                    Provider.of<NotesProvider>(context, listen: false);
-
-                // Вызываем соответствующий метод в зависимости от нового статуса
-                if (newStatus) {
-                  await notesProvider.completeNote(noteId);
-                } else {
-                  await notesProvider.uncompleteNote(noteId);
-                }
-
-                // Обновляем локальные данные
-                for (int i = 0; i < _localNotes.length; i++) {
-                  if (_localNotes[i].id == noteId) {
-                    setState(() {
-                      _localNotes[i] =
-                          _localNotes[i].copyWith(isCompleted: newStatus);
-                    });
-                    break;
-                  }
-                }
-
-                // Вызываем колбэк, если задан
-                if (widget.onActionSelected != null) {
-                  widget.onActionSelected!(note, NoteListAction.complete);
-                }
-
-                // Показываем уведомление
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(newStatus
-                          ? 'Задача отмечена как выполненная'
-                          : 'Задача отмечена как невыполненная'),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Ошибка: $e')),
-                  );
-                }
-              }
-            } else if (widget.availableActions
-                .contains(NoteListAction.favorite)) {
-              // Для обычных заметок - переключение избранного
-              _toggleFavoriteLocally(note);
-              if (widget.onActionSelected != null) {
-                widget.onActionSelected!(note, NoteListAction.favorite);
-              }
-            }
-            return false; // Не убираем карточку
-          }
-          return false;
-        } catch (e) {
-          // Обработка ошибок при взаимодействии
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Произошла ошибка: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return false;
-        }
+        return await _handleSwipeConfirmation(direction, note);
       },
 
       onDismissed: (direction) {},
 
-      // Cтруктура виджетов карточки
+      // Основная карточка без изменений
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
         child: Material(
@@ -905,6 +803,141 @@ class _NoteListWidgetState extends State<NoteListWidget>
     );
   }
 
+  // Новый метод обработки свайпа
+  Future<bool> _handleSwipeConfirmation(
+      DismissDirection direction, Note note) async {
+    if (!mounted) return false;
+
+    try {
+      if (direction == DismissDirection.endToStart) {
+        // Свайп влево - удаление или отвязка от темы
+        if (widget.isInThemeView && widget.themeId != null) {
+          // Отвязка от темы или удаление заметки
+          final action = await _showUnlinkConfirmationDialog(note);
+
+          if (action == UnlinkAction.unlink) {
+            // Отвязываем заметку от темы
+            final index = _localNotes.indexWhere((n) => n.id == note.id);
+            if (index != -1) {
+              _removeNoteLocally(index);
+            }
+            if (widget.onNoteUnlinked != null) {
+              widget.onNoteUnlinked!(note);
+            }
+            if (widget.onActionSelected != null) {
+              widget.onActionSelected!(note, NoteListAction.unlinkFromTheme);
+            }
+            return true;
+          } else if (action == UnlinkAction.delete) {
+            // Удаляем заметку полностью
+            final index = _localNotes.indexWhere((n) => n.id == note.id);
+            if (index != -1) {
+              _removeNoteLocally(index);
+            }
+            if (widget.onNoteDeleted != null) {
+              widget.onNoteDeleted!(note);
+            }
+            if (widget.onActionSelected != null) {
+              widget.onActionSelected!(note, NoteListAction.delete);
+            }
+            return true;
+          }
+          return false;
+        } else {
+          // Обычное удаление заметки в других случаях
+          final result = await _showDeleteConfirmationDialog(note);
+          if (result) {
+            // Находим индекс заметки в локальном списке
+            final index = _localNotes.indexWhere((n) => n.id == note.id);
+            if (index != -1) {
+              _removeNoteLocally(index);
+              if (widget.onNoteDeleted != null) {
+                widget.onNoteDeleted!(note);
+              }
+              if (widget.onActionSelected != null) {
+                widget.onActionSelected!(note, NoteListAction.delete);
+              }
+            }
+          }
+          return false; // Не позволяем Dismissible обрабатывать удаление
+        }
+      } else if (direction == DismissDirection.startToEnd) {
+        // Свайп вправо - обработка в зависимости от типа заметки
+        if (note.hasDeadline &&
+            widget.availableActions.contains(NoteListAction.complete)) {
+          // Для задач с дедлайном - переключение статуса выполнения
+          final noteId = note.id; // Сохраняем ID для безопасного доступа
+          final newStatus = !note.isCompleted;
+
+          try {
+            final notesProvider =
+                Provider.of<NotesProvider>(context, listen: false);
+
+            // Вызываем соответствующий метод в зависимости от нового статуса
+            if (newStatus) {
+              await notesProvider.completeNote(noteId);
+            } else {
+              await notesProvider.uncompleteNote(noteId);
+            }
+
+            // Обновляем локальные данные
+            for (int i = 0; i < _localNotes.length; i++) {
+              if (_localNotes[i].id == noteId) {
+                setState(() {
+                  _localNotes[i] =
+                      _localNotes[i].copyWith(isCompleted: newStatus);
+                });
+                break;
+              }
+            }
+
+            // Вызываем колбэк, если задан
+            if (widget.onActionSelected != null) {
+              widget.onActionSelected!(note, NoteListAction.complete);
+            }
+
+            // Показываем уведомление
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(newStatus
+                      ? 'Задача отмечена как выполненная'
+                      : 'Задача отмечена как невыполненная'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Ошибка: $e')),
+              );
+            }
+          }
+        } else if (widget.availableActions.contains(NoteListAction.favorite)) {
+          // Для обычных заметок - переключение избранного
+          _toggleFavoriteLocally(note);
+          if (widget.onActionSelected != null) {
+            widget.onActionSelected!(note, NoteListAction.favorite);
+          }
+        }
+        return false; // Не убираем карточку
+      }
+      return false;
+    } catch (e) {
+      // Обработка ошибок при взаимодействии
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Произошла ошибка: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
   bool _hasMediaContent(Note note) {
     return note.hasImages ||
         note.hasAudio ||
@@ -1102,28 +1135,57 @@ class _NoteListWidgetState extends State<NoteListWidget>
   }
 
   // Диалог подтверждения отвязки заметки от темы
-  Future<bool> _showUnlinkConfirmationDialog(Note note) async {
-    return await showDialog<bool>(
+  Future<UnlinkAction> _showUnlinkConfirmationDialog(Note note) async {
+    return await showDialog<UnlinkAction>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Отвязать заметку'),
-            content: const Text(
-              'Вы хотите отвязать эту заметку от текущей темы? '
-              'Заметка не будет удалена и останется доступна.',
+            contentPadding: EdgeInsets.zero,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, UnlinkAction.unlink),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12.0),
+                      child: Text('Отвязать от темы'),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, UnlinkAction.delete),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12.0),
+                      child: Text(
+                        'Удалить полностью',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, UnlinkAction.cancel),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12.0),
+                      child: Text('Отмена'),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Отмена'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Отвязать'),
-              ),
-            ],
           ),
         ) ??
-        false;
+        UnlinkAction.cancel;
   }
 
   // Контекстное меню с опциями для заметки
@@ -1270,9 +1332,8 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 title: const Text('Отвязать от темы'),
                 onTap: () async {
                   Navigator.pop(context);
-                  final shouldUnlink =
-                      await _showUnlinkConfirmationDialog(note);
-                  if (shouldUnlink) {
+                  final action = await _showUnlinkConfirmationDialog(note);
+                  if (action == UnlinkAction.unlink) {
                     // Находим индекс заметки в локальном списке
                     final index =
                         _localNotes.indexWhere((n) => n.id == note.id);
@@ -1287,6 +1348,20 @@ class _NoteListWidgetState extends State<NoteListWidget>
                     if (widget.onActionSelected != null) {
                       widget.onActionSelected!(
                           note, NoteListAction.unlinkFromTheme);
+                    }
+                  } else if (action == UnlinkAction.delete) {
+                    // Удаляем заметку полностью
+                    final index =
+                        _localNotes.indexWhere((n) => n.id == note.id);
+                    if (index != -1) {
+                      // Локально удаляем заметку с анимацией
+                      _removeNoteLocally(index);
+                    }
+                    if (widget.onNoteDeleted != null) {
+                      widget.onNoteDeleted!(note);
+                    }
+                    if (widget.onActionSelected != null) {
+                      widget.onActionSelected!(note, NoteListAction.delete);
                     }
                   }
                 },
