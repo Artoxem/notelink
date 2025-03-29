@@ -39,11 +39,8 @@ class MarkdownEditor extends StatefulWidget {
 class _MarkdownEditorState extends State<MarkdownEditor>
     with TickerProviderStateMixin {
   late FocusNode _focusNode;
-  bool _isPreviewMode = false;
   bool _isFocusMode = false;
   bool _isLoading = false;
-  late TabController _tabController;
-  int _selectedTabIndex = 0;
 
   // Контроллер анимации для режима фокусировки
   late AnimationController _focusModeController;
@@ -57,7 +54,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
   void initState() {
     super.initState();
     _focusNode = widget.focusNode ?? FocusNode();
-    _tabController = TabController(length: 2, vsync: this);
 
     // Инициализация контроллера анимации
     _focusModeController = AnimationController(
@@ -69,14 +65,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
       parent: _focusModeController,
       curve: Curves.easeInOut,
     );
-
-    // Слушаем изменения табов для переключения между режимами
-    _tabController.addListener(() {
-      setState(() {
-        _selectedTabIndex = _tabController.index;
-        _isPreviewMode = _selectedTabIndex == 1;
-      });
-    });
 
     // Слушаем фокус для определения режима фокусировки
     _focusNode.addListener(_handleFocusChange);
@@ -91,7 +79,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
       _focusNode.dispose();
     }
     _focusNode.removeListener(_handleFocusChange);
-    _tabController.dispose();
     _focusModeController.dispose();
 
     // Удаляем обработчик при удалении виджета
@@ -289,7 +276,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
     final appProvider = Provider.of<AppProvider>(context, listen: false);
 
     // Активируем режим фокусировки только если фокус на редакторе и включена опция в настройках
-    if (_focusNode.hasFocus && appProvider.enableFocusMode && !_isPreviewMode) {
+    if (_focusNode.hasFocus && appProvider.enableFocusMode) {
       _setFocusMode(true);
     } else {
       _setFocusMode(false);
@@ -567,7 +554,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Вкладки редактор/предпросмотр и кнопки форматирования
+                      // Панель для кнопок прикрепления файлов
                       if (markdownEnabled && !widget.readOnly)
                         Container(
                           decoration: BoxDecoration(
@@ -579,79 +566,60 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                                   Radius.circular(AppDimens.buttonBorderRadius),
                             ),
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TabBar(
-                                controller: _tabController,
-                                labelColor: AppColors.accentSecondary,
-                                unselectedLabelColor:
-                                    AppColors.textOnDark.withOpacity(0.7),
-                                indicatorColor: AppColors.accentSecondary,
-                                indicatorSize: TabBarIndicatorSize.label,
-                                tabs: const [
-                                  Tab(text: 'Редактор'),
-                                  Tab(text: 'Предпросмотр'),
-                                ],
-                              ),
-                              // Обновленная панель для кнопок прикрепления файлов
-                              if (!_isPreviewMode)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12.0, vertical: 8.0),
-                                  child: Row(
-                                    children: [
-                                      // Иконка для прикрепления фото (без стиля кнопки)
-                                      InkWell(
-                                        borderRadius: BorderRadius.circular(18),
-                                        onTap: () {
-                                          _showImagePickerOptions(context);
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Icon(
-                                            Icons.add_photo_alternate_outlined,
-                                            color: AppColors.textOnDark,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ),
-
-                                      const SizedBox(width: 12),
-
-                                      // Иконка для прикрепления файла (без стиля кнопки)
-                                      InkWell(
-                                        borderRadius: BorderRadius.circular(18),
-                                        onTap: () {
-                                          _pickFile();
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Icon(
-                                            Icons.attachment_outlined,
-                                            color: AppColors.textOnDark,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ),
-
-                                      const Spacer(),
-
-                                      // Кнопка голосовой записи
-                                      VoiceRecordButton(
-                                        size: 36, // Уменьшен размер с 44
-                                        onRecordComplete: (audioPath) {
-                                          _insertVoiceNote(audioPath);
-                                        },
-                                      ),
-                                    ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12.0, vertical: 8.0),
+                            child: Row(
+                              children: [
+                                // Иконка для прикрепления фото (без стиля кнопки)
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: () {
+                                    _showImagePickerOptions(context);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Icon(
+                                      Icons.add_photo_alternate_outlined,
+                                      color: AppColors.textOnDark,
+                                      size: 20,
+                                    ),
                                   ),
                                 ),
-                            ],
+
+                                const SizedBox(width: 12),
+
+                                // Иконка для прикрепления файла (без стиля кнопки)
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: () {
+                                    _pickFile();
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Icon(
+                                      Icons.attachment_outlined,
+                                      color: AppColors.textOnDark,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+
+                                const Spacer(),
+
+                                // Кнопка голосовой записи
+                                VoiceRecordButton(
+                                  size: 36, // Уменьшен размер с 44
+                                  onRecordComplete: (audioPath) {
+                                    _insertVoiceNote(audioPath);
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
                         ),
 
-                      // Содержимое вкладок
+                      // Редактор (вместо TabBarView)
                       Container(
                         height:
                             widget.height ?? 250, // Уменьшаем высоту редактора
@@ -660,21 +628,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
                           maxHeight: widget.height ??
                               400, // Уменьшаем максимальную высоту
                         ),
-                        child: markdownEnabled
-                            ? TabBarView(
-                                controller: _tabController,
-                                physics: widget.readOnly
-                                    ? const NeverScrollableScrollPhysics()
-                                    : null,
-                                children: [
-                                  // Вкладка редактирования
-                                  _buildEditor(),
-
-                                  // Вкладка предпросмотра
-                                  _buildPreview(),
-                                ],
-                              )
-                            : _buildEditor(),
+                        child: _buildEditor(),
                       ),
                     ],
                   ),
@@ -684,7 +638,7 @@ class _MarkdownEditorState extends State<MarkdownEditor>
 
             // Отдельный блок для панели форматирования
             const SizedBox(height: 8), // Расстояние между блоками
-            if (!_isPreviewMode && markdownEnabled)
+            if (markdownEnabled && !widget.readOnly)
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.cardBackground,
@@ -725,26 +679,6 @@ class _MarkdownEditorState extends State<MarkdownEditor>
           onChanged: widget.onChanged,
           textCapitalization: TextCapitalization.sentences,
         ),
-      ),
-    );
-  }
-
-  Widget _buildPreview() {
-    return Container(
-      color: AppColors.textBackground,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: widget.controller.text.isEmpty
-            ? Center(
-                child: Text(
-                  'Начните вводить текст для предпросмотра',
-                  style: TextStyle(
-                    color: AppColors.textOnLight.withOpacity(0.6),
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              )
-            : _buildMarkdownWithVoiceNotes(widget.controller.text),
       ),
     );
   }

@@ -29,8 +29,8 @@ class ResponsiveValues {
     return height < 600;
   }
 
-  // Высота календаря
-  double get calendarHeight => isSmallScreen ? 320.0 : 360.0;
+  // Высота календаря - УВЕЛИЧЕНО для решения проблемы перекрытия блоком кнопок
+  double get calendarHeight => isSmallScreen ? 370.0 : 400.0;
 
   // Высота статистики
   double get statsHeight => isSmallScreen ? 40.0 : 50.0;
@@ -616,15 +616,20 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
+  // ИЗМЕНЕН - уменьшена высота заголовка месяца вдвое
   Widget _buildMonthHeader() {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      // Уменьшаем вертикальные отступы вдвое
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Кнопка предыдущего месяца
           IconButton(
             icon: const Icon(Icons.chevron_left, size: 28),
+            padding: EdgeInsets.zero, // Убираем внутренние отступы кнопки
+            constraints:
+                const BoxConstraints(), // Убираем минимальные ограничения
             onPressed: () {
               setState(() {
                 _focusedDay = DateTime(
@@ -668,6 +673,9 @@ class _CalendarScreenState extends State<CalendarScreen>
           // Кнопка следующего месяца
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 28),
+            padding: EdgeInsets.zero, // Убираем внутренние отступы кнопки
+            constraints:
+                const BoxConstraints(), // Убираем минимальные ограничения
             onPressed: () {
               setState(() {
                 _focusedDay = DateTime(
