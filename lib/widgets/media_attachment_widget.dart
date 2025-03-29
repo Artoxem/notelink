@@ -1,19 +1,24 @@
+// Изменения в файле lib/widgets/media_attachment_widget.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../utils/constants.dart';
 import '../services/media_service.dart';
 import 'package:path/path.dart' as path;
 
+// Обновляем класс MediaAttachmentWidget для добавления колбэка на нажатие
 class MediaAttachmentWidget extends StatelessWidget {
   final String mediaPath;
   final VoidCallback onRemove;
   final bool isEditing;
+  final VoidCallback? onTap; // Новый колбэк для обработки нажатия
 
   const MediaAttachmentWidget({
     Key? key,
     required this.mediaPath,
     required this.onRemove,
     this.isEditing = true,
+    this.onTap, // Добавляем новый параметр
   }) : super(key: key);
 
   @override
@@ -28,7 +33,7 @@ class MediaAttachmentWidget extends StatelessWidget {
     final bool fileExists = file.existsSync();
 
     if (!fileExists) {
-      return _buildErrorWidget();
+      return _buildErrorWidget(context);
     }
 
     if (isImage) {
@@ -38,43 +43,48 @@ class MediaAttachmentWidget extends StatelessWidget {
     }
   }
 
-  Widget _buildErrorWidget() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(6), // Уменьшен отступ с 8 до 6
-      decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline,
-              color: Colors.red, size: 20), // Уменьшен размер с 24 до 20
-          const SizedBox(width: 6), // Уменьшен отступ с 8 до 6
-          const Expanded(
-            child: Text(
-              'Файл не найден',
-              style: TextStyle(
-                  color: Colors.red, fontSize: 12), // Уменьшен размер шрифта
+  Widget _buildErrorWidget(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap, // Используем переданный колбэк
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(6), // Уменьшен отступ с 8 до 6
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline,
+                color: Colors.red, size: 20), // Уменьшен размер с 24 до 20
+            const SizedBox(width: 6), // Уменьшен отступ с 8 до 6
+            const Expanded(
+              child: Text(
+                'Файл не найден',
+                style: TextStyle(
+                    color: Colors.red, fontSize: 12), // Уменьшен размер шрифта
+              ),
             ),
-          ),
-          if (isEditing)
-            IconButton(
-              icon: const Icon(Icons.close,
-                  size: 16, color: Colors.red), // Уменьшен размер с 20 до 16
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: onRemove,
-            ),
-        ],
+            if (isEditing)
+              IconButton(
+                icon: const Icon(Icons.close,
+                    size: 16, color: Colors.red), // Уменьшен размер с 20 до 16
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onRemove,
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildImageWidget(File file, BuildContext context) {
     return GestureDetector(
-      onTap: () => _showImagePreview(context, file),
+      onTap: onTap ??
+          () => _showImagePreview(
+              context, file), // Используем колбэк или показываем превью
       onLongPress: isEditing ? () => _showFileOptions(context) : null,
       child: Stack(
         children: [
@@ -172,7 +182,9 @@ class MediaAttachmentWidget extends StatelessWidget {
     }
 
     return GestureDetector(
-      onTap: () => _showFilePreview(context, fileName, extension),
+      onTap: onTap ??
+          () => _showFilePreview(context, fileName,
+              extension), // Используем колбэк или показываем превью
       onLongPress: () => _showFileOptions(context),
       child: Card(
         elevation: 1, // Уменьшена тень
@@ -243,26 +255,61 @@ class MediaAttachmentWidget extends StatelessWidget {
     );
   }
 
-  // Метод для показа предпросмотра изображения
+  // Улучшенный метод для показа предпросмотра изображения
   void _showImagePreview(BuildContext context, File file) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
         child: Stack(
-          alignment: Alignment.center,
           children: [
+            // Изображение с InteractiveViewer для зума
             InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
               minScale: 0.5,
-              maxScale: 3.0,
-              child: Image.file(file),
+              maxScale: 4,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height,
+                  alignment: Alignment.center,
+                  child: Image.file(
+                    file,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(Icons.broken_image,
+                            size: 48, color: Colors.white),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            // Кнопки управления
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ),
             Positioned(
-              top: 0,
-              right: 0,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                onPressed: () => Navigator.pop(context),
+              bottom: 40,
+              right: 20,
+              child: FloatingActionButton(
+                heroTag: 'openImageExternalFAB',
+                backgroundColor: AppColors.accentSecondary,
+                mini: true,
+                child: const Icon(Icons.open_in_new, color: Colors.white),
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await _openFileExternally(context, mediaPath);
+                },
               ),
             ),
           ],
@@ -271,10 +318,46 @@ class MediaAttachmentWidget extends StatelessWidget {
     );
   }
 
-  // Метод для показа предпросмотра файла - упрощенный для компактности
+  // Улучшенный метод для показа предпросмотра файла
   void _showFilePreview(
       BuildContext context, String fileName, String extension) {
-    final MediaService mediaService = MediaService();
+    final mediaService = MediaService();
+
+    // Определяем иконку и цвет на основе расширения
+    IconData fileIcon;
+    Color iconColor;
+
+    switch (extension) {
+      case '.pdf':
+        fileIcon = Icons.picture_as_pdf;
+        iconColor = Colors.red;
+        break;
+      case '.doc':
+      case '.docx':
+        fileIcon = Icons.description;
+        iconColor = Colors.blue;
+        break;
+      case '.xls':
+      case '.xlsx':
+        fileIcon = Icons.table_chart;
+        iconColor = Colors.green;
+        break;
+      case '.mp3':
+      case '.wav':
+      case '.m4a':
+        fileIcon = Icons.music_note;
+        iconColor = Colors.purple;
+        break;
+      case '.mp4':
+      case '.mov':
+      case '.avi':
+        fileIcon = Icons.video_file;
+        iconColor = Colors.orange;
+        break;
+      default:
+        fileIcon = Icons.insert_drive_file;
+        iconColor = Colors.grey;
+    }
 
     showDialog(
       context: context,
@@ -283,8 +366,22 @@ class MediaAttachmentWidget extends StatelessWidget {
             style: const TextStyle(fontSize: 16)), // Уменьшен размер шрифта
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // Иконка файла с фоном
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                fileIcon,
+                size: 48,
+                color: iconColor,
+              ),
+            ),
+            const SizedBox(height: 16),
             Text('Тип файла: ${extension.toUpperCase().substring(1)}',
                 style: const TextStyle(fontSize: 14)), // Уменьшен размер шрифта
             const SizedBox(height: 8),
@@ -297,15 +394,57 @@ class MediaAttachmentWidget extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
             child: const Text('Закрыть'),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _openFileExternally(context, mediaPath);
+            },
+            child: const Text('Открыть'),
+          ),
         ],
       ),
     );
   }
 
-  // Метод для показа опций файла - упрощенный для компактности
+  // Метод для показа опций файла с улучшенным интерфейсом
   void _showFileOptions(BuildContext context) {
-    final MediaService mediaService = MediaService();
+    final mediaService = MediaService();
     final fileName = mediaService.getFileNameFromPath(mediaPath);
+    final extension = mediaService.getFileExtension(mediaPath);
+
+    // Определяем тип файла для заголовка
+    String fileType;
+    switch (extension) {
+      case '.jpg':
+      case '.jpeg':
+      case '.png':
+      case '.gif':
+        fileType = 'Изображение';
+        break;
+      case '.pdf':
+        fileType = 'PDF документ';
+        break;
+      case '.doc':
+      case '.docx':
+        fileType = 'Word документ';
+        break;
+      case '.xls':
+      case '.xlsx':
+        fileType = 'Excel таблица';
+        break;
+      case '.mp3':
+      case '.wav':
+      case '.m4a':
+        fileType = 'Аудиофайл';
+        break;
+      case '.mp4':
+      case '.mov':
+      case '.avi':
+        fileType = 'Видеофайл';
+        break;
+      default:
+        fileType = 'Файл';
+    }
 
     showModalBottomSheet(
       context: context,
@@ -316,16 +455,38 @@ class MediaAttachmentWidget extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 8, bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              child: Text(
-                fileName,
-                style: const TextStyle(
-                  fontSize: 14, // Уменьшен шрифт с 16 до 14
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileType,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    fileName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
             const Divider(height: 1),
@@ -337,7 +498,7 @@ class MediaAttachmentWidget extends StatelessWidget {
               dense: true, // Компактный вид
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Реализовать открытие файла
+                _openFileExternally(context, mediaPath);
               },
             ),
             if (isEditing)
@@ -361,13 +522,56 @@ class MediaAttachmentWidget extends StatelessWidget {
               dense: true, // Компактный вид
               onTap: () => Navigator.pop(context),
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
 
-  // Метод для подтверждения удаления - упрощенный для компактности
+  // Метод для открытия файла во внешнем приложении
+  Future<void> _openFileExternally(
+      BuildContext context, String filePath) async {
+    final file = File(filePath);
+
+    if (await file.exists()) {
+      try {
+        final uri = Uri.file(filePath);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Не удалось открыть файл во внешнем приложении'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка при открытии файла: $e'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Файл не существует или был удален'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // Метод для подтверждения удаления с улучшенным дизайном
   void _confirmDelete(BuildContext context) {
     showDialog(
       context: context,
@@ -390,98 +594,6 @@ class MediaAttachmentWidget extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// Виджет для отображения сетки изображений - улучшенная версия для квадратного отображения
-class MediaGrid extends StatelessWidget {
-  final List<String> imagePaths;
-  final Function(int index) onRemove;
-  final bool isEditing;
-
-  const MediaGrid({
-    Key? key,
-    required this.imagePaths,
-    required this.onRemove,
-    this.isEditing = true,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final MediaService mediaService = MediaService();
-
-    // Фильтруем только изображения
-    final images =
-        imagePaths.where((path) => mediaService.isImage(path)).toList();
-
-    if (images.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Используем GridView с фиксированным количеством плиток в ряду
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, // Всегда 2 изображения в ряду
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 1.0, // Точно квадратные ячейки
-      ),
-      itemCount: images.length,
-      itemBuilder: (context, index) {
-        return MediaAttachmentWidget(
-          mediaPath: images[index],
-          onRemove: () => onRemove(imagePaths.indexOf(images[index])),
-          isEditing: isEditing,
-        );
-      },
-    );
-  }
-}
-
-// Виджет для отображения списка файлов (не изображений) - компактная версия
-class FilesList extends StatelessWidget {
-  final List<String> filePaths;
-  final Function(int index) onRemove;
-  final bool isEditing;
-
-  const FilesList({
-    Key? key,
-    required this.filePaths,
-    required this.onRemove,
-    this.isEditing = true,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final MediaService mediaService = MediaService();
-
-    // Фильтруем только не-изображения
-    final files =
-        filePaths.where((path) => !mediaService.isImage(path)).toList();
-
-    if (files.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: files.length,
-      separatorBuilder: (context, index) =>
-          const SizedBox(height: 4), // Уменьшен отступ с 8 до 4
-      itemBuilder: (context, index) {
-        return SizedBox(
-          height: 50, // Фиксированная компактная высота
-          child: MediaAttachmentWidget(
-            mediaPath: files[index],
-            onRemove: () => onRemove(filePaths.indexOf(files[index])),
-            isEditing: isEditing,
-          ),
-        );
-      },
     );
   }
 }

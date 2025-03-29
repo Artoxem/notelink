@@ -463,7 +463,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     }
   }
 
-  // Построение режима просмотра с добавлением медиафайлов
+// Обновляем метод _buildViewMode() - добавляем отображение медиа-файлов
   Widget _buildViewMode() {
     final bool enableMarkdown =
         Provider.of<AppProvider>(context).enableMarkdownFormatting;
@@ -585,6 +585,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             child: Divider(height: 1),
           ),
 
+          // Добавляем улучшенное отображение медиа-файлов в режиме просмотра
+          if (_mediaFiles.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8.0),
+                    child: Text(
+                      "Прикрепленные файлы:",
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ),
+                  // Отдельно отображаем изображения и другие файлы
+                  _buildMediaFilesSection(),
+                ],
+              ),
+            ),
+
           // Содержимое заметки с поддержкой Markdown и голосовых сообщений
           if (enableMarkdown)
             Container(
@@ -610,6 +631,465 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         ],
       ),
     );
+  }
+
+// Метод для группировки и отображения медиа-файлов по типам
+  Widget _buildMediaFilesSection() {
+    final MediaService mediaService = MediaService();
+
+    // Разделяем файлы по типам
+    final List<String> images = [];
+    final List<String> otherFiles = [];
+
+    for (String mediaPath in _mediaFiles) {
+      if (mediaService.isImage(mediaPath)) {
+        images.add(mediaPath);
+      } else {
+        otherFiles.add(mediaPath);
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Отображаем изображения в виде сетки
+        if (images.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12.0),
+            child: Wrap(
+              spacing: 8.0,
+              runSpacing: 8.0,
+              children: images.map((path) => _buildImagePreview(path)).toList(),
+            ),
+          ),
+
+        // Отображаем остальные файлы в виде списка
+        if (otherFiles.isNotEmpty)
+          ListView.separated(
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: otherFiles.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              return MediaAttachmentWidget(
+                mediaPath: otherFiles[index],
+                onRemove: () {},
+                isEditing: false,
+                onTap: () => _openFileWithPreview(otherFiles[index]),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+// Добавляем метод для отображения превью изображения
+  Widget _buildImagePreview(String imagePath) {
+    // Проверяем существование файла
+    final file = File(imagePath);
+    final fileExists = file.existsSync();
+
+    return GestureDetector(
+      onTap: () {
+        if (fileExists) {
+          _showImageFullscreen(imagePath);
+        }
+      },
+      child: Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          color: fileExists
+              ? AppColors.textBackground
+              : AppColors.error.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: fileExists
+                ? AppColors.secondary.withOpacity(0.3)
+                : AppColors.error.withOpacity(0.5),
+            width: 1,
+          ),
+        ),
+        child: fileExists
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: Image.file(
+                  file,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Icon(Icons.broken_image, color: Colors.grey),
+                    );
+                  },
+                ),
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    color: AppColors.error,
+                    size: 24,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    "Файл не найден",
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+// Добавляем метод для отображения изображения в полноэкранном режиме
+  void _showImageFullscreen(String imagePath) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            children: [
+              // Изображение с InteractiveViewer для зума
+              InteractiveViewer(
+                panEnabled: true,
+                boundaryMargin: const EdgeInsets.all(20),
+                minScale: 0.5,
+                maxScale: 4,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context).size.height,
+                    alignment: Alignment.center,
+                    child: Image.file(
+                      File(imagePath),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(
+                          child: Icon(Icons.broken_image,
+                              size: 48, color: Colors.white),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              // Кнопка закрытия
+              Positioned(
+                top: 40,
+                right: 20,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              // Кнопка для открытия во внешнем приложении
+              Positioned(
+                bottom: 40,
+                right: 20,
+                child: FloatingActionButton(
+                  heroTag: 'openImageExternal',
+                  backgroundColor: AppColors.accentSecondary,
+                  mini: true,
+                  child: const Icon(Icons.open_in_new, color: Colors.white),
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    await _openFileExternally(imagePath);
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+// Метод для открытия файла с предварительным просмотром
+  void _openFileWithPreview(String filePath) {
+    final MediaService mediaService = MediaService();
+    final extension = filePath.toLowerCase();
+
+    // Проверяем тип файла и показываем соответствующий предпросмотр
+    if (mediaService.isImage(filePath)) {
+      _showImageFullscreen(filePath);
+    } else if (extension.endsWith('.pdf') ||
+        extension.endsWith('.doc') ||
+        extension.endsWith('.docx') ||
+        extension.endsWith('.txt')) {
+      _showDocumentPreview(filePath);
+    } else if (extension.endsWith('.mp3') ||
+        extension.endsWith('.wav') ||
+        extension.endsWith('.m4a')) {
+      _showAudioPreview(filePath);
+    } else {
+      // Для других форматов показываем общее диалоговое окно
+      _showFileOptionsDialog(filePath);
+    }
+  }
+
+// Метод для показа диалога с опциями файла
+  void _showFileOptionsDialog(String filePath) {
+    final File file = File(filePath);
+    final bool fileExists = file.existsSync();
+    final MediaService mediaService = MediaService();
+    final String fileName = mediaService.getFileNameFromPath(filePath);
+    final String extension = mediaService.getFileExtension(filePath);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          fileName,
+          style: const TextStyle(fontSize: 16),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Тип файла: ${extension.toUpperCase().substring(1)}',
+                style: const TextStyle(fontSize: 14)),
+            const SizedBox(height: 16),
+            if (!fileExists)
+              const Text(
+                'Файл не найден или был удален.',
+                style: TextStyle(color: Colors.red, fontSize: 14),
+              )
+            else
+              const Text(
+                'Выберите действие:',
+                style: TextStyle(fontSize: 14),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
+          if (fileExists)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _openFileExternally(filePath);
+              },
+              child: const Text('Открыть'),
+            ),
+        ],
+      ),
+    );
+  }
+
+// Метод для показа предпросмотра аудио файла
+  void _showAudioPreview(String filePath) {
+    final File file = File(filePath);
+    final bool fileExists = file.existsSync();
+    final MediaService mediaService = MediaService();
+    final String fileName = mediaService.getFileNameFromPath(filePath);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          fileName,
+          style: const TextStyle(fontSize: 16),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (!fileExists)
+              const Text(
+                'Аудиофайл не найден или был удален.',
+                style: TextStyle(color: Colors.red, fontSize: 14),
+              )
+            else
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.music_note,
+                        size: 48, color: Colors.purple),
+                    const SizedBox(height: 8),
+                    Text(
+                      fileName,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
+          if (fileExists)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _openFileExternally(filePath);
+              },
+              child: const Text('Открыть'),
+            ),
+        ],
+      ),
+    );
+  }
+
+// Метод для показа предпросмотра документа
+  void _showDocumentPreview(String filePath) {
+    final File file = File(filePath);
+    final bool fileExists = file.existsSync();
+    final MediaService mediaService = MediaService();
+    final String fileName = mediaService.getFileNameFromPath(filePath);
+    final String extension = mediaService.getFileExtension(filePath);
+
+    // Определяем иконку на основе расширения
+    IconData fileIcon;
+    Color iconColor;
+
+    switch (extension) {
+      case '.pdf':
+        fileIcon = Icons.picture_as_pdf;
+        iconColor = Colors.red;
+        break;
+      case '.doc':
+      case '.docx':
+        fileIcon = Icons.description;
+        iconColor = Colors.blue;
+        break;
+      case '.txt':
+        fileIcon = Icons.article;
+        iconColor = Colors.grey;
+        break;
+      default:
+        fileIcon = Icons.insert_drive_file;
+        iconColor = Colors.blue;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          fileName,
+          style: const TextStyle(fontSize: 16),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (!fileExists)
+              const Text(
+                'Документ не найден или был удален.',
+                style: TextStyle(color: Colors.red, fontSize: 14),
+              )
+            else
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Icon(fileIcon, size: 48, color: iconColor),
+                    const SizedBox(height: 8),
+                    Text(
+                      fileName,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Формат: ${extension.toUpperCase().substring(1)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
+          if (fileExists)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _openFileExternally(filePath);
+              },
+              child: const Text('Открыть'),
+            ),
+        ],
+      ),
+    );
+  }
+
+// Метод для открытия файла во внешнем приложении
+  Future<void> _openFileExternally(String filePath) async {
+    File file = File(filePath);
+    if (await file.exists()) {
+      try {
+        // Используем url_launcher для открытия файла
+        final uri = Uri.file(filePath);
+        final canLaunch = await canLaunchUrl(uri);
+
+        if (canLaunch) {
+          await launchUrl(uri);
+        } else {
+          // Если не можем открыть, показываем сообщение
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content:
+                      Text('Не удалось открыть файл во внешнем приложении')),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка: ${e.toString()}')),
+          );
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Файл не существует')),
+        );
+      }
+    }
   }
 
   // Оптимизированный метод построения медиа-секции
