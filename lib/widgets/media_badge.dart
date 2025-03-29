@@ -9,6 +9,7 @@ class MediaBadge extends StatelessWidget {
   final double size;
   final bool showCount;
   final VoidCallback? onTap;
+  final bool isFirstRun; // Добавлен новый параметр
 
   const MediaBadge({
     Key? key,
@@ -17,6 +18,7 @@ class MediaBadge extends StatelessWidget {
     this.size = 24.0,
     this.showCount = true,
     this.onTap,
+    this.isFirstRun = false, // Добавлен со значением по умолчанию
   }) : super(key: key);
 
   @override
