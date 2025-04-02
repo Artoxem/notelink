@@ -6,6 +6,7 @@ import 'providers/notes_provider.dart';
 import 'providers/themes_provider.dart';
 import 'screens/main_screen.dart';
 import 'services/database_service.dart';
+import 'services/notification_service.dart'; // Добавляем импорт сервиса уведомлений
 import 'utils/constants.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -19,6 +20,10 @@ void main() async {
   // Инициализация базы данных
   final databaseService = DatabaseService();
   await databaseService.database;
+
+  // Инициализация сервиса уведомлений
+  final notificationService = NotificationService();
+  await notificationService.init();
 
   // Создаем провайдеры заранее
   final appProvider = AppProvider();

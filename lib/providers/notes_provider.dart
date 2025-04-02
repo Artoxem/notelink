@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../services/database_service.dart';
+import '../services/notification_service.dart'; // Добавляем импорт
 
 // Определяем тип коллбэка для синхронизации
 typedef NoteDeletedCallback = void Function(
@@ -19,6 +20,10 @@ class NotesProvider with ChangeNotifier {
   // Добавляем список подписчиков на удаление заметок
   final List<NoteDeletedCallback> _onDeleteCallbacks = [];
 
+  // Сервисы
+  final DatabaseService _databaseService = DatabaseService();
+  final NotificationService _notificationService = NotificationService();
+
   // Геттеры для состояния
   List<Note> get notes => List.unmodifiable(_notes);
 
@@ -27,9 +32,6 @@ class NotesProvider with ChangeNotifier {
 
   // Набор для блокировки повторных операций
   final Set<String> _operationLock = {};
-
-  // Сервис для работы с базой данных
-  final DatabaseService _databaseService = DatabaseService();
 
   // Метод для регистрации коллбэка удаления
   void registerDeleteCallback(NoteDeletedCallback callback) {
@@ -236,6 +238,14 @@ class NotesProvider with ChangeNotifier {
       _noteCache[note.id] = note;
       _invalidateCache(); // Инвалидируем фильтрованные списки
 
+      // Планируем напоминания, если они есть
+      if (hasDeadline &&
+          deadlineDate != null &&
+          reminderDates != null &&
+          reminderDates.isNotEmpty) {
+        await _notificationService.scheduleNotificationsForNote(note);
+      }
+
       _isLoading = false;
       _loadingError = false;
       notifyListeners();
@@ -252,18 +262,43 @@ class NotesProvider with ChangeNotifier {
   // Обновить существующую заметку с улучшенной обработкой ошибок
   Future<bool> updateNote(Note note) async {
     try {
+      // Получаем старую версию заметки для сравнения напоминаний
+      Note? oldNote;
+      final index = _notes.indexWhere((n) => n.id == note.id);
+      if (index != -1) {
+        oldNote = _notes[index];
+      }
+
+      // Проверяем, изменились ли напоминания
+      bool remindersChanged = _haveRemindersChanged(oldNote, note);
+
       // Обновляем в БД
       final updatedNote = note.copyWith(updatedAt: DateTime.now());
       await _databaseService.updateNote(updatedNote);
 
       // Обновляем локальное состояние
-      final index = _notes.indexWhere((n) => n.id == note.id);
       if (index != -1) {
         _notes[index] = updatedNote;
 
         // Обновляем кэш
         _noteCache[note.id] = updatedNote;
         _invalidateCache(); // Инвалидируем фильтрованные списки
+
+        // Обновляем напоминания, если они изменились
+        if (remindersChanged) {
+          if (updatedNote.hasDeadline &&
+              updatedNote.deadlineDate != null &&
+              updatedNote.reminderDates != null &&
+              updatedNote.reminderDates!.isNotEmpty) {
+            // Планируем новые напоминания
+            await _notificationService
+                .scheduleNotificationsForNote(updatedNote);
+          } else {
+            // Отменяем существующие напоминания
+            await _notificationService
+                .cancelNotificationsForNote(updatedNote.id);
+          }
+        }
 
         notifyListeners();
       }
@@ -274,6 +309,40 @@ class NotesProvider with ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  // Проверка, изменились ли напоминания
+  bool _haveRemindersChanged(Note? oldNote, Note newNote) {
+    if (oldNote == null) return true;
+
+    // Проверяем изменение статуса дедлайна
+    if (oldNote.hasDeadline != newNote.hasDeadline) return true;
+
+    // Проверяем изменение даты дедлайна
+    if (oldNote.deadlineDate != newNote.deadlineDate) return true;
+
+    // Проверяем наличие/отсутствие дат напоминаний
+    if ((oldNote.reminderDates == null) != (newNote.reminderDates == null))
+      return true;
+
+    // Если у обоих нет дат напоминаний, то изменений нет
+    if (oldNote.reminderDates == null && newNote.reminderDates == null)
+      return false;
+
+    // Если количество дат напоминаний изменилось
+    if (oldNote.reminderDates!.length != newNote.reminderDates!.length)
+      return true;
+
+    // Сравниваем каждую дату
+    for (int i = 0; i < oldNote.reminderDates!.length; i++) {
+      if (oldNote.reminderDates![i] != newNote.reminderDates![i]) return true;
+    }
+
+    // Проверяем изменение звука
+    if (oldNote.reminderSound != newNote.reminderSound) return true;
+
+    // Если все проверки прошли, то напоминания не изменились
+    return false;
   }
 
   // Отметить заметку как выполненную
@@ -321,6 +390,9 @@ class NotesProvider with ChangeNotifier {
       // Инвалидируем кэш
       _noteCache[noteId] = updatedNote;
       _invalidateCache();
+
+      // Отменяем напоминания для выполненной задачи
+      await _notificationService.cancelNotificationsForNote(noteId);
 
       // Уведомляем слушателей
       notifyListeners();
@@ -379,6 +451,12 @@ class NotesProvider with ChangeNotifier {
       _noteCache[noteId] = updatedNote;
       _invalidateCache();
 
+      // Если есть напоминания, планируем их снова
+      if (updatedNote.reminderDates != null &&
+          updatedNote.reminderDates!.isNotEmpty) {
+        await _notificationService.scheduleNotificationsForNote(updatedNote);
+      }
+
       // Уведомляем слушателей
       notifyListeners();
 
@@ -426,6 +504,32 @@ class NotesProvider with ChangeNotifier {
       _noteCache[id] = updatedNote;
       _invalidateCache(); // Инвалидируем фильтрованные списки
 
+      // Если есть напоминания, обновляем их
+      if (updatedNote.reminderDates != null &&
+          updatedNote.reminderDates!.isNotEmpty) {
+        // Обновляем даты напоминаний относительно нового дедлайна
+        final List<DateTime> newReminderDates = _updateReminderDatesForDeadline(
+          updatedNote.reminderDates!,
+          originalDeadline,
+          newDeadline,
+        );
+
+        final noteWithUpdatedReminders = updatedNote.copyWith(
+          reminderDates: newReminderDates,
+        );
+
+        // Обновляем заметку с новыми датами напоминаний
+        await _databaseService.updateNote(noteWithUpdatedReminders);
+
+        // Обновляем локальное состояние и кэш
+        _notes[index] = noteWithUpdatedReminders;
+        _noteCache[id] = noteWithUpdatedReminders;
+
+        // Перепланируем напоминания
+        await _notificationService
+            .scheduleNotificationsForNote(noteWithUpdatedReminders);
+      }
+
       notifyListeners();
       return true;
     } catch (e) {
@@ -434,6 +538,33 @@ class NotesProvider with ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  // Обновление дат напоминаний при переносе дедлайна
+  List<DateTime> _updateReminderDatesForDeadline(
+    List<DateTime> oldReminders,
+    DateTime oldDeadline,
+    DateTime newDeadline,
+  ) {
+    // Находим разницу между старым и новым дедлайном
+    final difference = newDeadline.difference(oldDeadline);
+
+    // Создаем новый список напоминаний
+    List<DateTime> newReminders = [];
+
+    for (final oldReminderDate in oldReminders) {
+      // Если старое напоминание еще не наступило, переносим его на то же смещение
+      if (oldReminderDate.isAfter(DateTime.now())) {
+        newReminders.add(oldReminderDate.add(difference));
+      }
+    }
+
+    // Если все старые напоминания уже прошли, создаем новое напоминание за день до дедлайна
+    if (newReminders.isEmpty) {
+      newReminders.add(newDeadline.subtract(const Duration(days: 1)));
+    }
+
+    return newReminders;
   }
 
   // Улучшенный метод deleteNote с синхронизацией
@@ -448,6 +579,9 @@ class NotesProvider with ChangeNotifier {
         noteToDelete = _notes[index];
         themeIds = List.from(noteToDelete.themeIds);
       }
+
+      // Отменяем напоминания для заметки
+      await _notificationService.cancelNotificationsForNote(id);
 
       // Удаляем из БД
       await _databaseService.deleteNote(id);
@@ -600,6 +734,181 @@ class NotesProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = "Ошибка получения заметки: ${e.toString()}";
       return null;
+    }
+  }
+
+  // Создать новое напоминание к заметке
+  Future<bool> addReminderToNote(String noteId, DateTime reminderDate,
+      {String? sound}) async {
+    final index = _notes.indexWhere((n) => n.id == noteId);
+    if (index == -1) return false;
+
+    final note = _notes[index];
+
+    // Если у заметки нет дедлайна, невозможно добавить напоминание
+    if (!note.hasDeadline || note.deadlineDate == null) return false;
+
+    // Если заметка уже выполнена, не добавляем напоминание
+    if (note.isCompleted) return false;
+
+    // Если дата напоминания уже прошла, не добавляем
+    if (reminderDate.isBefore(DateTime.now())) return false;
+
+    // Получаем текущий список напоминаний или создаем новый
+    List<DateTime> reminderDates =
+        List<DateTime>.from(note.reminderDates ?? []);
+
+    // Добавляем новую дату напоминания
+    reminderDates.add(reminderDate);
+
+    // Сортируем даты напоминаний по времени
+    reminderDates.sort();
+
+    // Создаем обновленную копию заметки
+    final updatedNote = note.copyWith(
+      reminderDates: reminderDates,
+      reminderSound: sound ?? note.reminderSound,
+      updatedAt: DateTime.now(),
+    );
+
+    try {
+      // Обновляем в БД
+      await _databaseService.updateNote(updatedNote);
+
+      // Обновляем локальное состояние
+      _notes[index] = updatedNote;
+
+      // Обновляем кэш
+      _noteCache[noteId] = updatedNote;
+      _invalidateCache();
+
+      // Планируем напоминание
+      await _notificationService.scheduleNotificationsForNote(updatedNote);
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка добавления напоминания: ${e.toString()}";
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Удалить напоминание из заметки
+  Future<bool> removeReminderFromNote(
+      String noteId, DateTime reminderDate) async {
+    final index = _notes.indexWhere((n) => n.id == noteId);
+    if (index == -1) return false;
+
+    final note = _notes[index];
+
+    // Если у заметки нет напоминаний, выходим
+    if (note.reminderDates == null || note.reminderDates!.isEmpty) return false;
+
+    // Получаем текущий список напоминаний
+    List<DateTime> reminderDates = List<DateTime>.from(note.reminderDates!);
+
+    // Находим и удаляем точное соответствие дате
+    int removeIndex = -1;
+    for (int i = 0; i < reminderDates.length; i++) {
+      // Сравниваем даты с точностью до минуты
+      if (_isSameMinute(reminderDates[i], reminderDate)) {
+        removeIndex = i;
+        break;
+      }
+    }
+
+    // Если дата не найдена, выходим
+    if (removeIndex == -1) return false;
+
+    // Удаляем дату из списка
+    reminderDates.removeAt(removeIndex);
+
+    // Создаем обновленную копию заметки
+    final updatedNote = note.copyWith(
+      reminderDates: reminderDates,
+      updatedAt: DateTime.now(),
+    );
+
+    try {
+      // Обновляем в БД
+      await _databaseService.updateNote(updatedNote);
+
+      // Обновляем локальное состояние
+      _notes[index] = updatedNote;
+
+      // Обновляем кэш
+      _noteCache[noteId] = updatedNote;
+      _invalidateCache();
+
+      // Перепланируем напоминания
+      await _notificationService.cancelNotificationsForNote(noteId);
+      if (reminderDates.isNotEmpty) {
+        await _notificationService.scheduleNotificationsForNote(updatedNote);
+      }
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка удаления напоминания: ${e.toString()}";
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Вспомогательный метод для сравнения дат с точностью до минуты
+  bool _isSameMinute(DateTime a, DateTime b) {
+    return a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day &&
+        a.hour == b.hour &&
+        a.minute == b.minute;
+  }
+
+  // Обновить все напоминания заметки
+  Future<bool> updateNoteReminders(String noteId, List<DateTime> reminderDates,
+      {String? sound}) async {
+    final index = _notes.indexWhere((n) => n.id == noteId);
+    if (index == -1) return false;
+
+    final note = _notes[index];
+
+    // Если у заметки нет дедлайна, невозможно обновить напоминания
+    if (!note.hasDeadline || note.deadlineDate == null) return false;
+
+    // Создаем обновленную копию заметки
+    final updatedNote = note.copyWith(
+      reminderDates: reminderDates,
+      reminderSound: sound ?? note.reminderSound,
+      updatedAt: DateTime.now(),
+    );
+
+    try {
+      // Обновляем в БД
+      await _databaseService.updateNote(updatedNote);
+
+      // Обновляем локальное состояние
+      _notes[index] = updatedNote;
+
+      // Обновляем кэш
+      _noteCache[noteId] = updatedNote;
+      _invalidateCache();
+
+      // Перепланируем напоминания
+      await _notificationService.cancelNotificationsForNote(noteId);
+      if (reminderDates.isNotEmpty && !note.isCompleted) {
+        await _notificationService.scheduleNotificationsForNote(updatedNote);
+      }
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _loadingError = true;
+      _errorMessage = "Ошибка обновления напоминаний: ${e.toString()}";
+      notifyListeners();
+      return false;
     }
   }
 

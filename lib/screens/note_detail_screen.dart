@@ -10,6 +10,7 @@ import '../providers/themes_provider.dart';
 import '../widgets/markdown_editor.dart';
 import '../widgets/voice_note_player.dart';
 import '../widgets/media_attachment_widget.dart';
+import '../widgets/reminder_settings_widget.dart'; // Добавлен новый импорт
 import '../services/media_service.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -52,7 +53,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   bool _isContentChanged = false;
   bool _isFocusMode = false;
   bool _isLoading = false;
-  List<String> _mediaFiles = []; // Новое поле для медиафайлов
+  List<String> _mediaFiles = []; // Поле для медиафайлов
+
+  // Добавленные переменные для напоминаний
+  bool _hasReminders = false;
+  List<DateTime> _reminderDates = [];
+  String _reminderSound = 'default';
 
   // Для перехода между режимами
   late AnimationController _modeTransitionController;
@@ -118,6 +124,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       _hasDeadline = widget.note!.hasDeadline;
       _deadlineDate = widget.note!.deadlineDate;
 
+      // Инициализация напоминаний
+      _hasReminders = widget.note!.reminderDates != null &&
+          widget.note!.reminderDates!.isNotEmpty;
+      _reminderDates = widget.note!.reminderDates != null
+          ? List<DateTime>.from(widget.note!.reminderDates!)
+          : [];
+      _reminderSound = widget.note!.reminderSound ?? 'default';
+
       // Автоматически устанавливаем привязку к дате
       _hasDateLink = true;
       _linkedDate =
@@ -157,6 +171,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       _isEditing = false;
       _isEditMode =
           true; // Для новой заметки сразу включаем режим редактирования
+
+      // Инициализация напоминаний для новой заметки
+      _hasReminders = false;
+      _reminderDates = [];
+      _reminderSound = 'default';
 
       // Для новой заметки сразу устанавливаем анимацию редактирования
       _modeTransitionController.value = 1.0;
@@ -281,6 +300,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   void _removeMedia(int index) {
     setState(() {
       _mediaFiles.removeAt(index);
+      _isSettingsChanged = true;
+    });
+  }
+
+  // Обработчик изменения напоминаний
+  void _handleRemindersChanged(List<DateTime> dates, String sound) {
+    // Проверяем, что виджет всё ещё находится в дереве перед обновлением состояния
+    if (!mounted) return;
+
+    setState(() {
+      _reminderDates = dates;
+      _reminderSound = sound;
       _isSettingsChanged = true;
     });
   }
@@ -1333,6 +1364,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               if (_hasDeadline && _deadlineDate == null) {
                 _deadlineDate = DateTime.now().add(const Duration(days: 1));
               }
+              // Сбрасываем напоминания, если отключаем дедлайн
+              if (!_hasDeadline) {
+                _hasReminders = false;
+                _reminderDates = [];
+              }
             });
           },
         ),
@@ -1366,6 +1402,69 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                 });
               }
             },
+          ),
+
+        // Настройка напоминаний (появляется только когда есть дедлайн)
+        if (_hasDeadline && _deadlineDate != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Переключатель для включения/отключения напоминаний
+                Builder(
+                  builder: (context) {
+                    return SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Напоминания',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      dense: true,
+                      value: _hasReminders,
+                      onChanged: (value) {
+                        if (!mounted) return;
+
+                        setState(() {
+                          _hasReminders = value;
+                          if (_hasReminders && _reminderDates.isEmpty) {
+                            // Создаем напоминание по умолчанию (за день до дедлайна)
+                            final defaultReminderDate = _deadlineDate!
+                                .subtract(const Duration(days: 1));
+                            // Проверяем, что дата не в прошлом
+                            if (defaultReminderDate.isAfter(DateTime.now())) {
+                              _reminderDates = [defaultReminderDate];
+                            } else {
+                              // Если дата в прошлом, создаем напоминание на час вперед
+                              _reminderDates = [
+                                DateTime.now().add(const Duration(hours: 1))
+                              ];
+                            }
+                          }
+                          _isSettingsChanged = true;
+                        });
+                      },
+                    );
+                  },
+                ),
+
+                // Настройки напоминаний (используем переменную для упрощения условий)
+                Builder(
+                  builder: (context) {
+                    final bool showReminderSettings =
+                        _hasReminders && _deadlineDate != null && mounted;
+                    if (!showReminderSettings) return const SizedBox.shrink();
+
+                    return ReminderSettingsWidget(
+                      reminderDates: _reminderDates,
+                      reminderSound: _reminderSound,
+                      deadlineDate: _deadlineDate!,
+                      onRemindersChanged: _handleRemindersChanged,
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
 
         // Настройка связанной даты (компактнее)
@@ -1571,6 +1670,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
   // Метод для отображения markdown с голосовыми сообщениями
   Widget _buildMarkdownWithVoiceNotes(String content) {
+    if (!mounted) return const SizedBox();
+
     // Проверяем наличие голосовых сообщений в тексте
     final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:([^)]+)\)');
     final matches = voiceRegex.allMatches(content);
@@ -1732,7 +1833,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
         );
       }
 
-      // Добавляем виджет голосового сообщения (компактный)
+      // Добавляем виджет голосового сообщения в компактном виде
       final voiceNoteId = match.group(1);
       if (voiceNoteId != null) {
         contentWidgets.add(
@@ -1865,6 +1966,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               _emoji = widget.note!.emoji;
               _mediaFiles = List.from(
                   widget.note!.mediaUrls); // Сбрасываем список медиафайлов
+              // Восстанавливаем настройки напоминаний
+              _hasReminders = widget.note!.reminderDates != null &&
+                  widget.note!.reminderDates!.isNotEmpty;
+              _reminderDates = widget.note!.reminderDates != null
+                  ? List<DateTime>.from(widget.note!.reminderDates!)
+                  : [];
+              _reminderSound = widget.note!.reminderSound ?? 'default';
             }
 
             _isContentChanged = false;
@@ -1934,6 +2042,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
+  // Обновляем метод _saveNote для сохранения напоминаний
   Future<void> _saveNote() async {
     setState(() {
       // Используем поле класса вместо локальной переменной
@@ -1968,6 +2077,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           linkedDate: _linkedDate ?? DateTime.now(),
           emoji: _emoji,
           mediaUrls: _mediaFiles,
+          reminderDates: _hasReminders && _hasDeadline ? _reminderDates : null,
+          reminderSound: _hasReminders && _hasDeadline ? _reminderSound : null,
           voiceNotes: widget.note!.voiceNotes, // Сохраняем голосовые заметки
         );
 
@@ -2005,6 +2116,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           linkedDate: _linkedDate ?? DateTime.now(),
           emoji: _emoji,
           mediaUrls: _mediaFiles,
+          reminderDates: _hasReminders && _hasDeadline ? _reminderDates : null,
+          reminderSound: _hasReminders && _hasDeadline ? _reminderSound : null,
         );
 
         // Добавляем проверку результата

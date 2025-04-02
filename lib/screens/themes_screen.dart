@@ -219,7 +219,17 @@ class _ThemesScreenState extends State<ThemesScreen>
           return _buildEmptyState();
         }
 
-        return _buildThemesList();
+        // Теперь возвращаем колонку, содержащую фильтры и список тем
+        return Column(
+          children: [
+            // Добавляем фильтры тем вверху
+            _buildThemeFilters(themesProvider),
+            // Список тем занимает оставшееся пространство
+            Expanded(
+              child: _buildThemesList(),
+            ),
+          ],
+        );
       },
     );
   }
