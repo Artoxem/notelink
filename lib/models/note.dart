@@ -1,5 +1,41 @@
 import 'dart:convert';
 
+// Перечисление для типа напоминания
+enum ReminderType {
+  exactTime,
+  relativeTime,
+}
+
+// Класс для относительного напоминания
+class RelativeReminder {
+  final int minutes; // количество минут до дедлайна
+  final String description; // описание, например "За 1 час"
+
+  RelativeReminder({
+    required this.minutes,
+    required this.description,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'minutes': minutes,
+      'description': description,
+    };
+  }
+
+  factory RelativeReminder.fromMap(Map<String, dynamic> map) {
+    return RelativeReminder(
+      minutes: map['minutes'] as int,
+      description: map['description'] as String,
+    );
+  }
+
+  String toJson() => json.encode(toMap());
+
+  factory RelativeReminder.fromJson(String source) =>
+      RelativeReminder.fromMap(json.decode(source));
+}
+
 class Note {
   final String id;
   String content;
@@ -13,11 +49,19 @@ class Note {
   bool isCompleted;
   List<String> mediaUrls;
   String? emoji;
-  List<DateTime>? reminderDates;
+
+  // Поля для напоминаний
+  List<DateTime>? reminderDates; // Сохранено для обратной совместимости
   String? reminderSound;
+
+  // Новые поля для типа напоминания
+  ReminderType reminderType =
+      ReminderType.exactTime; // По умолчанию точное время
+  RelativeReminder? relativeReminder; // Данные о относительном напоминании
+
   List<DeadlineExtension>? deadlineExtensions;
   bool isFavorite;
-  List<String> voiceNotes; // Новое поле для голосовых заметок
+  List<String> voiceNotes; // Поле для голосовых заметок
 
   Note({
     required this.id,
@@ -35,6 +79,8 @@ class Note {
     this.emoji,
     this.reminderDates,
     this.reminderSound,
+    this.reminderType = ReminderType.exactTime,
+    this.relativeReminder,
     this.deadlineExtensions,
     this.voiceNotes = const [], // Значение по умолчанию - пустой список
   });
@@ -48,8 +94,13 @@ class Note {
       url.endsWith('.mp3') || url.endsWith('.wav') || url.endsWith('.m4a'));
   bool get hasFiles => mediaUrls.any((url) =>
       url.endsWith('.pdf') || url.endsWith('.doc') || url.endsWith('.txt'));
-  // Новый хелпер для проверки наличия голосовых заметок
+  // Хелпер для проверки наличия голосовых заметок
   bool get hasVoiceNotes => voiceNotes.isNotEmpty;
+
+  // Хелпер для проверки наличия напоминаний
+  bool get hasReminders =>
+      (reminderDates != null && reminderDates!.isNotEmpty) ||
+      relativeReminder != null;
 
   // Хелпер для получения "заголовка" из контента - первые несколько слов
   String get previewText {
@@ -77,6 +128,8 @@ class Note {
     String? emoji,
     List<DateTime>? reminderDates,
     String? reminderSound,
+    ReminderType? reminderType,
+    RelativeReminder? relativeReminder,
     List<DeadlineExtension>? deadlineExtensions,
     List<String>? voiceNotes,
   }) {
@@ -96,6 +149,8 @@ class Note {
       emoji: emoji ?? this.emoji,
       reminderDates: reminderDates ?? this.reminderDates,
       reminderSound: reminderSound ?? this.reminderSound,
+      reminderType: reminderType ?? this.reminderType,
+      relativeReminder: relativeReminder ?? this.relativeReminder,
       deadlineExtensions: deadlineExtensions ?? this.deadlineExtensions,
       voiceNotes: voiceNotes ?? this.voiceNotes,
     );
@@ -119,9 +174,10 @@ class Note {
       'reminderDates':
           reminderDates?.map((x) => x.millisecondsSinceEpoch).toList(),
       'reminderSound': reminderSound,
+      'reminderType': reminderType.index,
+      'relativeReminder': relativeReminder?.toMap(),
       'deadlineExtensions': deadlineExtensions?.map((x) => x.toMap()).toList(),
-      'voiceNotes':
-          json.encode(voiceNotes), // Добавляем сериализацию голосовых заметок
+      'voiceNotes': json.encode(voiceNotes),
     };
   }
 
@@ -149,11 +205,16 @@ class Note {
               .map((x) => DateTime.fromMillisecondsSinceEpoch(x)))
           : null,
       reminderSound: map['reminderSound'],
+      reminderType: map['reminderType'] != null
+          ? ReminderType.values[map['reminderType']]
+          : ReminderType.exactTime,
+      relativeReminder: map['relativeReminder'] != null
+          ? RelativeReminder.fromMap(map['relativeReminder'])
+          : null,
       deadlineExtensions: map['deadlineExtensions'] != null
           ? List<DeadlineExtension>.from(map['deadlineExtensions']
               .map((x) => DeadlineExtension.fromMap(x)))
           : null,
-      // Добавляем десериализацию голосовых заметок
       voiceNotes: map['voiceNotes'] != null
           ? List<String>.from(json.decode(map['voiceNotes']))
           : [],
@@ -163,6 +224,30 @@ class Note {
   String toJson() => json.encode(toMap());
 
   factory Note.fromJson(String source) => Note.fromMap(json.decode(source));
+
+  // Метод для получения актуального времени напоминания
+  // с учетом типа напоминания и дедлайна
+  DateTime? getActualReminderDateTime() {
+    if (!hasDeadline || deadlineDate == null) {
+      return null;
+    }
+
+    if (reminderType == ReminderType.exactTime) {
+      // Для точного времени возвращаем первую дату из списка
+      if (reminderDates == null || reminderDates!.isEmpty) {
+        return null;
+      }
+      return reminderDates!.first;
+    } else {
+      // Для относительного времени рассчитываем от дедлайна
+      if (relativeReminder == null) {
+        return null;
+      }
+
+      return deadlineDate!
+          .subtract(Duration(minutes: relativeReminder!.minutes));
+    }
+  }
 }
 
 class DeadlineExtension {

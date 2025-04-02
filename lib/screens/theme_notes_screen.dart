@@ -19,40 +19,6 @@ class ThemeNotesScreen extends StatefulWidget {
   State<ThemeNotesScreen> createState() => _ThemeNotesScreenState();
 }
 
-// Клиппер для треугольной формы
-class TriangleClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(size.width / 2, 0);
-    path.lineTo(size.width, size.height);
-    path.lineTo(0, size.height);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(TriangleClipper oldClipper) => false;
-}
-
-// Клиппер для пятиугольной формы
-class PentagonClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(size.width / 2, 0);
-    path.lineTo(size.width, size.height * 0.4);
-    path.lineTo(size.width * 0.8, size.height);
-    path.lineTo(size.width * 0.2, size.height);
-    path.lineTo(0, size.height * 0.4);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(PentagonClipper oldClipper) => false;
-}
-
 class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
   bool _isLoading = false;
   bool _hasError = false;

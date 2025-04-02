@@ -1313,7 +1313,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Левая колонка - настройки дат и дедлайнов
+                        // Левая колонка - настройки дат и дедлайнов (без напоминаний)
                         Expanded(
                           flex: 6,
                           child: _buildDateSettings(),
@@ -1334,6 +1334,63 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                       ],
                     ),
                   ),
+
+                  // Разделитель перед блоком напоминаний
+                  if (_hasDeadline)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Divider(height: 1),
+                    ),
+
+                  // Блок настроек напоминаний (появляется только когда есть дедлайн)
+                  if (_hasDeadline && _deadlineDate != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Переключатель для включения/отключения напоминаний
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Напоминания',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          dense: true,
+                          value: _hasReminders,
+                          onChanged: (value) {
+                            if (!mounted) return;
+
+                            setState(() {
+                              _hasReminders = value;
+                              if (_hasReminders && _reminderDates.isEmpty) {
+                                // Создаем напоминание по умолчанию (за день до дедлайна)
+                                final defaultReminderDate = _deadlineDate!
+                                    .subtract(const Duration(days: 1));
+                                // Проверяем, что дата не в прошлом
+                                if (defaultReminderDate
+                                    .isAfter(DateTime.now())) {
+                                  _reminderDates = [defaultReminderDate];
+                                } else {
+                                  // Если дата в прошлом, создаем напоминание на час вперед
+                                  _reminderDates = [
+                                    DateTime.now().add(const Duration(hours: 1))
+                                  ];
+                                }
+                              }
+                              _isSettingsChanged = true;
+                            });
+                          },
+                        ),
+
+                        // Настройки напоминаний (без дублирующего заголовка)
+                        if (_hasReminders && _deadlineDate != null && mounted)
+                          ReminderSettingsWidget(
+                            reminderDates: _reminderDates,
+                            reminderSound: _reminderSound,
+                            deadlineDate: _deadlineDate!,
+                            onRemindersChanged: _handleRemindersChanged,
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -1343,7 +1400,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
-// Оптимизированные настройки даты и дедлайна (левая колонка)
+  // Метод форматирования даты с днем недели
+  String _formatDateWithWeekday(DateTime date) {
+    // Массив дней недели на русском языке
+    final List<String> weekdays = [
+      'понедельник',
+      'вторник',
+      'среда',
+      'четверг',
+      'пятница',
+      'суббота',
+      'воскресенье'
+    ];
+
+    // Получаем индекс дня недели (в Dart дни недели индексируются с 1, поэтому вычитаем 1)
+    final int weekdayIndex = date.weekday - 1;
+
+    // Форматируем дату в виде "DD.MM (день недели)"
+    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')} (${weekdays[weekdayIndex]})';
+  }
+
+// Обновленный метод _buildDateSettings
   Widget _buildDateSettings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1353,7 +1430,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           contentPadding: EdgeInsets.zero,
           title: const Text(
             'Deadline',
-            style: TextStyle(fontSize: 13), // Уменьшение с 14 до 13
+            style: TextStyle(fontSize: 13),
           ),
           dense: true, // Делает виджет компактнее
           value: _hasDeadline,
@@ -1373,7 +1450,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           },
         ),
 
-        // Выбор даты для дедлайна (компактнее)
+        // Выбор даты для дедлайна (компактнее) с оранжевым цветом
         if (_hasDeadline)
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -1381,11 +1458,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             title: const Text('Deadline', style: TextStyle(fontSize: 13)),
             subtitle: Text(
                 _deadlineDate != null
-                    ? DateFormat('yyyy-MM-dd').format(_deadlineDate!)
+                    ? _formatDateWithWeekday(_deadlineDate!)
                     : 'Выберите дату',
-                style: TextStyle(fontSize: 12)), // Уменьшен шрифт
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.orange, // Оранжевый цвет для даты дедлайна
+                  fontWeight:
+                      FontWeight.bold, // Делаем текст жирным для выделения
+                )),
             leading: const Icon(Icons.calendar_today,
-                size: 20), // Уменьшен размер иконки
+                size: 20, color: Colors.orange), // Оранжевый цвет иконки
             onTap: () async {
               final selectedDate = await showDatePicker(
                 context: context,
@@ -1404,82 +1486,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             },
           ),
 
-        // Настройка напоминаний (появляется только когда есть дедлайн)
-        if (_hasDeadline && _deadlineDate != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Переключатель для включения/отключения напоминаний
-                Builder(
-                  builder: (context) {
-                    return SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Напоминания',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                      dense: true,
-                      value: _hasReminders,
-                      onChanged: (value) {
-                        if (!mounted) return;
-
-                        setState(() {
-                          _hasReminders = value;
-                          if (_hasReminders && _reminderDates.isEmpty) {
-                            // Создаем напоминание по умолчанию (за день до дедлайна)
-                            final defaultReminderDate = _deadlineDate!
-                                .subtract(const Duration(days: 1));
-                            // Проверяем, что дата не в прошлом
-                            if (defaultReminderDate.isAfter(DateTime.now())) {
-                              _reminderDates = [defaultReminderDate];
-                            } else {
-                              // Если дата в прошлом, создаем напоминание на час вперед
-                              _reminderDates = [
-                                DateTime.now().add(const Duration(hours: 1))
-                              ];
-                            }
-                          }
-                          _isSettingsChanged = true;
-                        });
-                      },
-                    );
-                  },
-                ),
-
-                // Настройки напоминаний (используем переменную для упрощения условий)
-                Builder(
-                  builder: (context) {
-                    final bool showReminderSettings =
-                        _hasReminders && _deadlineDate != null && mounted;
-                    if (!showReminderSettings) return const SizedBox.shrink();
-
-                    return ReminderSettingsWidget(
-                      reminderDates: _reminderDates,
-                      reminderSound: _reminderSound,
-                      deadlineDate: _deadlineDate!,
-                      onRemindersChanged: _handleRemindersChanged,
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-
         // Настройка связанной даты (компактнее)
-        const SizedBox(
-            height: 4), // Уменьшен отступ с AppDimens.smallPadding до 4
+        const SizedBox(height: 4),
         ListTile(
           contentPadding: EdgeInsets.zero,
           dense: true, // Компактный размер
           title: const Text('Создано', style: TextStyle(fontSize: 13)),
           subtitle: Text(
               _linkedDate != null
-                  ? DateFormat('yyyy-MM-dd').format(_linkedDate!)
+                  ? _formatDateWithWeekday(_linkedDate!)
                   : 'Выберите дату',
-              style: TextStyle(fontSize: 12)), // Уменьшен шрифт
-          leading: const Icon(Icons.link, size: 20), // Уменьшен размер иконки
+              style: const TextStyle(fontSize: 12)),
+          leading: const Icon(Icons.link, size: 20),
           onTap: () async {
             final selectedDate = await showDatePicker(
               context: context,
