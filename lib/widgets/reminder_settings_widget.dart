@@ -10,7 +10,10 @@ class ReminderSettingsWidget extends StatefulWidget {
   final List<DateTime> reminderDates;
   final String? reminderSound;
   final DateTime deadlineDate;
-  final Function(List<DateTime> dates, String sound) onRemindersChanged;
+  final Function(List<DateTime> dates, String sound,
+      {bool isRelativeTimeActive,
+      int? relativeMinutes,
+      String? relativeDescription}) onRemindersChanged;
 
   const ReminderSettingsWidget({
     Key? key,
@@ -153,9 +156,10 @@ class _ReminderSettingsWidgetState extends State<ReminderSettingsWidget> {
       _reminderDates.sort();
     });
 
-    // Уведомляем родительский виджет
+    // Уведомляем родительский виджет с указанием, что это точное время
     if (mounted) {
-      widget.onRemindersChanged(_reminderDates, _selectedSound);
+      widget.onRemindersChanged(_reminderDates, _selectedSound,
+          isRelativeTimeActive: false);
     }
   }
 
@@ -165,6 +169,7 @@ class _ReminderSettingsWidgetState extends State<ReminderSettingsWidget> {
 
     final relativeOption = _relativeOptions[index];
     final minutes = relativeOption['minutes'] as int;
+    final description = relativeOption['title'] as String;
 
     // Расчитываем дату напоминания относительно дедлайна
     final reminderDateTime =
@@ -187,8 +192,11 @@ class _ReminderSettingsWidgetState extends State<ReminderSettingsWidget> {
       ]; // Заменяем все напоминания одним относительным
     });
 
-    // Уведомляем родительский виджет
-    widget.onRemindersChanged(_reminderDates, _selectedSound);
+    // Уведомляем родительский виджет с указанием, что это относительное время
+    widget.onRemindersChanged(_reminderDates, _selectedSound,
+        isRelativeTimeActive: true,
+        relativeMinutes: minutes,
+        relativeDescription: description);
   }
 
   // Удаление напоминания
@@ -199,7 +207,8 @@ class _ReminderSettingsWidgetState extends State<ReminderSettingsWidget> {
       });
 
       // Уведомляем родительский виджет
-      widget.onRemindersChanged(_reminderDates, _selectedSound);
+      widget.onRemindersChanged(_reminderDates, _selectedSound,
+          isRelativeTimeActive: _isRelativeTimeActive);
     }
   }
 
@@ -215,7 +224,18 @@ class _ReminderSettingsWidgetState extends State<ReminderSettingsWidget> {
     }
 
     // Уведомляем родительский виджет
-    widget.onRemindersChanged(_reminderDates, _selectedSound);
+    if (_isRelativeTimeActive &&
+        _selectedRelativeOptionIndex >= 0 &&
+        _selectedRelativeOptionIndex < _relativeOptions.length) {
+      final relativeOption = _relativeOptions[_selectedRelativeOptionIndex];
+      widget.onRemindersChanged(_reminderDates, _selectedSound,
+          isRelativeTimeActive: true,
+          relativeMinutes: relativeOption['minutes'] as int,
+          relativeDescription: relativeOption['title'] as String);
+    } else {
+      widget.onRemindersChanged(_reminderDates, _selectedSound,
+          isRelativeTimeActive: false);
+    }
   }
 
   // Воспроизведение звука
@@ -320,6 +340,11 @@ class _ReminderSettingsWidgetState extends State<ReminderSettingsWidget> {
                                   _isExactTimeActive = true;
                                   _isRelativeTimeActive = false;
                                 });
+
+                                // Уведомляем об изменении типа
+                                widget.onRemindersChanged(
+                                    _reminderDates, _selectedSound,
+                                    isRelativeTimeActive: false);
                               },
                               child: Padding(
                                 padding: const EdgeInsets.only(bottom: 8.0),

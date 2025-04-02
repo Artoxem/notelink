@@ -59,6 +59,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   bool _hasReminders = false;
   List<DateTime> _reminderDates = [];
   String _reminderSound = 'default';
+  // Новые поля для типа напоминания
+  ReminderType _reminderType = ReminderType.exactTime;
+  RelativeReminder? _relativeReminder;
 
   // Для перехода между режимами
   late AnimationController _modeTransitionController;
@@ -132,6 +135,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           : [];
       _reminderSound = widget.note!.reminderSound ?? 'default';
 
+      // Инициализация типа напоминания и относительного напоминания
+      _reminderType = widget.note!.reminderType;
+      _relativeReminder = widget.note!.relativeReminder;
+
       // Автоматически устанавливаем привязку к дате
       _hasDateLink = true;
       _linkedDate =
@@ -176,6 +183,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       _hasReminders = false;
       _reminderDates = [];
       _reminderSound = 'default';
+      _reminderType = ReminderType.exactTime;
+      _relativeReminder = null;
 
       // Для новой заметки сразу устанавливаем анимацию редактирования
       _modeTransitionController.value = 1.0;
@@ -305,13 +314,30 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
   }
 
   // Обработчик изменения напоминаний
-  void _handleRemindersChanged(List<DateTime> dates, String sound) {
-    // Проверяем, что виджет всё ещё находится в дереве перед обновлением состояния
+  void _handleRemindersChanged(List<DateTime> dates, String sound,
+      {bool isRelativeTimeActive = false,
+      int? relativeMinutes,
+      String? relativeDescription}) {
     if (!mounted) return;
 
     setState(() {
       _reminderDates = dates;
       _reminderSound = sound;
+
+      // Обновляем тип напоминания и информацию о относительном напоминании
+      if (isRelativeTimeActive &&
+          relativeMinutes != null &&
+          relativeDescription != null) {
+        _reminderType = ReminderType.relativeTime;
+        _relativeReminder = RelativeReminder(
+          minutes: relativeMinutes,
+          description: relativeDescription,
+        );
+      } else {
+        _reminderType = ReminderType.exactTime;
+        _relativeReminder = null;
+      }
+
       _isSettingsChanged = true;
     });
   }
@@ -1381,7 +1407,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                           },
                         ),
 
-                        // Настройки напоминаний (без дублирующего заголовка)
+                        // Настройки напоминаний
                         if (_hasReminders && _deadlineDate != null && mounted)
                           ReminderSettingsWidget(
                             reminderDates: _reminderDates,
@@ -2060,7 +2086,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
     );
   }
 
-  // Обновляем метод _saveNote для сохранения напоминаний
+  // Метод для сохранения напоминаний
   Future<void> _saveNote() async {
     setState(() {
       // Используем поле класса вместо локальной переменной
@@ -2097,6 +2123,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           mediaUrls: _mediaFiles,
           reminderDates: _hasReminders && _hasDeadline ? _reminderDates : null,
           reminderSound: _hasReminders && _hasDeadline ? _reminderSound : null,
+          reminderType: _hasReminders && _hasDeadline
+              ? _reminderType
+              : ReminderType.exactTime,
+          relativeReminder:
+              _hasReminders && _hasDeadline ? _relativeReminder : null,
           voiceNotes: widget.note!.voiceNotes, // Сохраняем голосовые заметки
         );
 
@@ -2136,6 +2167,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           mediaUrls: _mediaFiles,
           reminderDates: _hasReminders && _hasDeadline ? _reminderDates : null,
           reminderSound: _hasReminders && _hasDeadline ? _reminderSound : null,
+          reminderType: _hasReminders && _hasDeadline
+              ? _reminderType
+              : ReminderType.exactTime,
+          relativeReminder:
+              _hasReminders && _hasDeadline ? _relativeReminder : null,
         );
 
         // Добавляем проверку результата
