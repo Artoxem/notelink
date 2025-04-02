@@ -36,6 +36,7 @@ class DatabaseService {
       // Проверяем и модифицируем таблицы при необходимости
       await ensureThemesTableHasLogoType();
       await ensureNotesTableHasVoiceNotes(); // Добавляем проверку колонки voiceNotes
+      await ensureNotesTableHasReminderFields(); // Добавляем новую проверку для полей напоминаний
       newLock.complete();
     } catch (e) {
       print('Критическая ошибка при инициализации базы данных: $e');
@@ -51,10 +52,40 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3, // Версия базы данных
+      version: 4, // Увеличиваем версию базы данных для поддержки новых полей
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
+  }
+
+  // Метод проверки и модификации таблицы notes для поддержки полей напоминаний
+  Future<void> ensureNotesTableHasReminderFields() async {
+    final db = await database;
+
+    try {
+      // Проверяем, есть ли колонка reminderType в таблице notes
+      var tableInfo = await db.rawQuery("PRAGMA table_info(notes)");
+      bool hasReminderType =
+          tableInfo.any((column) => column['name'] == 'reminderType');
+      bool hasRelativeReminder =
+          tableInfo.any((column) => column['name'] == 'relativeReminder');
+
+      if (!hasReminderType) {
+        print('Добавление колонки reminderType в таблицу notes...');
+        await db.execute(
+            "ALTER TABLE notes ADD COLUMN reminderType INTEGER DEFAULT 0");
+        print('Колонка reminderType успешно добавлена');
+      }
+
+      if (!hasRelativeReminder) {
+        print('Добавление колонки relativeReminder в таблицу notes...');
+        await db.execute(
+            "ALTER TABLE notes ADD COLUMN relativeReminder TEXT DEFAULT NULL");
+        print('Колонка relativeReminder успешно добавлена');
+      }
+    } catch (e) {
+      print('Ошибка при проверке/добавлении колонок для напоминаний: $e');
+    }
   }
 
   // Метод проверки и модификации таблицы notes
@@ -146,6 +177,33 @@ class DatabaseService {
         print(
             'База данных обновлена до версии 3. Требуется миграция логотипов тем.');
       }
+
+      // Добавляем поддержку для типа напоминаний и относительных напоминаний
+      if (oldVersion < 4) {
+        // Проверяем, есть ли уже колонка reminderType
+        var tableInfo = await db.rawQuery("PRAGMA table_info(notes)");
+        bool hasReminderType =
+            tableInfo.any((column) => column['name'] == 'reminderType');
+        bool hasRelativeReminder =
+            tableInfo.any((column) => column['name'] == 'relativeReminder');
+
+        if (!hasReminderType) {
+          print('Добавление колонки reminderType в таблицу notes...');
+          await db.execute(
+              "ALTER TABLE notes ADD COLUMN reminderType INTEGER DEFAULT 0");
+          print('Колонка reminderType успешно добавлена');
+        }
+
+        if (!hasRelativeReminder) {
+          print('Добавление колонки relativeReminder в таблицу notes...');
+          await db.execute(
+              "ALTER TABLE notes ADD COLUMN relativeReminder TEXT DEFAULT NULL");
+          print('Колонка relativeReminder успешно добавлена');
+        }
+
+        print(
+            'База данных обновлена до версии 4. Добавлена поддержка типов напоминаний.');
+      }
     } catch (e) {
       print('Ошибка обновления базы данных: $e');
       rethrow;
@@ -154,7 +212,7 @@ class DatabaseService {
 
   Future<void> _createDatabase(Database db, int version) async {
     try {
-      // Создаем таблицу заметок с колонкой voiceNotes
+      // Создаем таблицу заметок с колонками для напоминаний
       await db.execute('''
     CREATE TABLE notes(
       id TEXT PRIMARY KEY,
@@ -172,7 +230,9 @@ class DatabaseService {
       reminderDates TEXT,
       reminderSound TEXT,
       deadlineExtensions TEXT,
-      voiceNotes TEXT DEFAULT '[]'
+      voiceNotes TEXT DEFAULT '[]',
+      reminderType INTEGER DEFAULT 0,
+      relativeReminder TEXT
     )
     ''');
 
@@ -284,6 +344,10 @@ class DatabaseService {
                     note.deadlineExtensions!.map((x) => x.toMap()).toList())
                 : null,
             'voiceNotes': json.encode(note.voiceNotes),
+            'reminderType': note.reminderType.index, // Сохраняем индекс enum
+            'relativeReminder': note.relativeReminder != null
+                ? json.encode(note.relativeReminder!.toMap())
+                : null, // Сохраняем JSON представление
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -356,6 +420,26 @@ class DatabaseService {
         final noteId = map['id'] as String;
         final themeIds = noteThemeMap[noteId] ?? [];
 
+        // Десериализация полей reminderType и relativeReminder
+        ReminderType reminderType = ReminderType.exactTime; // По умолчанию
+        if (map['reminderType'] != null) {
+          final int typeIndex = map['reminderType'] as int;
+          if (typeIndex >= 0 && typeIndex < ReminderType.values.length) {
+            reminderType = ReminderType.values[typeIndex];
+          }
+        }
+
+        RelativeReminder? relativeReminder;
+        if (map['relativeReminder'] != null) {
+          try {
+            final Map<String, dynamic> reminderMap =
+                json.decode(map['relativeReminder'] as String);
+            relativeReminder = RelativeReminder.fromMap(reminderMap);
+          } catch (e) {
+            print('Ошибка при десериализации relativeReminder: $e');
+          }
+        }
+
         return Note(
           id: noteId,
           content: map['content'] as String,
@@ -391,6 +475,9 @@ class DatabaseService {
           voiceNotes: map['voiceNotes'] != null
               ? List<String>.from(json.decode(map['voiceNotes'] as String))
               : [],
+          // Добавляем поля для типов напоминаний
+          reminderType: reminderType,
+          relativeReminder: relativeReminder,
         );
       }).toList();
     } catch (e) {
@@ -508,6 +595,26 @@ class DatabaseService {
         final noteId = map['id'] as String;
         final themeIds = noteThemeMap[noteId] ?? [];
 
+        // Десериализация полей reminderType и relativeReminder
+        ReminderType reminderType = ReminderType.exactTime; // По умолчанию
+        if (map['reminderType'] != null) {
+          final int typeIndex = map['reminderType'] as int;
+          if (typeIndex >= 0 && typeIndex < ReminderType.values.length) {
+            reminderType = ReminderType.values[typeIndex];
+          }
+        }
+
+        RelativeReminder? relativeReminder;
+        if (map['relativeReminder'] != null) {
+          try {
+            final Map<String, dynamic> reminderMap =
+                json.decode(map['relativeReminder'] as String);
+            relativeReminder = RelativeReminder.fromMap(reminderMap);
+          } catch (e) {
+            print('Ошибка при десериализации relativeReminder: $e');
+          }
+        }
+
         return Note(
           id: noteId,
           content: map['content'] as String,
@@ -543,6 +650,8 @@ class DatabaseService {
           voiceNotes: map['voiceNotes'] != null
               ? List<String>.from(json.decode(map['voiceNotes'] as String))
               : [],
+          reminderType: reminderType,
+          relativeReminder: relativeReminder,
         );
       }).toList();
     } catch (e) {
@@ -568,6 +677,26 @@ class DatabaseService {
 
       // Получаем связи с темами для конкретной заметки
       final List<String> themeIds = await getThemeIdsForNote(id);
+
+      // Десериализация полей reminderType и relativeReminder
+      ReminderType reminderType = ReminderType.exactTime; // По умолчанию
+      if (map['reminderType'] != null) {
+        final int typeIndex = map['reminderType'] as int;
+        if (typeIndex >= 0 && typeIndex < ReminderType.values.length) {
+          reminderType = ReminderType.values[typeIndex];
+        }
+      }
+
+      RelativeReminder? relativeReminder;
+      if (map['relativeReminder'] != null) {
+        try {
+          final Map<String, dynamic> reminderMap =
+              json.decode(map['relativeReminder'] as String);
+          relativeReminder = RelativeReminder.fromMap(reminderMap);
+        } catch (e) {
+          print('Ошибка при десериализации relativeReminder: $e');
+        }
+      }
 
       return Note(
         id: map['id'] as String,
@@ -602,6 +731,8 @@ class DatabaseService {
         voiceNotes: map['voiceNotes'] != null
             ? List<String>.from(json.decode(map['voiceNotes'] as String))
             : [],
+        reminderType: reminderType,
+        relativeReminder: relativeReminder,
       );
     } catch (e) {
       print('Ошибка при получении заметки: $e');
@@ -660,6 +791,10 @@ class DatabaseService {
                     note.deadlineExtensions!.map((x) => x.toMap()).toList())
                 : null,
             'voiceNotes': json.encode(note.voiceNotes),
+            'reminderType': note.reminderType.index, // Сохраняем индекс enum
+            'relativeReminder': note.relativeReminder != null
+                ? json.encode(note.relativeReminder!.toMap())
+                : null, // Сохраняем JSON представление
           },
           where: 'id = ?',
           whereArgs: [note.id],
@@ -1089,6 +1224,26 @@ class DatabaseService {
         final noteId = map['id'] as String;
         final themeIds = noteThemeMap[noteId] ?? [];
 
+        // Десериализация полей reminderType и relativeReminder
+        ReminderType reminderType = ReminderType.exactTime; // По умолчанию
+        if (map['reminderType'] != null) {
+          final int typeIndex = map['reminderType'] as int;
+          if (typeIndex >= 0 && typeIndex < ReminderType.values.length) {
+            reminderType = ReminderType.values[typeIndex];
+          }
+        }
+
+        RelativeReminder? relativeReminder;
+        if (map['relativeReminder'] != null) {
+          try {
+            final Map<String, dynamic> reminderMap =
+                json.decode(map['relativeReminder'] as String);
+            relativeReminder = RelativeReminder.fromMap(reminderMap);
+          } catch (e) {
+            print('Ошибка при десериализации relativeReminder: $e');
+          }
+        }
+
         return Note(
           id: noteId,
           content: map['content'] as String,
@@ -1124,6 +1279,8 @@ class DatabaseService {
           voiceNotes: map['voiceNotes'] != null
               ? List<String>.from(json.decode(map['voiceNotes'] as String))
               : [],
+          reminderType: reminderType,
+          relativeReminder: relativeReminder,
         );
       }).toList();
     } catch (e) {
@@ -1173,6 +1330,10 @@ class DatabaseService {
                         note.deadlineExtensions!.map((x) => x.toMap()).toList())
                     : null,
                 'voiceNotes': json.encode(note.voiceNotes),
+                'reminderType': note.reminderType.index,
+                'relativeReminder': note.relativeReminder != null
+                    ? json.encode(note.relativeReminder!.toMap())
+                    : null,
               },
               where: 'id = ?',
               whereArgs: [note.id],

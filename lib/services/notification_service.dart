@@ -1,11 +1,12 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz_data;
-import 'package:flutter/services.dart';
+import 'package:timezone/data/latest.dart' as tz_init;
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import 'dart:async';
 import '../models/note.dart';
-import 'dart:math';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:intl/intl.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -13,263 +14,458 @@ class NotificationService {
 
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
+  final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  // Список доступных звуков (будет заполнен при инициализации)
-  List<String> _availableSounds = ['default'];
+  bool _isInitialized = false;
+
+  // Константы для идентификации каналов уведомлений
+  static const String _channelId = 'note_link_reminders';
+  static const String _channelName = 'Напоминания';
+  static const String _channelDescription =
+      'Уведомления о приближающихся дедлайнах и задачах';
+
+  // Константы для идентификации типов напоминаний в ID
+  static const String _reminderId = 'reminder';
+  static const String _deadlineId = 'deadline';
+
+  // Максимальное количество секунд для отложенных уведомлений
+  static const int _maxNotificationDelay =
+      7 * 24 * 60 * 60; // 7 дней в секундах
+
+  // Доступные звуки для уведомлений
+  final List<String> _availableSounds = [
+    'default',
+    'alert',
+    'bell',
+    'chime',
+    'urgent',
+    'clock'
+  ];
 
   // Инициализация сервиса уведомлений
   Future<void> init() async {
-    tz_data.initializeTimeZones();
+    if (_isInitialized) return;
 
-    // Инициализация плагина уведомлений
-    const AndroidInitializationSettings initializationSettingsAndroid =
+    // Инициализируем данные временных зон
+    tz_init.initializeTimeZones();
+
+    // Настройки для Android
+    const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    final DarwinInitializationSettings initializationSettingsIOS =
+    // Настройки для iOS
+    final DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
-      requestSoundPermission: true,
-      requestBadgePermission: true,
       requestAlertPermission: true,
-      onDidReceiveLocalNotification: (id, title, body, payload) async {
-        // Обработка нажатия на уведомление в iOS
-      },
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+      onDidReceiveLocalNotification: _onDidReceiveLocalNotification,
     );
 
-    final InitializationSettings initializationSettings =
-        InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
+    // Объединяем настройки
+    final InitializationSettings initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
     );
 
-    await _flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse details) {
-        // Обработка нажатия на уведомление
-      },
+    // Инициализируем плагин
+    await _notifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: _onNotificationResponse,
     );
 
-    // Загружаем список доступных звуков
-    await _loadAvailableSounds();
+    // Запрашиваем разрешения на показ уведомлений
+    await _requestPermissions();
+
+    // Копируем звуки в директорию приложения
+    await _prepareSounds();
+
+    _isInitialized = true;
   }
 
-  // Загрузка списка доступных звуков из ресурсов
-  Future<void> _loadAvailableSounds() async {
-    try {
-      // Начинаем с базового списка
-      _availableSounds = ['default'];
+  // Обработчик нажатия на уведомление в iOS
+  Future<void> _onDidReceiveLocalNotification(
+      int id, String? title, String? body, String? payload) async {
+    // В iOS 10+ эта функция не будет вызываться
+  }
 
-      // Список предустановленных звуков (находим эти файлы в assets/sounds/reminder)
-      // В реальном случае можно использовать rootBundle.loadString('AssetManifest.json')
-      // для динамического получения списка, но для упрощения я использую жесткий список
-      final predefinedSounds = ['clock'];
+  // Обработчик действия пользователя по уведомлению
+  void _onNotificationResponse(NotificationResponse response) {
+    // Здесь можно обрабатывать действия пользователя
+    print('Нажато на уведомление: ${response.payload}');
+  }
 
-      _availableSounds.addAll(predefinedSounds);
-    } catch (e) {
-      print('Ошибка при загрузке доступных звуков: $e');
+  // Запрос разрешений для показа уведомлений
+  Future<void> _requestPermissions() async {
+    // Запрос для Android 13+
+    if (Platform.isAndroid) {
+      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+          _notifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      // Проверяем, что реализация найдена, перед вызовом метода
+      await androidImplementation?.requestNotificationsPermission();
+    }
+
+    // Запрос для iOS
+    if (Platform.isIOS) {
+      await _notifications
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+    }
+  }
+
+  // Подготовка звуковых файлов
+  Future<void> _prepareSounds() async {
+    // Получаем директорию приложения
+    final directory = await getApplicationDocumentsDirectory();
+    final soundsDir = Directory('${directory.path}/sounds');
+
+    // Создаем директорию, если ее нет
+    if (!await soundsDir.exists()) {
+      await soundsDir.create(recursive: true);
+    }
+
+    // Копируем звуки из ассетов
+    for (final sound in _availableSounds) {
+      if (sound == 'default') continue; // Стандартный звук не нужно копировать
+
+      final soundFile = File('${soundsDir.path}/$sound.wav');
+      if (!await soundFile.exists()) {
+        try {
+          final data = await rootBundle.load('assets/sounds/$sound.wav');
+          final buffer = data.buffer.asUint8List();
+          await soundFile.writeAsBytes(buffer);
+        } catch (e) {
+          print('Ошибка при копировании звука $sound: $e');
+        }
+      }
     }
   }
 
   // Получение списка доступных звуков
-  List<String> getAvailableSounds() {
-    return _availableSounds;
-  }
+  List<String> getAvailableSounds() => List.from(_availableSounds);
 
-  // Запланировать уведомления для заметки
+  // Планирование уведомлений для заметки
   Future<void> scheduleNotificationsForNote(Note note) async {
-    // Отменяем существующие уведомления для этой заметки
-    await cancelNotificationsForNote(note.id);
+    if (!_isInitialized) await init();
 
-    // Проверяем, есть ли даты напоминаний
-    if (!note.hasDeadline ||
-        note.reminderDates == null ||
-        note.reminderDates!.isEmpty) {
+    // Проверяем, что заметка имеет дедлайн и напоминания
+    if (!note.hasDeadline || note.deadlineDate == null || !note.hasReminders) {
       return;
     }
 
-    // Название заметки для уведомления (первые слова или "Напоминание")
-    String title = note.content.isNotEmpty
-        ? (note.content.length > 30
-            ? '${note.content.substring(0, 30)}...'
-            : note.content)
-        : 'Напоминание';
+    // Сначала отменяем существующие уведомления для этой заметки
+    await cancelNotificationsForNote(note.id);
 
-    // Текст уведомления
-    String body = note.hasDeadline && note.deadlineDate != null
-        ? 'Дедлайн: ${_formatDate(note.deadlineDate!)}'
-        : 'Новое напоминание';
+    // Устанавливаем параметры уведомлений в зависимости от типа напоминания
+    if (note.reminderType == ReminderType.exactTime) {
+      await _scheduleExactTimeReminders(note);
+    } else if (note.reminderType == ReminderType.relativeTime) {
+      await _scheduleRelativeTimeReminder(note);
+    }
 
-    // Выбираем звук уведомления
-    String soundName = note.reminderSound ?? 'default';
+    // Планируем уведомление о дедлайне, если до него осталось не более 7 дней
+    await _scheduleDeadlineNotification(note);
+  }
 
-    // Создаем уведомление для каждой даты напоминания
-    for (var reminderDate in note.reminderDates!) {
-      // Пропускаем прошедшие даты
-      if (reminderDate.isBefore(DateTime.now())) {
-        continue;
+  // Планирование напоминаний с точным временем
+  Future<void> _scheduleExactTimeReminders(Note note) async {
+    if (note.reminderDates == null || note.reminderDates!.isEmpty) return;
+
+    for (int i = 0; i < note.reminderDates!.length; i++) {
+      final reminderDate = note.reminderDates![i];
+
+      // Проверяем, что дата в будущем
+      if (reminderDate.isBefore(DateTime.now())) continue;
+
+      // Рассчитываем задержку в секундах
+      final delayInSeconds = reminderDate.difference(DateTime.now()).inSeconds;
+
+      // Планируем только если задержка не превышает максимальную
+      if (delayInSeconds <= _maxNotificationDelay) {
+        await _scheduleReminderNotification(
+          note,
+          reminderDate,
+          i, // Используем индекс для создания уникального ID
+          note.reminderSound ?? 'default',
+        );
       }
+    }
+  }
 
-      // Генерируем уникальный ID для уведомления на основе ID заметки и даты
-      final int notificationId = _generateNotificationId(note.id, reminderDate);
+  // Планирование относительного напоминания
+  Future<void> _scheduleRelativeTimeReminder(Note note) async {
+    if (note.relativeReminder == null || note.deadlineDate == null) return;
 
-      // Планируем уведомление
-      await _scheduleNotification(
-        id: notificationId,
-        title: title,
-        body: body,
-        time: reminderDate,
-        payload: note.id,
-        soundName: soundName,
+    // Рассчитываем дату напоминания на основе дедлайна и смещения в минутах
+    final reminderDate = note.deadlineDate!.subtract(
+      Duration(minutes: note.relativeReminder!.minutes),
+    );
+
+    // Проверяем, что дата в будущем
+    if (reminderDate.isBefore(DateTime.now())) return;
+
+    // Рассчитываем задержку в секундах
+    final delayInSeconds = reminderDate.difference(DateTime.now()).inSeconds;
+
+    // Планируем только если задержка не превышает максимальную
+    if (delayInSeconds <= _maxNotificationDelay) {
+      await _scheduleReminderNotification(
+        note,
+        reminderDate,
+        0, // Для относительного напоминания используем индекс 0
+        note.reminderSound ?? 'default',
+        isRelative: true, // Указываем, что это относительное напоминание
       );
     }
   }
 
-  // Генерация уникального ID для уведомления
-  int _generateNotificationId(String noteId, DateTime date) {
-    // Используем хеш строки noteId и timestamp даты для генерации ID
-    final String idString = '$noteId-${date.millisecondsSinceEpoch}';
-    final int hash = idString.hashCode;
+  // Планирование уведомления о дедлайне
+  Future<void> _scheduleDeadlineNotification(Note note) async {
+    if (note.deadlineDate == null) return;
 
-    // Ограничиваем до 31 бита (максимальный размер для Android)
-    return hash.abs() % 2147483647;
-  }
+    // Не планируем уведомление для выполненных задач
+    if (note.isCompleted) return;
 
-  // Запланировать уведомление
-  Future<void> _scheduleNotification({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime time,
-    required String payload,
-    required String soundName,
-  }) async {
-    // Настройки Android
-    AndroidNotificationDetails androidDetails;
+    // Проверяем, что дедлайн в будущем и не более чем через 7 дней
+    final now = DateTime.now();
+    final deadline = note.deadlineDate!;
 
-    // Если звук не "default", используем кастомный звук
-    if (soundName != 'default' && _availableSounds.contains(soundName)) {
-      // Подготавливаем звуковой файл (копируем из ресурсов если нужно)
-      final String soundPath = await _prepareSoundFile(soundName);
+    if (deadline.isBefore(now)) return;
 
-      androidDetails = AndroidNotificationDetails(
-        'reminder_channel_id',
-        'Напоминания',
-        channelDescription: 'Уведомления о напоминаниях',
-        importance: Importance.high,
-        priority: Priority.high,
-        sound: soundPath.isNotEmpty
-            ? RawResourceAndroidNotificationSound(soundPath)
-            : null,
-        playSound: true,
-      );
-    } else {
-      // Используем звук по умолчанию
-      androidDetails = const AndroidNotificationDetails(
-        'reminder_channel_id',
-        'Напоминания',
-        channelDescription: 'Уведомления о напоминаниях',
-        importance: Importance.high,
-        priority: Priority.high,
-      );
-    }
+    final delayInSeconds = deadline.difference(now).inSeconds;
+    if (delayInSeconds > _maxNotificationDelay) return;
 
-    // Настройки iOS
-    DarwinNotificationDetails iosDetails;
+    // Создаем идентификатор для уведомления о дедлайне
+    final int notificationId = _generateNotificationId(
+      note.id,
+      _deadlineId,
+      0, // Для дедлайна используем индекс 0
+    );
 
-    if (soundName != 'default' && _availableSounds.contains(soundName)) {
-      iosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        sound: '$soundName.m4a',
-      );
-    } else {
-      iosDetails = const DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      );
-    }
+    // Получаем текст заголовка и содержимого
+    final String title = 'Дедлайн: ${_getPreviewText(note.content)}';
+    final String body =
+        'Срок выполнения заканчивается ${_formatDate(deadline)}';
 
-    // Настройки для всех платформ
-    NotificationDetails platformDetails = NotificationDetails(
+    // Настройки для Android
+    final AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      sound: RawResourceAndroidNotificationSound(
+          'urgent'), // Используем звук 'urgent' для дедлайнов
+      styleInformation: BigTextStyleInformation(body),
+    );
+
+    // Настройки для iOS
+    final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      sound: 'urgent.wav',
+    );
+
+    // Объединяем настройки
+    final NotificationDetails details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
 
-    // Запланировать уведомление с использованием timezone
-    await _flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
+    // Планируем уведомление
+    await _notifications.zonedSchedule(
+      notificationId,
       title,
       body,
-      tz.TZDateTime.from(time, tz.local),
-      platformDetails,
+      tz.TZDateTime.from(deadline, tz.local),
+      details,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: payload,
+      payload: note.id,
     );
   }
 
-  // Подготовка звукового файла для уведомления на Android
-  Future<String> _prepareSoundFile(String soundName) async {
-    try {
-      // На Android мы не можем напрямую использовать звуки из assets,
-      // поэтому копируем их во временный каталог или используем raw ресурсы
-      // В этой реализации будем просто возвращать имя файла без расширения
-      // предполагая, что файл есть в res/raw директории Android проекта
-      return soundName;
-    } catch (e) {
-      print('Ошибка при подготовке звукового файла: $e');
-      return '';
+  // Планирование конкретного напоминания
+  Future<void> _scheduleReminderNotification(
+    Note note,
+    DateTime reminderTime,
+    int index,
+    String sound, {
+    bool isRelative = false,
+  }) async {
+    // Создаем идентификатор для уведомления
+    final int notificationId = _generateNotificationId(
+      note.id,
+      _reminderId,
+      index,
+    );
+
+    // Формируем текст заголовка и содержимого
+    String title;
+    String body;
+
+    if (isRelative) {
+      // Текст для относительного напоминания
+      title = 'Напоминание: ${_getPreviewText(note.content)}';
+      body =
+          'Осталось ${note.relativeReminder!.description} до дедлайна (${_formatDate(note.deadlineDate!)})';
+    } else {
+      // Текст для напоминания с точным временем
+      title = 'Напоминание: ${_getPreviewText(note.content)}';
+
+      if (note.hasDeadline && note.deadlineDate != null) {
+        final int daysUntilDeadline =
+            note.deadlineDate!.difference(reminderTime).inDays;
+        if (daysUntilDeadline == 0) {
+          body =
+              'Дедлайн сегодня в ${DateFormat('HH:mm').format(note.deadlineDate!)}';
+        } else if (daysUntilDeadline == 1) {
+          body =
+              'Дедлайн завтра в ${DateFormat('HH:mm').format(note.deadlineDate!)}';
+        } else {
+          body = 'Срок выполнения: ${_formatDate(note.deadlineDate!)}';
+        }
+      } else {
+        body = 'Не забудьте выполнить эту задачу';
+      }
     }
+
+    // Получаем имя файла звука
+    final String soundFileName = sound == 'default' ? 'default' : '$sound.wav';
+
+    // Настройки для Android
+    final AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      sound: sound == 'default'
+          ? null
+          : RawResourceAndroidNotificationSound(sound),
+      styleInformation: BigTextStyleInformation(body),
+    );
+
+    // Настройки для iOS
+    final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      sound: sound == 'default' ? null : soundFileName,
+    );
+
+    // Объединяем настройки
+    final NotificationDetails details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    // Планируем уведомление
+    await _notifications.zonedSchedule(
+      notificationId,
+      title,
+      body,
+      tz.TZDateTime.from(reminderTime, tz.local),
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: note.id,
+    );
   }
 
   // Отмена всех уведомлений для заметки
   Future<void> cancelNotificationsForNote(String noteId) async {
-    // В идеале, мы должны хранить все ID уведомлений для каждой заметки
-    // Но для простоты мы можем отменить диапазон уведомлений
-
-    // Создаем хеш из ID заметки
-    final int baseId = noteId.hashCode.abs() % 100000000;
-
-    // Отменяем уведомления в диапазоне baseId до baseId + 100
-    // Это позволит отменить до 100 уведомлений для одной заметки
-    for (int i = 0; i < 100; i++) {
-      await _flutterLocalNotificationsPlugin.cancel(baseId + i);
-    }
-  }
-
-  // Форматирование даты
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
-  }
-
-  // Получение пути к файлу звука для предварительного прослушивания
-  Future<String> getSoundFilePath(String soundName) async {
-    if (soundName == 'default' || !_availableSounds.contains(soundName)) {
-      return '';
-    }
+    if (!_isInitialized) await init();
 
     try {
-      // В реальном приложении здесь будет логика для получения пути к файлу
-      // в зависимости от платформы
+      // Отменяем напоминания
+      for (int i = 0; i < 10; i++) {
+        // Предполагаем, что может быть до 10 напоминаний
+        final int reminderNotificationId = _generateNotificationId(
+          noteId,
+          _reminderId,
+          i,
+        );
+        await _notifications.cancel(reminderNotificationId);
+      }
 
-      // Для Flutter это может быть копирование asset файла во временный каталог
-      final ByteData data =
-          await rootBundle.load('assets/sounds/reminder/$soundName.m4a');
-      final Directory tempDir = await getTemporaryDirectory();
-      final String tempPath = '${tempDir.path}/$soundName.m4a';
-      final File tempFile = File(tempPath);
-      await tempFile.writeAsBytes(
-          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
-
-      return tempPath;
+      // Отменяем уведомление о дедлайне
+      final int deadlineNotificationId = _generateNotificationId(
+        noteId,
+        _deadlineId,
+        0,
+      );
+      await _notifications.cancel(deadlineNotificationId);
     } catch (e) {
-      print('Ошибка при получении пути к звуковому файлу: $e');
-      return '';
+      print('Ошибка при отмене уведомлений: $e');
+    }
+  }
+
+  // Генерация уникального ID для уведомления
+  int _generateNotificationId(String noteId, String type, int index) {
+    // Хешируем ID заметки для получения базового числа
+    final int noteIdHash = noteId.hashCode;
+
+    // Хешируем тип уведомления
+    final int typeHash = type.hashCode;
+
+    // Комбинируем их с индексом для создания уникального ID
+    // Используем побитовые операции для минимизации коллизий
+    return ((noteIdHash & 0xFFFF) << 16) |
+        ((typeHash & 0xFF) << 8) |
+        (index & 0xFF);
+  }
+
+  // Получение короткого текста для предпросмотра
+  String _getPreviewText(String content) {
+    // Ограничиваем длину текста для предпросмотра
+    const int maxPreviewLength = 30;
+
+    // Удаляем маркировку Markdown, если она есть
+    final String plainText = content
+        .replaceAll(RegExp(r'#{1,3}\s+'), '') // Заголовки
+        .replaceAll(RegExp(r'\*\*|\*|__'), '') // Жирный, курсив
+        .replaceAll(RegExp(r'\[.*?\]\(.*?\)'), '') // Ссылки
+        .replaceAll(
+            RegExp(r'!\[voice\]\(voice:[^)]+\)'), '') // Голосовые заметки
+        .trim();
+
+    // Получаем первую строку
+    final String firstLine = plainText.split('\n').first.trim();
+
+    // Ограничиваем длину
+    if (firstLine.length <= maxPreviewLength) {
+      return firstLine;
+    } else {
+      return '${firstLine.substring(0, maxPreviewLength)}...';
+    }
+  }
+
+  // Форматирование даты для отображения
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    if (dateOnly == today) {
+      return 'сегодня в ${DateFormat('HH:mm').format(date)}';
+    } else if (dateOnly == tomorrow) {
+      return 'завтра в ${DateFormat('HH:mm').format(date)}';
+    } else {
+      return DateFormat('dd.MM.yyyy в HH:mm').format(date);
     }
   }
 }
