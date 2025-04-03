@@ -10,7 +10,7 @@ import '../providers/themes_provider.dart';
 import '../widgets/markdown_editor.dart';
 import '../widgets/voice_note_player.dart';
 import '../widgets/media_attachment_widget.dart';
-import '../widgets/reminder_settings_widget.dart'; // Добавлен новый импорт
+import '../widgets/reminder_settings_section.dart';
 import '../services/media_service.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1370,52 +1370,41 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
                   // Блок настроек напоминаний (появляется только когда есть дедлайн)
                   if (_hasDeadline && _deadlineDate != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Переключатель для включения/отключения напоминаний
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text(
-                            'Напоминания',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                          dense: true,
-                          value: _hasReminders,
-                          onChanged: (value) {
-                            if (!mounted) return;
+                    ReminderSettingsSection(
+                      reminderDates: _reminderDates,
+                      reminderSound: _reminderSound,
+                      deadlineDate: _deadlineDate!,
+                      hasReminders: _hasReminders,
+                      onRemindersChanged: (
+                        hasReminders,
+                        dates,
+                        sound, {
+                        isRelativeTimeActive = false,
+                        relativeMinutes,
+                        relativeDescription,
+                      }) {
+                        setState(() {
+                          _hasReminders = hasReminders;
+                          _reminderDates = dates;
+                          _reminderSound = sound;
 
-                            setState(() {
-                              _hasReminders = value;
-                              if (_hasReminders && _reminderDates.isEmpty) {
-                                // Создаем напоминание по умолчанию (за день до дедлайна)
-                                final defaultReminderDate = _deadlineDate!
-                                    .subtract(const Duration(days: 1));
-                                // Проверяем, что дата не в прошлом
-                                if (defaultReminderDate
-                                    .isAfter(DateTime.now())) {
-                                  _reminderDates = [defaultReminderDate];
-                                } else {
-                                  // Если дата в прошлом, создаем напоминание на час вперед
-                                  _reminderDates = [
-                                    DateTime.now().add(const Duration(hours: 1))
-                                  ];
-                                }
-                              }
-                              _isSettingsChanged = true;
-                            });
-                          },
-                        ),
+                          // Обновляем тип напоминания и информацию о относительном напоминании
+                          if (isRelativeTimeActive &&
+                              relativeMinutes != null &&
+                              relativeDescription != null) {
+                            _reminderType = ReminderType.relativeTime;
+                            _relativeReminder = RelativeReminder(
+                              minutes: relativeMinutes,
+                              description: relativeDescription,
+                            );
+                          } else {
+                            _reminderType = ReminderType.exactTime;
+                            _relativeReminder = null;
+                          }
 
-                        // Настройки напоминаний
-                        if (_hasReminders && _deadlineDate != null && mounted)
-                          ReminderSettingsWidget(
-                            reminderDates: _reminderDates,
-                            reminderSound: _reminderSound,
-                            deadlineDate: _deadlineDate!,
-                            onRemindersChanged: _handleRemindersChanged,
-                          ),
-                      ],
+                          _isSettingsChanged = true;
+                        });
+                      },
                     ),
                 ],
               ),
