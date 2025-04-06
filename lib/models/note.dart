@@ -189,58 +189,102 @@ class Note {
     if (content.isEmpty) {
       return '';
     }
+
     try {
-      final decoded = json.decode(content);
-      Delta? delta;
+      // Стандартизируем формат Delta JSON
+      final dynamic decodedJson = json.decode(content);
+      dynamic deltaOps;
 
-      if (decoded is Map && decoded.containsKey('ops')) {
-        final opsList = decoded['ops'];
-        if (opsList is List) {
-          delta = Delta.fromJson(opsList);
+      // Обработка разных форматов
+      if (decodedJson is Map<String, dynamic>) {
+        if (decodedJson.containsKey('ops')) {
+          // Стандартный формат с ключом 'ops'
+          deltaOps = decodedJson['ops'];
         } else {
-          print('Ошибка в plainTextContent: поле "ops" не является списком.');
-          return '';
+          // Map без 'ops' - не можем интерпретировать как Delta
+          return content.trim();
         }
-      } else if (decoded is List) {
-        delta = Delta.fromJson(decoded);
+      } else if (decodedJson is List) {
+        // Список операций без обертки 'ops'
+        deltaOps = decodedJson;
+      } else if (decodedJson is String) {
+        // JSON декодирован как строка - возвращаем как есть
+        return decodedJson.trim();
+      } else {
+        // Неизвестный формат
+        return content.trim();
       }
 
-      if (delta != null) {
-        // Используем quill.Document
-        final doc = quill.Document.fromDelta(delta);
-        final plainText = doc.toPlainText().trim();
-        return (plainText.isEmpty || plainText == '\n') ? '' : plainText;
+      // Проверяем, что deltaOps - список
+      if (deltaOps is! List) {
+        return content.trim();
       }
 
-      // Если не удалось создать дельту, проверяем текст напрямую
-      if (decoded is String) {
-        return decoded.trim();
-      }
+      // Создаем Delta из операций
+      final delta = Delta.fromJson(deltaOps);
 
-      print('Ошибка в plainTextContent: не удалось создать Delta.');
-      return '';
+      // Используем Document для получения текста
+      final doc = quill.Document.fromDelta(delta);
+      final plainText = doc.toPlainText().trim();
+
+      return (plainText.isEmpty || plainText == '\n') ? '' : plainText;
     } catch (e) {
-      print('Ошибка при получении текста из Delta в Note: $e');
-      // Проверяем, является ли content простой пустой Delta
+      // Обработка ошибок - пытаемся извлечь текст напрямую
       try {
+        // Проверяем, это может быть пустая Delta
         const emptyDeltaJson = '{"ops":[{"insert":"\\n"}]}';
-        final emptyDeltaJsonWithoutNewline = '{"ops":[{"insert":""}]}';
+        const emptyDeltaJsonWithoutNewline = '{"ops":[{"insert":""}]}';
         if (content == emptyDeltaJson ||
             content == emptyDeltaJsonWithoutNewline) {
           return '';
         }
 
-        // Если content не похож на JSON, возвращаем его как есть
-        if (!content.contains('{') && !content.contains('"ops"')) {
+        // Если это просто текст, возвращаем его
+        if (!content.contains('{') && !content.contains('[')) {
           return content.trim();
+        }
+
+        // Пытаемся вручную извлечь текст из операций
+        final decodedContent = json.decode(content);
+        if (decodedContent is Map && decodedContent.containsKey('ops')) {
+          final ops = decodedContent['ops'];
+          if (ops is List) {
+            return ops.fold<String>('', (text, op) {
+              if (op is Map &&
+                  op.containsKey('insert') &&
+                  op['insert'] is String) {
+                return text + op['insert'];
+              }
+              return text;
+            }).trim();
+          }
         }
 
         return '';
       } catch (innerError) {
-        print('Вложенная ошибка при обработке контента: $innerError');
+        // При любой другой ошибке возвращаем пустую строку
         return '';
       }
     }
+  }
+
+  // Сокращенная версия для превью с ограничением длины
+  String get previewText {
+    final text = plainTextContent.trim();
+    if (text.isEmpty) return '';
+
+    // Берем только первую строку текста
+    final firstLineBreak = text.indexOf('\n');
+    if (firstLineBreak > 0) {
+      return text.substring(0, firstLineBreak);
+    }
+
+    // Ограничиваем длину превью
+    if (text.length > 100) {
+      return '${text.substring(0, 100)}...';
+    }
+
+    return text;
   }
 
   // Метод для получения следующих дат повторяющегося напоминания
@@ -348,25 +392,6 @@ class Note {
     }
 
     return result;
-  }
-
-  // Геттер для получения текста предпросмотра заметки
-  String get previewText {
-    final text = plainTextContent.trim();
-    if (text.isEmpty) return '';
-
-    // Берем только первую строку текста
-    final firstLineBreak = text.indexOf('\n');
-    if (firstLineBreak > 0) {
-      return text.substring(0, firstLineBreak);
-    }
-
-    // Ограничиваем длину превью
-    if (text.length > 100) {
-      return '${text.substring(0, 100)}...';
-    }
-
-    return text;
   }
 
   const Note({

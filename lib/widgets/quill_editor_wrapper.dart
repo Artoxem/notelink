@@ -8,11 +8,15 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
-
-import '../providers/app_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:image_picker/image_picker.dart';
 import '../services/media_service.dart';
+import '../providers/app_provider.dart';
 import '../utils/constants.dart';
 import 'voice_record_button.dart';
+import '../utils/delta_utils.dart';
+import 'package:flutter_quill/flutter_quill.dart' hide Text;
+import 'package:flutter_quill/flutter_quill.dart';
 
 // Виджет-обёртка для Flutter Quill
 class QuillEditorWrapper extends StatefulWidget {
@@ -37,32 +41,24 @@ class QuillEditorWrapper extends StatefulWidget {
     this.onMediaAdded,
   }) : super(key: key);
 
-  // Добавляем метод для получения доступа к контроллеру
-  QuillController? getQuillController() {
-    final state = currentState;
-    if (state is _QuillEditorWrapperState) {
-      return state._quillController;
-    }
-    return null;
-  }
-
-  // Получаем текущее состояние виджета
-  _QuillEditorWrapperState? get currentState {
-    return GlobalObjectKey(this).currentState as _QuillEditorWrapperState?;
-  }
-
-  @override
-  State<QuillEditorWrapper> createState() => _QuillEditorWrapperState();
-}
-
-class _QuillEditorWrapperState extends State<QuillEditorWrapper>
-    with TickerProviderStateMixin {
-  // Объявляем _quillController как переменную экземпляра класса с инициализацией по умолчанию
-  late QuillController _quillController = QuillController.basic();
-  // Создаем getter для доступа к контроллеру извне
+  // Возвращает QuillController для внешнего доступа
   QuillController? getQuillController() {
     return _quillController;
   }
+
+  // Получаем текущее состояние виджета
+  QuillEditorWrapperState? get currentState {
+    return GlobalObjectKey(this).currentState as QuillEditorWrapperState?;
+  }
+
+  @override
+  State<QuillEditorWrapper> createState() => QuillEditorWrapperState();
+}
+
+class QuillEditorWrapperState extends State<QuillEditorWrapper>
+    with TickerProviderStateMixin {
+  // Объявляем _quillController как переменную экземпляра класса
+  late QuillController _quillController;
 
   late FocusNode _focusNode;
   bool _isFocusMode = false;
@@ -81,6 +77,9 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
     super.initState();
     _focusNode = widget.focusNode ?? FocusNode();
 
+    // Инициализируем контроллер
+    _quillController = QuillController.basic();
+
     // Добавляем слушатель фокуса для эффектов UI
     _focusNode.addListener(_handleFocusChange);
 
@@ -98,6 +97,11 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
     );
   }
 
+  // Метод для доступа к контроллеру извне
+  QuillController? getQuillController() {
+    return _quillController;
+  }
+
   Future<void> _initQuillEditor() async {
     setState(() {
       _isLoading = true;
@@ -109,31 +113,33 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
 
       if (jsonText.isNotEmpty) {
         try {
-          // Создаем документ из JSON, как в примере
-          final decodedJson = json.decode(jsonText);
-          _quillController = QuillController(
-            document: Document.fromJson(decodedJson),
-            selection: const TextSelection.collapsed(offset: 0),
-          );
+          // Декодируем JSON
+          final dynamic decodedJson = json.decode(jsonText);
 
-          debugPrint('QuillController успешно инициализирован из JSON');
-          debugPrint(
-            'Содержимое: ${_quillController.document.toPlainText().substring(0, min(50, _quillController.document.toPlainText().length))}...',
-          );
+          // Обрабатываем разные форматы Delta JSON
+          if (decodedJson is Map<String, dynamic> &&
+              decodedJson.containsKey('ops')) {
+            // Стандартный формат с 'ops'
+            _quillController = QuillController(
+              document: Document.fromJson(decodedJson),
+              selection: const TextSelection.collapsed(offset: 0),
+            );
+          } else if (decodedJson is List) {
+            // Список операций без 'ops'
+            _quillController = QuillController(
+              document: Document.fromJson({'ops': decodedJson}),
+              selection: const TextSelection.collapsed(offset: 0),
+            );
+          } else {
+            // Неизвестный формат - оставляем пустой контроллер
 
-          setState(() {
-            _isLoading = false;
-            _isInitialized = true;
-          });
-
-          // Настраиваем слушатель изменений
-          _setupDocumentListener();
-          return;
+            // Если это текст, добавляем его в документ
+            if (decodedJson is String) {
+              _quillController.document.insert(0, decodedJson);
+            }
+          }
         } catch (e) {
           debugPrint('Ошибка при создании документа из JSON: $e');
-
-          // Если не удалось распарсить JSON, создаем пустой документ
-          _quillController = QuillController.basic();
 
           // Пытаемся интерпретировать как текст, если не похож на JSON
           if (!jsonText.contains('{') && !jsonText.contains('[')) {
@@ -142,9 +148,8 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
           }
         }
       } else {
-        // Если текст пустой, используем пустой документ
+        // Если текст пустой, оставляем пустой документ
         debugPrint('Инициализация пустого редактора, текст контроллера пуст');
-        _quillController = QuillController.basic();
       }
 
       // Настраиваем слушатель изменений
@@ -156,8 +161,6 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
       });
     } catch (e) {
       debugPrint('Ошибка инициализации QuillEditor: $e');
-      // В любом случае инициализируем базовый контроллер
-      _quillController = QuillController.basic();
       _setupDocumentListener();
 
       setState(() {
@@ -167,7 +170,6 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Выносим настройку слушателя в отдельный метод для переиспользования
   void _setupDocumentListener() {
     // Отменяем предыдущую подписку, если она была
     _documentChangesSubscription?.cancel();
@@ -177,25 +179,18 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
       event,
     ) {
       try {
-        // Сохраняем delta в формате JSON с ключом 'ops' по тому же принципу, как в примере
-        final json = jsonEncode(_quillController.document.toDelta().toJson());
+        // Получаем Delta в формате JSON
+        final delta = _quillController.document.toDelta();
+        // Преобразуем в JSON строку
+        final deltaJson = jsonEncode({'ops': delta.toJson()});
 
-        // Отладочный вывод
-        debugPrint(
-          'Изменение в документе: ${_quillController.document.length} символов',
-        );
-        final plainText = _quillController.document.toPlainText();
-        debugPrint(
-          'Текущий текст: ${plainText.substring(0, min(50, plainText.length))}...',
-        );
-
-        // Обновляем текстовый контроллер JSON строкой
-        if (widget.controller.text != json) {
+        // Обновляем текстовый контроллер только если изменилось содержимое
+        if (widget.controller.text != deltaJson) {
           debugPrint('Обновление контроллера текста с JSON Delta');
-          widget.controller.text = json;
+          widget.controller.text = deltaJson;
 
           if (widget.onChanged != null) {
-            widget.onChanged!(json);
+            widget.onChanged!(deltaJson);
           }
         }
       } catch (e) {
@@ -204,15 +199,16 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
         // В случае ошибки создаем минимальную валидную Delta
         try {
           final plainText = _quillController.document.toPlainText();
-          final json = jsonEncode([
-            {"insert": plainText.isEmpty ? "\n" : plainText},
-          ]);
+          final ops = [
+            {'insert': plainText.isEmpty ? '\n' : plainText},
+          ];
+          final safeJson = jsonEncode({'ops': ops});
 
-          if (widget.controller.text != json) {
-            widget.controller.text = json;
+          if (widget.controller.text != safeJson) {
+            widget.controller.text = safeJson;
 
             if (widget.onChanged != null) {
-              widget.onChanged!(json);
+              widget.onChanged!(safeJson);
             }
           }
         } catch (backupError) {
@@ -230,11 +226,84 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
     } else {
       _focusNode.removeListener(_handleFocusChange);
     }
-    _quillController?.removeListener(() {});
-    _quillController?.dispose();
     _documentChangesSubscription?.cancel();
+    _quillController.dispose();
     _focusModeController.dispose();
     super.dispose();
+  }
+
+  // Исправленный метод для выбора изображения
+  Future<void> _onImageButtonPressed() async {
+    final ImagePicker picker = ImagePicker();
+
+    try {
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
+
+      if (pickedFile != null) {
+        _insertImage(pickedFile.path);
+      }
+    } catch (e) {
+      debugPrint('Ошибка при выборе изображения: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось выбрать изображение'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // Вспомогательный метод для создания QuillController из JSON
+  Future<QuillController?> _createQuillControllerFromJson(
+    String jsonText,
+  ) async {
+    try {
+      // Декодируем JSON
+      final decodedJson = json.decode(jsonText);
+
+      // Обрабатываем разные форматы Delta JSON
+      if (decodedJson is Map<String, dynamic>) {
+        // Формат с ключом 'ops'
+        if (decodedJson.containsKey('ops')) {
+          return QuillController(
+            document: Document.fromJson(decodedJson),
+            selection: const TextSelection.collapsed(offset: 0),
+          );
+        }
+        // Другие форматы Map, которые не содержат 'ops'
+        else {
+          debugPrint('JSON в неизвестном формате Map без ключа ops');
+          return null;
+        }
+      }
+      // Если это список операций без обертки 'ops'
+      else if (decodedJson is List) {
+        // Создаем правильный формат с ключом 'ops'
+        final correctJson = {'ops': decodedJson};
+        return QuillController(
+          document: Document.fromJson(correctJson),
+          selection: const TextSelection.collapsed(offset: 0),
+        );
+      }
+      // Если это строка или другой формат
+      else if (decodedJson is String) {
+        final controller = QuillController.basic();
+        controller.document.insert(0, decodedJson);
+        return controller;
+      }
+      // Неизвестный формат
+      else {
+        debugPrint('Неизвестный формат JSON: ${decodedJson.runtimeType}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Ошибка при создании QuillController из JSON: $e');
+      return null;
+    }
   }
 
   @override
@@ -319,6 +388,120 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
           print('Ошибка при сохранении документа в контроллер: $e');
         }
       }
+    }
+  }
+
+  // Обработчик выбора и вставки файла
+  Future<void> _onFileButtonPressed() async {
+    final MediaService mediaService = MediaService();
+
+    try {
+      // Использование MediaService для выбора файла
+      final filePath = await mediaService.pickFile();
+
+      if (filePath != null && filePath.isNotEmpty) {
+        // Вставляем файл как изображение, если это изображение
+        if (mediaService.isImage(filePath)) {
+          _insertImage(filePath);
+        } else {
+          // Для других типов файлов вставляем специальный блок
+          _insertCustomFile(filePath);
+        }
+
+        // Уведомляем родительский виджет
+        if (widget.onMediaAdded != null) {
+          widget.onMediaAdded!(filePath);
+        }
+      }
+    } catch (e) {
+      debugPrint('Ошибка при выборе файла: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось выбрать файл'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // Метод для вставки изображения
+  void _insertImage(String imagePath) {
+    if (_quillController == null) return;
+
+    final index = _quillController!.selection.baseOffset;
+    final correctedIndex = index < 0 ? 0 : index;
+
+    // Вставляем изображение как embedded объект
+    _quillController!.document.insert(
+      correctedIndex,
+      BlockEmbed.image(imagePath),
+    );
+
+    // Добавляем перевод строки после изображения для удобства редактирования
+    _quillController!.document.insert(correctedIndex + 1, '\n');
+
+    // Уведомляем родительский виджет
+    if (widget.onMediaAdded != null) {
+      widget.onMediaAdded!(imagePath);
+    }
+  }
+
+  // Метод для вставки файла (не изображения)
+  void _insertCustomFile(String filePath) {
+    if (_quillController == null) return;
+
+    final index = _quillController!.selection.baseOffset;
+    final correctedIndex = index < 0 ? 0 : index;
+
+    // Вставляем описание файла с ссылкой
+    final fileName = path.basename(filePath);
+    final fileExtension = path.extension(filePath).toLowerCase();
+
+    // Создаем форматированный текст для ссылки на файл
+    _quillController!.document.insert(correctedIndex, '[Файл: $fileName]');
+
+    // Форматируем как ссылку
+    _quillController!.formatText(
+      correctedIndex,
+      fileName.length + 8, // длина текста [Файл: $fileName]
+      LinkAttribute(filePath),
+    );
+
+    // Добавляем перевод строки
+    _quillController!.document.insert(
+      correctedIndex + fileName.length + 8,
+      '\n',
+    );
+  }
+
+  // Метод для открытия файла
+  Future<void> _openFile(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        final uri = Uri.file(filePath);
+        if (await url_launcher.canLaunchUrl(uri)) {
+          await url_launcher.launchUrl(uri);
+        } else {
+          _showErrorMessage('Не удалось открыть файл');
+        }
+      } else {
+        _showErrorMessage('Файл не существует');
+      }
+    } catch (e) {
+      debugPrint('Ошибка при открытии файла: $e');
+      _showErrorMessage('Ошибка при открытии файла');
+    }
+  }
+
+  // Отображение сообщения об ошибке
+  void _showErrorMessage(String message) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      );
     }
   }
 
@@ -507,28 +690,6 @@ class _QuillEditorWrapperState extends State<QuillEditorWrapper>
     } else {
       _focusModeController.reverse();
     }
-  }
-
-  // Метод для вставки изображения в редактор
-  void _insertImage(String path) {
-    if (_quillController == null) return;
-
-    // Получаем текущую позицию курсора
-    final index = _quillController!.selection.baseOffset;
-    final correctedIndex = index < 0 ? 0 : index;
-
-    // Вставляем изображение как embedded объект
-    _quillController!.document.insert(correctedIndex, BlockEmbed.image(path));
-
-    // Уведомляем родительский виджет
-    if (widget.onMediaAdded != null) {
-      widget.onMediaAdded!(path);
-    }
-  }
-
-  // Метод для обработки выбора медиа-файла
-  Future<void> _onImageButtonPressed() async {
-    // ... существующий код
   }
 
   @override

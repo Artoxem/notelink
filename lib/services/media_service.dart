@@ -107,20 +107,42 @@ class MediaService {
     }
   }
 
-  // Выбор файла
+  /// Выбор изображения из галереи или камеры
   Future<String?> pickFile() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles();
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
 
-      if (result == null || result.files.single.path == null) return null;
-
-      final file = File(result.files.single.path!);
-      final newName = _generateFileName(result.files.single.name);
-      return await _saveFileToAppStorage(file, newName);
+      if (result != null && result.files.single.path != null) {
+        return result.files.single.path;
+      }
+      return null;
     } catch (e) {
-      print('Ошибка при выборе файла: $e');
+      debugPrint('Ошибка при выборе файла: $e');
       return null;
     }
+  }
+
+  /// Проверяет, является ли файл изображением по расширению
+  bool isImage(String filePath) {
+    final extension = filePath.toLowerCase();
+    return extension.endsWith('.jpg') ||
+        extension.endsWith('.jpeg') ||
+        extension.endsWith('.png') ||
+        extension.endsWith('.gif') ||
+        extension.endsWith('.webp');
+  }
+
+  /// Возвращает имя файла из пути
+  String getFileNameFromPath(String filePath) {
+    return path.basename(filePath);
+  }
+
+  /// Возвращает расширение файла
+  String getFileExtension(String filePath) {
+    return path.extension(filePath).toLowerCase();
   }
 
   // Удаление файла
@@ -136,21 +158,5 @@ class MediaService {
       print('Ошибка при удалении файла: $e');
       return false;
     }
-  }
-
-  // Получение имени файла из пути
-  String getFileNameFromPath(String filePath) {
-    return path.basename(filePath);
-  }
-
-  // Получение расширения файла
-  String getFileExtension(String filePath) {
-    return path.extension(filePath).toLowerCase();
-  }
-
-  // Проверка, является ли файл изображением
-  bool isImage(String filePath) {
-    final ext = getFileExtension(filePath);
-    return ext == '.jpg' || ext == '.jpeg' || ext == '.png' || ext == '.gif';
   }
 }
