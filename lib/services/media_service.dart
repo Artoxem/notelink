@@ -44,40 +44,65 @@ class MediaService {
     }
   }
 
-  // Получение изображения с камеры
+  // Метод получения картинки из камеры
   Future<String?> pickImageFromCamera() async {
     try {
-      final pickedFile = await _picker.pickImage(
+      final XFile? image = await _picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 80,
+        imageQuality: 70, // Немного сжимаем для экономии места
       );
 
-      if (pickedFile == null) return null;
+      // Проверка на null и существование файла
+      if (image == null) {
+        debugPrint('Изображение не выбрано (null)');
+        return null;
+      }
 
-      final file = File(pickedFile.path);
-      final newName = _generateFileName(pickedFile.name);
-      return await _saveFileToAppStorage(file, newName);
+      final file = File(image.path);
+      if (!await file.exists()) {
+        debugPrint('Файл изображения не существует: ${image.path}');
+        return null;
+      }
+
+      // Сохраняем файл в директорию приложения
+      final newName = _generateFileName(image.name);
+      final savedPath = await _saveFileToAppStorage(file, newName);
+      debugPrint('Изображение с камеры сохранено: $savedPath');
+      return savedPath;
     } catch (e) {
-      print('Ошибка при получении изображения с камеры: $e');
+      debugPrint('Ошибка при получении изображения с камеры: $e');
       return null;
     }
   }
 
-  // Получение изображения из галереи
+  // Метод получения картинки из галереи
   Future<String?> pickImageFromGallery() async {
     try {
-      final pickedFile = await _picker.pickImage(
+      final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 80,
+        imageQuality: 70, // Сжимаем для экономии места
       );
 
-      if (pickedFile == null) return null;
+      // Проверка на null
+      if (image == null) {
+        debugPrint('Изображение из галереи не выбрано (null)');
+        return null;
+      }
 
-      final file = File(pickedFile.path);
-      final newName = _generateFileName(pickedFile.name);
-      return await _saveFileToAppStorage(file, newName);
+      // Проверка существования файла
+      final file = File(image.path);
+      if (!await file.exists()) {
+        debugPrint('Файл изображения не существует: ${image.path}');
+        return null;
+      }
+
+      // Сохраняем файл в директорию приложения
+      final newName = _generateFileName(image.name);
+      final savedPath = await _saveFileToAppStorage(file, newName);
+      debugPrint('Изображение из галереи сохранено: $savedPath');
+      return savedPath;
     } catch (e) {
-      print('Ошибка при получении изображения из галереи: $e');
+      debugPrint('Ошибка при получении изображения из галереи: $e');
       return null;
     }
   }

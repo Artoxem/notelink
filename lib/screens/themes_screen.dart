@@ -16,9 +16,7 @@ class ThemesScreen extends StatefulWidget {
   static void showAddThemeDialog(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const ThemeDetailScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const ThemeDetailScreen()),
     );
   }
 
@@ -129,8 +127,10 @@ class _ThemesScreenState extends State<ThemesScreen>
 
     try {
       // Принудительно обновляем данные в обоих провайдерах
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      final themesProvider = Provider.of<ThemesProvider>(
+        context,
+        listen: false,
+      );
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
 
       // Сначала обновляем заметки, затем темы для обеспечения согласованности
@@ -163,8 +163,10 @@ class _ThemesScreenState extends State<ThemesScreen>
 
     try {
       // Загружаем темы и заметки параллельно
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      final themesProvider = Provider.of<ThemesProvider>(
+        context,
+        listen: false,
+      );
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
 
       await Future.wait([
@@ -183,10 +185,7 @@ class _ThemesScreenState extends State<ThemesScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        child: _buildContent(),
-      ),
+      body: RefreshIndicator(onRefresh: _refreshData, child: _buildContent()),
       floatingActionButton: _buildAddThemeFab(),
     );
   }
@@ -199,10 +198,11 @@ class _ThemesScreenState extends State<ThemesScreen>
       },
       backgroundColor: AppColors.accentSecondary,
       child: const Icon(Icons.add),
+      heroTag: 'themesScreenFAB',
     );
   }
 
-// Метод для построения основного содержимого
+  // Метод для построения основного содержимого
   Widget _buildContent() {
     return Consumer<ThemesProvider>(
       builder: (context, themesProvider, _) {
@@ -225,9 +225,7 @@ class _ThemesScreenState extends State<ThemesScreen>
             // Добавляем фильтры тем вверху
             _buildThemeFilters(themesProvider),
             // Список тем занимает оставшееся пространство
-            Expanded(
-              child: _buildThemesList(),
-            ),
+            Expanded(child: _buildThemesList()),
           ],
         );
       },
@@ -242,14 +240,16 @@ class _ThemesScreenState extends State<ThemesScreen>
       itemCount: _displayedThemes.length,
       itemBuilder: (context, index) {
         final theme = _displayedThemes[index];
-        final themesProvider =
-            Provider.of<ThemesProvider>(context, listen: false);
+        final themesProvider = Provider.of<ThemesProvider>(
+          context,
+          listen: false,
+        );
         return _buildThemeCard(theme, themesProvider);
       },
     );
   }
 
-// Метод для обработки и сортировки тем
+  // Метод для обработки и сортировки тем
   void _processThemes() {
     final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
     final themes = themesProvider.themes;
@@ -273,8 +273,10 @@ class _ThemesScreenState extends State<ThemesScreen>
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: themesProvider
-            .themes.length, // Убираем +1, так как не нужна кнопка "Все темы"
+        itemCount:
+            themesProvider
+                .themes
+                .length, // Убираем +1, так как не нужна кнопка "Все темы"
         itemBuilder: (context, index) {
           // Получаем тему для кнопки
           final theme = themesProvider.themes[index];
@@ -292,9 +294,7 @@ class _ThemesScreenState extends State<ThemesScreen>
             child: ActionChip(
               label: Text(theme.name),
               backgroundColor: themeColor.withOpacity(0.3),
-              labelStyle: TextStyle(
-                color: AppColors.textOnLight,
-              ),
+              labelStyle: TextStyle(color: AppColors.textOnLight),
               onPressed: () {
                 // Переходим на экран выбранной темы
                 Navigator.push(
@@ -328,8 +328,9 @@ class _ThemesScreenState extends State<ThemesScreen>
     }
 
     return Card(
-      margin:
-          const EdgeInsets.only(bottom: 10), // Уменьшено на 40% (с ~16 до 10)
+      margin: const EdgeInsets.only(
+        bottom: 10,
+      ), // Уменьшено на 40% (с ~16 до 10)
       elevation: 2,
       color: AppColors.cardBackground,
       shape: RoundedRectangleBorder(
@@ -372,7 +373,6 @@ class _ThemesScreenState extends State<ThemesScreen>
                       _buildThemeLogo(theme, themeColor),
 
                       const SizedBox(width: 12), // Уменьшено
-
                       // Информация о теме - перестроена
                       Expanded(
                         child: Column(
@@ -388,7 +388,6 @@ class _ThemesScreenState extends State<ThemesScreen>
                               ),
                             ),
                             const SizedBox(height: 4), // Небольшой отступ
-
                             // Счетчик заметок теперь под названием темы
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -418,13 +417,15 @@ class _ThemesScreenState extends State<ThemesScreen>
                                 theme.description!.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(
-                                    top: 4), // Маленький отступ
+                                  top: 4,
+                                ), // Маленький отступ
                                 child: Text(
                                   theme.description!,
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color:
-                                        AppColors.textOnLight.withOpacity(0.8),
+                                    color: AppColors.textOnLight.withOpacity(
+                                      0.8,
+                                    ),
                                   ),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
@@ -498,16 +499,18 @@ class _ThemesScreenState extends State<ThemesScreen>
                     const SizedBox(height: 4), // Уменьшено в 2 раза
                     const Divider(height: 1),
                     const SizedBox(height: 4), // Уменьшено в 2 раза
-
                     // Предпросмотр заметок
-                    ...previewNotes.map((noteItem) =>
-                        _buildNotePreviewer(noteItem, themeColor)),
+                    ...previewNotes.map(
+                      (noteItem) => _buildNotePreviewer(noteItem, themeColor),
+                    ),
 
                     // Индикатор дополнительных заметок
                     if (notes.length > 5)
                       Padding(
                         padding: const EdgeInsets.only(
-                            top: 6, bottom: 8), // Уменьшено
+                          top: 6,
+                          bottom: 8,
+                        ), // Уменьшено
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -551,7 +554,7 @@ class _ThemesScreenState extends State<ThemesScreen>
     );
   }
 
-// Метод для создания логотипа темы
+  // Метод для создания логотипа темы
   Widget _buildThemeLogo(NoteTheme theme, Color themeColor) {
     // Получаем номер иконки (от 01 до 55)
     String iconNumber = (theme.logoType.index + 1).toString().padLeft(2, '0');
@@ -572,11 +575,26 @@ class _ThemesScreenState extends State<ThemesScreen>
         child: Padding(
           padding: const EdgeInsets.all(6.0), // Отступ для иконки
           child: ClipOval(
-            child: isDark
-                ? ColorFiltered(
-                    colorFilter:
-                        const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                    child: Image.asset(
+            child:
+                isDark
+                    ? ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                      child: Image.asset(
+                        assetName,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.image_not_supported,
+                            color: Colors.white,
+                            size: 24,
+                          );
+                        },
+                      ),
+                    )
+                    : Image.asset(
                       assetName,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
@@ -587,52 +605,27 @@ class _ThemesScreenState extends State<ThemesScreen>
                         );
                       },
                     ),
-                  )
-                : Image.asset(
-                    assetName,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.image_not_supported,
-                        color: Colors.white,
-                        size: 24,
-                      );
-                    },
-                  ),
           ),
         ),
       ),
     );
   }
 
-// Метод для предпросмотра заметки
+  // Метод для предпросмотра заметки
   Widget _buildNotePreviewer(Note note, Color themeColor) {
     // Извлекаем текст для превью
     String previewText = '';
 
-    // Пробуем извлечь заголовок из Markdown или берем начало контента
-    final headerMatch =
-        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(note.content);
-    if (headerMatch != null) {
-      previewText = headerMatch.group(1) ?? '';
-    } else {
-      // Если нет заголовка, берем начало текста (первую строку)
-      final firstLineBreak = note.content.indexOf('\n');
-      if (firstLineBreak > 0) {
-        previewText = note.content.substring(0, firstLineBreak).trim();
-      } else {
-        previewText = note.content.trim();
-      }
+    // Берем весь контент и обрезаем пробелы
+    previewText = note.content.trim();
+    final firstLineBreak = previewText.indexOf('\n');
+    if (firstLineBreak > 0) {
+      previewText = previewText.substring(0, firstLineBreak);
     }
-
-    // Удаляем разметку Markdown из текста превью
-    previewText = previewText
-        .replaceAll(RegExp(r'#{1,3}\s+'), '') // Убираем заголовки
-        .replaceAll(RegExp(r'\*\*|\*|__|\[.*?\]\(.*?\)'),
-            '') // Убираем жирный, курсив, ссылки
-        .replaceAll(RegExp(r'!\[voice\]\(voice:[^)]+\)'),
-            '') // Убираем голосовые заметки
-        .trim();
+    if (previewText.length > 100) {
+      // Ограничим длину превью
+      previewText = '${previewText.substring(0, 100)}...';
+    }
 
     // Подсчитываем разные типы медиа для значков
     int imagesCount = 0;
@@ -657,8 +650,9 @@ class _ThemesScreenState extends State<ThemesScreen>
     }
 
     // Подсчет голосовых заметок в контенте
-    final voiceMatches =
-        RegExp(r'!\[voice\]\(voice:[^)]+\)').allMatches(note.content);
+    final voiceMatches = RegExp(
+      r'!\[voice\]\(voice:[^)]+\)',
+    ).allMatches(note.content);
     voiceCount = voiceMatches.length;
 
     // Высота превью для полного скругления
@@ -679,10 +673,7 @@ class _ThemesScreenState extends State<ThemesScreen>
             decoration: BoxDecoration(
               color: AppColors.textBackground.withOpacity(0.7),
               borderRadius: BorderRadius.circular(previewHeight / 2),
-              border: Border.all(
-                color: themeColor.withOpacity(0.2),
-                width: 1,
-              ),
+              border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
             ),
             child: Row(
               children: [
@@ -696,9 +687,10 @@ class _ThemesScreenState extends State<ThemesScreen>
                         Icon(
                           Icons.timer,
                           size: 13, // 60% от обычного размера иконок (20-22px)
-                          color: note.isCompleted
-                              ? Color(0xFF008000)
-                              : Colors.orange,
+                          color:
+                              note.isCompleted
+                                  ? Color(0xFF008000)
+                                  : Colors.orange,
                         ),
 
                       // Добавляем небольшой отступ между иконками
@@ -782,8 +774,10 @@ class _ThemesScreenState extends State<ThemesScreen>
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               ListTile(
-                leading:
-                    const Icon(Icons.edit, color: AppColors.accentSecondary),
+                leading: const Icon(
+                  Icons.edit,
+                  color: AppColors.accentSecondary,
+                ),
                 title: const Text('Редактировать тему'),
                 onTap: () {
                   Navigator.pop(context);
@@ -801,8 +795,10 @@ class _ThemesScreenState extends State<ThemesScreen>
                 },
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.note, color: AppColors.accentSecondary),
+                leading: const Icon(
+                  Icons.note,
+                  color: AppColors.accentSecondary,
+                ),
                 title: const Text('Просмотреть все заметки'),
                 onTap: () {
                   Navigator.pop(context);
@@ -838,31 +834,39 @@ class _ThemesScreenState extends State<ThemesScreen>
   void _showDeleteConfirmation(NoteTheme theme) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить тему'),
-        content: Text('Вы действительно хотите удалить тему "${theme.name}"? '
-            'Это действие нельзя будет отменить. Заметки останутся, но будут отвязаны от этой темы.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Удалить тему'),
+            content: Text(
+              'Вы действительно хотите удалить тему "${theme.name}"? '
+              'Это действие нельзя будет отменить. Заметки останутся, но будут отвязаны от этой темы.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
 
-              final themesProvider =
-                  Provider.of<ThemesProvider>(context, listen: false);
-              await themesProvider.deleteTheme(theme.id);
+                  final themesProvider = Provider.of<ThemesProvider>(
+                    context,
+                    listen: false,
+                  );
+                  await themesProvider.deleteTheme(theme.id);
 
-              if (mounted) {
-                _loadData();
-              }
-            },
-            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+                  if (mounted) {
+                    _loadData();
+                  }
+                },
+                child: const Text(
+                  'Удалить',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -870,9 +874,7 @@ class _ThemesScreenState extends State<ThemesScreen>
   void _openNoteDetail(Note note) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(note: note),
-      ),
+      MaterialPageRoute(builder: (context) => NoteDetailScreen(note: note)),
     ).then((_) {
       if (mounted) {
         _loadData();
@@ -903,8 +905,11 @@ class _ThemesScreenState extends State<ThemesScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.category_outlined,
-              size: 80, color: AppColors.accentSecondary.withOpacity(0.5)),
+          Icon(
+            Icons.category_outlined,
+            size: 80,
+            color: AppColors.accentSecondary.withOpacity(0.5),
+          ),
           const SizedBox(height: 16),
           const Text(
             'У вас пока нет тем',
@@ -938,10 +943,7 @@ class _ThemesScreenState extends State<ThemesScreen>
             icon: const Icon(Icons.add),
             label: const Text('Создать первую тему'),
             style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

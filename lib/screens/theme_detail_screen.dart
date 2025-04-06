@@ -60,40 +60,57 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
       _selectedLogoType = widget.theme!.logoType;
     }
 
-    _loadNotes();
+    // Вызываем загрузку заметок после построения виджета
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadNotes();
+    });
   }
 
   Future<void> _loadNotes() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      await Provider.of<NotesProvider>(context, listen: false).loadNotes();
-      final notes = Provider.of<NotesProvider>(context, listen: false).notes;
+      // Используем Future.microtask, чтобы перенести выполнение на следующий цикл событий
+      await Future.microtask(() async {
+        final notesProvider = Provider.of<NotesProvider>(
+          context,
+          listen: false,
+        );
+        await notesProvider.loadNotes();
+        final notes = notesProvider.notes;
 
-      if (_isEditing) {
-        final themesProvider =
-            Provider.of<ThemesProvider>(context, listen: false);
-        final themeNotes =
-            await themesProvider.getNotesForTheme(widget.theme!.id);
+        if (_isEditing && mounted) {
+          final themesProvider = Provider.of<ThemesProvider>(
+            context,
+            listen: false,
+          );
+          final themeNotes = await themesProvider.getNotesForTheme(
+            widget.theme!.id,
+          );
 
+          setState(() {
+            _notes = notes;
+            _themeNotes = themeNotes;
+            _isLoading = false;
+          });
+        } else if (mounted) {
+          setState(() {
+            _notes = notes;
+            _isLoading = false;
+          });
+        }
+      });
+    } catch (e) {
+      print('Error loading notes: $e');
+      if (mounted) {
         setState(() {
-          _notes = notes;
-          _themeNotes = themeNotes;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _notes = notes;
           _isLoading = false;
         });
       }
-    } catch (e) {
-      print('Error loading notes: $e');
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
@@ -104,7 +121,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
     super.dispose();
   }
 
-// Обновленный метод для построения полей ввода в стиле приложения
+  // Обновленный метод для построения полей ввода в стиле приложения
   Widget _buildInputFields() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,10 +142,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
               border: InputBorder.none,
               hintStyle: TextStyle(color: Colors.grey),
             ),
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.black87,
-            ),
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
           ),
         ),
 
@@ -147,10 +161,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
               border: InputBorder.none,
               hintStyle: TextStyle(color: Colors.grey),
             ),
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.black87,
-            ),
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
           ),
         ),
       ],
@@ -177,10 +188,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           padding: EdgeInsets.only(left: 4.0, bottom: 8.0),
           child: Text(
             'Иконка темы',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
 
@@ -198,10 +206,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           itemCount: ThemeLogoType.values.length, // 55 иконок
           itemBuilder: (context, index) {
             final logoType = ThemeLogoType.values[index];
-            return _buildCircleLogoOption(
-              logoType,
-              _getLogoIcon(logoType),
-            );
+            return _buildCircleLogoOption(logoType, _getLogoIcon(logoType));
           },
         ),
       ],
@@ -217,10 +222,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           padding: EdgeInsets.only(left: 4.0, bottom: 12.0),
           child: Text(
             'Цвет темы',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
 
@@ -236,8 +238,9 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
 
     // Рассчитываем оптимальное количество цветов в строке (от 5 до 7)
     int optimalColorsPerRow = 6; // По умолчанию
-    int minRowCount = (totalColors / 7)
-        .ceil(); // Минимальное кол-во строк при 7 цветах в строке
+    int minRowCount =
+        (totalColors / 7)
+            .ceil(); // Минимальное кол-во строк при 7 цветах в строке
 
     // Проверяем варианты с 5, 6 и 7 цветами в строке, выбираем оптимальный
     for (int i = 5; i <= 7; i++) {
@@ -257,14 +260,17 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
       children: List.generate(rowCount, (rowIndex) {
         // Вычисляем количество цветов в текущей строке
         int startIndex = rowIndex * optimalColorsPerRow;
-        int endIndex = (startIndex + optimalColorsPerRow <= totalColors)
-            ? startIndex + optimalColorsPerRow
-            : totalColors;
+        int endIndex =
+            (startIndex + optimalColorsPerRow <= totalColors)
+                ? startIndex + optimalColorsPerRow
+                : totalColors;
         int colorsInThisRow = endIndex - startIndex;
 
         // Создаем подлист цветов для этой строки
-        List<Color> rowColors =
-            AppColors.themeColors.sublist(startIndex, endIndex);
+        List<Color> rowColors = AppColors.themeColors.sublist(
+          startIndex,
+          endIndex,
+        );
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
@@ -288,19 +294,21 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
-                    border: isSelected
-                        ? Border.all(color: Colors.white, width: 3)
-                        : null,
+                    border:
+                        isSelected
+                            ? Border.all(color: Colors.white, width: 3)
+                            : null,
                   ),
-                  child: isSelected
-                      ? const Center(
-                          child: Icon(
-                            Icons.check,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        )
-                      : null,
+                  child:
+                      isSelected
+                          ? const Center(
+                            child: Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          )
+                          : null,
                 ),
               );
             }),
@@ -321,22 +329,8 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
 
     return isDark
         ? ColorFiltered(
-            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-            child: Image.asset(
-              assetName,
-              width: 32,
-              height: 32,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(
-                  Icons.image_not_supported,
-                  size: 20,
-                  color: Colors.white,
-                );
-              },
-            ),
-          )
-        : Image.asset(
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          child: Image.asset(
             assetName,
             width: 32,
             height: 32,
@@ -345,10 +339,24 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
               return const Icon(
                 Icons.image_not_supported,
                 size: 20,
-                color: Colors.black45,
+                color: Colors.white,
               );
             },
-          );
+          ),
+        )
+        : Image.asset(
+          assetName,
+          width: 32,
+          height: 32,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(
+              Icons.image_not_supported,
+              size: 20,
+              color: Colors.black45,
+            );
+          },
+        );
   }
 
   // Метод для создания круглого логотипа с PNG-иконкой
@@ -371,9 +379,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
         ),
         padding: const EdgeInsets.all(8),
-        child: ClipOval(
-          child: icon,
-        ),
+        child: ClipOval(child: icon),
       ),
     );
   }
@@ -391,17 +397,15 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           padding: EdgeInsets.only(left: 4.0, bottom: 12.0),
           child: Text(
             'Выберите заметки для добавления',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
 
         // Адаптивные карточки заметок с ограничением высоты
         Container(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height *
+            maxHeight:
+                MediaQuery.of(context).size.height *
                 0.35, // Ограничиваем максимальную высоту
           ),
           child: ListView.builder(
@@ -502,33 +506,36 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(6.0),
                 child: ClipOval(
-                  child: _isColorDark(_selectedColor)
-                      ? ColorFiltered(
-                          colorFilter: const ColorFilter.mode(
-                              Colors.white, BlendMode.srcIn),
-                          child: Image.asset(
+                  child:
+                      _isColorDark(_selectedColor)
+                          ? ColorFiltered(
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
+                            child: Image.asset(
+                              'assets/icons/${(_selectedLogoType.index + 1).toString().padLeft(2, '0')}.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.image_not_supported,
+                                  size: 18,
+                                  color: Colors.white,
+                                );
+                              },
+                            ),
+                          )
+                          : Image.asset(
                             'assets/icons/${(_selectedLogoType.index + 1).toString().padLeft(2, '0')}.png',
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
                               return const Icon(
                                 Icons.image_not_supported,
                                 size: 18,
-                                color: Colors.white,
+                                color: Colors.black45,
                               );
                             },
                           ),
-                        )
-                      : Image.asset(
-                          'assets/icons/${(_selectedLogoType.index + 1).toString().padLeft(2, '0')}.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.image_not_supported,
-                              size: 18,
-                              color: Colors.black45,
-                            );
-                          },
-                        ),
                 ),
               ),
             ),
@@ -544,27 +551,27 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
               icon: const Icon(Icons.delete),
               onPressed: _showDeleteConfirmation,
             ),
-          IconButton(
-            icon: const Icon(Icons.check),
-            onPressed: _saveTheme,
-          ),
+          IconButton(icon: const Icon(Icons.check), onPressed: _saveTheme),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: _buildEditForm(),
-            ),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(child: _buildEditForm()),
     );
   }
 
   // Методы для работы с контентом заметок
   String _getNoteTitleFromContent(String content) {
-    String cleanContent =
-        content.replaceAll(RegExp(r'!\[voice\]\(voice:[^)]+\)'), '');
+    String cleanContent = content.replaceAll(
+      RegExp(r'!\[voice\]\(voice:[^)]+\)'),
+      '',
+    );
 
-    final headerMatch =
-        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(cleanContent);
+    final headerMatch = RegExp(
+      r'^#{1,3}\s+(.+)$',
+      multiLine: true,
+    ).firstMatch(cleanContent);
     if (headerMatch != null && headerMatch.group(1) != null) {
       return headerMatch.group(1)!;
     }
@@ -578,11 +585,15 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   }
 
   String _getNotePreviewFromContent(String content) {
-    String cleanContent =
-        content.replaceAll(RegExp(r'!\[voice\]\(voice:[^)]+\)'), '');
+    String cleanContent = content.replaceAll(
+      RegExp(r'!\[voice\]\(voice:[^)]+\)'),
+      '',
+    );
 
-    final headerMatch =
-        RegExp(r'^#{1,3}\s+(.+)$', multiLine: true).firstMatch(cleanContent);
+    final headerMatch = RegExp(
+      r'^#{1,3}\s+(.+)$',
+      multiLine: true,
+    ).firstMatch(cleanContent);
 
     if (headerMatch != null) {
       final headerEnd = headerMatch.end;
@@ -646,32 +657,36 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   void _showDeleteConfirmation() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить тему'),
-        content:
-            Text('Вы уверены, что хотите удалить тему "${widget.theme!.name}"? '
-                'Это действие удалит тему и отвяжет все заметки от неё.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await Provider.of<ThemesProvider>(context, listen: false)
-                  .deleteTheme(widget.theme!.id);
-              if (mounted) {
-                Navigator.pop(context);
-              }
-            },
-            child: const Text(
-              'Удалить',
-              style: TextStyle(color: Colors.red),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Удалить тему'),
+            content: Text(
+              'Вы уверены, что хотите удалить тему "${widget.theme!.name}"? '
+              'Это действие удалит тему и отвяжет все заметки от неё.',
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await Provider.of<ThemesProvider>(
+                    context,
+                    listen: false,
+                  ).deleteTheme(widget.theme!.id);
+                  if (mounted) {
+                    Navigator.pop(context);
+                  }
+                },
+                child: const Text(
+                  'Удалить',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

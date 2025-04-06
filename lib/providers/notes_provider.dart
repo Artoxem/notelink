@@ -3,10 +3,16 @@ import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
+import 'package:flutter_quill/quill_delta.dart';
+import 'dart:convert';
+import 'dart:async';
+import 'dart:collection';
+import 'dart:math';
+import 'package:flutter/material.dart'; // Для debugPrint
 
 // Определяем тип коллбэка для синхронизации
-typedef NoteDeletedCallback = void Function(
-    String noteId, List<String> themeIds);
+typedef NoteDeletedCallback =
+    void Function(String noteId, List<String> themeIds);
 
 class NotesProvider with ChangeNotifier {
   List<Note> _notes = [];
@@ -45,10 +51,45 @@ class NotesProvider with ChangeNotifier {
     _onDeleteCallbacks.remove(callback);
   }
 
-  // Очистка кэша при изменении данных
+  // Инвалидирует кэш фильтрованных заметок и очищает кэш отдельных заметок
   void _invalidateCache() {
-    _filteredNotesCache.clear();
-    _noteCache.clear();
+    debugPrint('Инвалидация кэша заметок [${DateTime.now()}]');
+    try {
+      // Полностью очищаем кэш фильтрованных списков
+      _filteredNotesCache.clear();
+
+      // Для каждой заметки в локальном списке
+      for (final note in _notes) {
+        // Если заметка есть в _noteCache, проверяем, нужно ли её удалить
+        if (_noteCache.containsKey(note.id)) {
+          // Если хотим удалить заметку из кэша по какому-то условию
+          // Например, если заметка старше 1 часа, можно удалить её из кэша
+          final now = DateTime.now();
+          if (note.updatedAt.isBefore(now.subtract(Duration(hours: 1)))) {
+            _noteCache.remove(note.id);
+            debugPrint('Удалена устаревшая заметка из кэша: ${note.id}');
+          }
+        }
+      }
+
+      // Проверяем, если в кэше есть заметки, которых нет в основном списке
+      final allNoteIds = _notes.map((n) => n.id).toSet();
+      final cacheIdsToRemove =
+          _noteCache.keys.where((id) => !allNoteIds.contains(id)).toList();
+
+      // Удаляем их из кэша
+      for (final id in cacheIdsToRemove) {
+        _noteCache.remove(id);
+        debugPrint('Удалена из кэша несуществующая заметка: $id');
+      }
+
+      debugPrint(
+        'Кэш очищен. Осталось ${_filteredNotesCache.length} кэшированных списков и ${_noteCache.length} заметок в кэше',
+      );
+    } catch (e) {
+      debugPrint('Ошибка при инвалидации кэша: $e');
+      debugPrint('Стек вызовов: ${StackTrace.current}');
+    }
   }
 
   // Получение избранных заметок с кэшированием
@@ -86,7 +127,7 @@ class NotesProvider with ChangeNotifier {
       // Обновляем кэш для конкретной заметки
       _noteCache[id] = updatedNote;
 
-      // Инвалидируем кэши, затронутые этим изменением
+      // Инвалидируем кэш для избранных заметок
       _filteredNotesCache.remove('favorites');
 
       // Уведомляем слушателей об изменении
@@ -103,37 +144,51 @@ class NotesProvider with ChangeNotifier {
   // Получить все заметки с улучшенной обработкой ошибок
   Future<void> loadNotes({bool force = false}) async {
     // Если уже идёт загрузка и не требуется принудительное обновление, выходим
-    if (_isLoading && !force) return;
+    if (_isLoading && !force) {
+      debugPrint('Загрузка заметок уже выполняется, новый запрос пропущен');
+      return;
+    }
+
+    debugPrint('Начинаем загрузку заметок (force: $force)');
 
     try {
       // Устанавливаем флаг загрузки и уведомляем об изменении состояния
       _isLoading = true;
+      _loadingError = false;
+      _errorMessage = '';
       notifyListeners();
 
       // Запрашиваем заметки из базы данных
+      debugPrint('Запрос заметок из базы данных...');
       List<Note> loadedNotes = await _databaseService.getNotes();
+      debugPrint('Получено ${loadedNotes.length} заметок из базы данных');
 
       // Сортируем заметки по дате создания (от новых к старым)
       loadedNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      debugPrint('Заметки отсортированы');
 
       // Обновляем список заметок - используем clear() и addAll() вместо прямого присваивания
       _notes.clear();
       _notes.addAll(loadedNotes);
+      debugPrint('Локальный список заметок обновлен');
 
       // Сбрасываем флаг загрузки
       _isLoading = false;
 
-      // Очищаем кэши
+      // Очищаем кэш
       _invalidateCache();
+      debugPrint('Кэш очищен');
 
       // Уведомляем слушателей об изменениях
       notifyListeners();
-    } catch (e) {
+      debugPrint('Загрузка заметок успешно завершена');
+    } catch (e, stackTrace) {
       // В случае ошибки сбрасываем флаг загрузки
       _isLoading = false;
 
       // Логируем ошибку
-      print('Ошибка при загрузке заметок: $e');
+      debugPrint('ОШИБКА при загрузке заметок: $e');
+      debugPrint('Стек вызовов: $stackTrace');
 
       // Устанавливаем флаг ошибки и сообщение
       _loadingError = true;
@@ -194,7 +249,7 @@ class NotesProvider with ChangeNotifier {
 
   // Создать новую заметку с улучшенной обработкой ошибок
   Future<Note?> createNote({
-    required String content,
+    required String content, // Теперь это будет Delta JSON
     List<String>? themeIds,
     bool hasDeadline = false,
     DateTime? deadlineDate,
@@ -206,15 +261,106 @@ class NotesProvider with ChangeNotifier {
     String? reminderSound,
     ReminderType reminderType = ReminderType.exactTime,
     RelativeReminder? relativeReminder,
+    RecurringReminder? recurringReminder,
   }) async {
+    debugPrint('=== НАЧАЛО СОЗДАНИЯ ЗАМЕТКИ ===');
     _isLoading = true;
     notifyListeners();
 
     try {
+      // Генерируем ID для заметки
+      final noteId = const Uuid().v4();
+      debugPrint('Сгенерирован ID: $noteId');
+
+      // Обработка списка тем с защитой от null
+      final safeThemeIds = themeIds ?? [];
+      debugPrint('Темы: ${safeThemeIds.join(', ')}');
+
+      // Проверка дедлайна
+      if (hasDeadline && deadlineDate == null) {
+        debugPrint('ОШИБКА: hasDeadline=true, но deadlineDate=null');
+        throw Exception('Дедлайн указан, но дата не задана');
+      }
+
+      // Проверка связанной даты
+      if (hasDateLink && linkedDate == null) {
+        debugPrint('ОШИБКА: hasDateLink=true, но linkedDate=null');
+        throw Exception('Связь с датой указана, но дата не задана');
+      }
+
+      // Проверяем и валидируем контент как JSON Delta
+      String validatedContent;
+      try {
+        // Проверяем, является ли контент уже JSON
+        final contentJson = json.decode(content);
+
+        // Проверяем структуру и преобразуем в правильный формат с 'ops'
+        if (contentJson is Map<String, dynamic> &&
+            contentJson.containsKey('ops')) {
+          // Контент уже в правильном формате с ключом 'ops'
+          debugPrint('Контент уже в формате Delta с ключом "ops"');
+          validatedContent = content;
+        } else if (contentJson is List) {
+          // Только массив операций - оборачиваем в структуру с 'ops'
+          debugPrint(
+            'Контент содержит только массив операций, добавляем ключ "ops"',
+          );
+          validatedContent = json.encode({'ops': contentJson});
+        } else {
+          // Неизвестный формат - создаем базовую структуру
+          debugPrint('Неизвестный формат JSON, создаем базовый Delta контент');
+          validatedContent = json.encode({
+            'ops': [
+              {'insert': 'Новая заметка\n'},
+            ],
+          });
+        }
+      } catch (e) {
+        // Контент не является JSON - пробуем создать Delta из текста
+        debugPrint('Контент не является JSON: $e');
+
+        if (content.isNotEmpty) {
+          // Пробуем интерпретировать контент как простой текст
+          debugPrint('Создаем Delta из текста длиной ${content.length}');
+          validatedContent = json.encode({
+            'ops': [
+              {'insert': content},
+            ],
+          });
+        } else {
+          // Пустой контент - создаем пустую заметку
+          debugPrint('Контент пуст, создаем пустую заметку');
+          validatedContent = json.encode({
+            'ops': [
+              {'insert': '\n'},
+            ],
+          });
+        }
+      }
+
+      // Дополнительная проверка после всех конвертаций
+      try {
+        final finalCheck = json.decode(validatedContent);
+        if (finalCheck is Map && finalCheck.containsKey('ops')) {
+          debugPrint(
+            'Финальная проверка пройдена: корректная структура Delta с полем ops',
+          );
+        } else {
+          debugPrint(
+            'ПРЕДУПРЕЖДЕНИЕ: После всех преобразований Delta все еще имеет неверный формат',
+          );
+          validatedContent = '{"ops":[{"insert":"\\n"}]}';
+        }
+      } catch (e) {
+        debugPrint('Ошибка при финальной проверке JSON: $e');
+        validatedContent = '{"ops":[{"insert":"\\n"}]}';
+      }
+
+      // Создаем объект заметки с безопасными значениями
       final note = Note(
-        id: const Uuid().v4(),
-        content: content,
-        themeIds: themeIds ?? [],
+        id: noteId,
+        content: validatedContent, // Используем проверенный Delta JSON
+        themeIds: safeThemeIds,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         hasDeadline: hasDeadline,
@@ -223,7 +369,7 @@ class NotesProvider with ChangeNotifier {
         linkedDate: linkedDate,
         isCompleted: false,
         isFavorite: false,
-        mediaUrls: mediaUrls ?? [],
+        mediaUrls: mediaUrls?.where((url) => url.isNotEmpty).toList() ?? [],
         emoji: emoji,
         reminderDates: reminderDates,
         reminderSound: reminderSound,
@@ -232,26 +378,85 @@ class NotesProvider with ChangeNotifier {
         voiceNotes: [], // Инициализируем пустым списком
       );
 
+      debugPrint('Заметка создана в памяти: ${note.id}');
+      debugPrint(
+        'Контент для сохранения в БД: ${note.content.substring(0, min(100, note.content.length))}...',
+      );
+
+      // Получаем текстовое содержимое для проверки
+      String plainText = "";
+      try {
+        final parsedContent = json.decode(validatedContent);
+        if (parsedContent is Map && parsedContent.containsKey('ops')) {
+          final opsList = parsedContent['ops'] as List;
+          // Извлекаем текст из операций
+          for (var op in opsList) {
+            if (op is Map && op.containsKey('insert')) {
+              plainText += op['insert'].toString();
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Ошибка при извлечении текста из Delta: $e');
+      }
+
+      // Проверяем, не пустая ли заметка (если контент пустой и нет связанных тем/дат/медиа)
+      final bool isEmptyNote =
+          (plainText.trim().isEmpty || plainText.trim() == '\n') &&
+          safeThemeIds.isEmpty &&
+          !hasDeadline &&
+          !hasDateLink &&
+          (mediaUrls == null || mediaUrls.isEmpty);
+
+      if (isEmptyNote) {
+        _isLoading = false;
+        debugPrint('Попытка создать пустую заметку без атрибутов - отклонено');
+        throw Exception('Нельзя создать пустую заметку без атрибутов');
+      }
+
       // Сначала добавляем в БД
-      await _databaseService.insertNote(note);
+      try {
+        debugPrint('Вставляем заметку в БД...');
+        final insertedId = await _databaseService.insertNote(note);
+        debugPrint('Заметка добавлена в БД с ID: $insertedId');
 
-      // Затем добавляем в локальный список
+        // Если ID не совпадают, это странно
+        if (insertedId != noteId) {
+          debugPrint(
+            'ПРЕДУПРЕЖДЕНИЕ: Возвращенный ID отличается от созданного',
+          );
+        }
+      } catch (dbError) {
+        debugPrint('ОШИБКА ПРИ ВСТАВКЕ В БД: $dbError');
+        debugPrint('Стек вызовов для ошибки БД: ${StackTrace.current}');
+        throw Exception('Ошибка при сохранении в базу данных: $dbError');
+      }
+
+      // Затем добавляем в локальный список и кэш
       _notes.add(note);
-
-      // Обновляем кэш
       _noteCache[note.id] = note;
       _invalidateCache(); // Инвалидируем фильтрованные списки
+      debugPrint('Локальное состояние и кэш обновлены');
 
       // Планируем напоминания, если они есть
       if (hasDeadline && deadlineDate != null && note.hasReminders) {
-        await _notificationService.scheduleNotificationsForNote(note);
+        try {
+          await _notificationService.scheduleNotificationsForNote(note);
+          debugPrint('Напоминания запланированы для заметки ${note.id}');
+        } catch (notifError) {
+          debugPrint('Ошибка при планировании напоминаний: $notifError');
+          // Не прерываем создание заметки из-за ошибки с напоминаниями
+        }
       }
 
       _isLoading = false;
       _loadingError = false;
       notifyListeners();
+      debugPrint('=== СОЗДАНИЕ ЗАМЕТКИ ЗАВЕРШЕНО УСПЕШНО ===');
       return note;
     } catch (e) {
+      debugPrint('!!! ОШИБКА СОЗДАНИЯ ЗАМЕТКИ: $e !!!');
+      debugPrint('Стек вызовов: ${StackTrace.current}');
       _isLoading = false;
       _loadingError = true;
       _errorMessage = "Ошибка создания заметки: ${e.toString()}";
@@ -263,47 +468,114 @@ class NotesProvider with ChangeNotifier {
   // Обновить существующую заметку с улучшенной обработкой ошибок
   Future<bool> updateNote(Note note) async {
     try {
-      // Получаем старую версию заметки для сравнения напоминаний
-      Note? oldNote;
-      final index = _notes.indexWhere((n) => n.id == note.id);
-      if (index != -1) {
-        oldNote = _notes[index];
-      }
+      // Записываем в лог для отладки
+      debugPrint('=== ОБНОВЛЕНИЕ ЗАМЕТКИ ===');
+      debugPrint(
+        'updateNote вызван для заметки ID: ${note.id}, длина контента: ${note.content.length}',
+      );
 
-      // Проверяем, изменились ли напоминания
-      bool remindersChanged = _haveRemindersChanged(oldNote, note);
+      // Проверяем, является ли контент валидным JSON для Quill Delta
+      try {
+        // Декодируем контент из JSON
+        final contentJson = json.decode(note.content);
 
-      // Обновляем в БД
-      final updatedNote = note.copyWith(updatedAt: DateTime.now());
-      await _databaseService.updateNote(updatedNote);
+        // Проверяем структуру JSON и преобразуем в правильный формат
+        String validatedContent;
 
-      // Обновляем локальное состояние
-      if (index != -1) {
-        _notes[index] = updatedNote;
+        if (contentJson is Map<String, dynamic> &&
+            contentJson.containsKey('ops')) {
+          // Стандартный формат с 'ops' - оставляем как есть
+          debugPrint(
+            'Контент содержит правильную структуру Delta с ключом "ops"',
+          );
+          validatedContent = note.content;
+        } else if (contentJson is List) {
+          // Формат без 'ops' - оборачиваем в правильную структуру
+          debugPrint(
+            'Контент содержит только массив операций, оборачиваем в {"ops": [...]}',
+          );
+          validatedContent = json.encode({'ops': contentJson});
+        } else {
+          debugPrint('Неожиданный формат JSON, создаем базовый Delta контент');
+          // Создаем простой документ из текста
+          validatedContent = json.encode({
+            'ops': [
+              {
+                'insert':
+                    'Контент заметки не может быть корректно обработан.\n',
+              },
+            ],
+          });
+        }
 
-        // Обновляем кэш
-        _noteCache[note.id] = updatedNote;
-        _invalidateCache(); // Инвалидируем фильтрованные списки
+        // Создаем копию заметки с проверенным контентом
+        final updatedNote = note.copyWith(content: validatedContent);
 
-        // Обновляем напоминания, если они изменились
-        if (remindersChanged) {
-          if (updatedNote.hasDeadline &&
-              updatedNote.deadlineDate != null &&
-              updatedNote.hasReminders) {
-            // Планируем новые напоминания
-            await _notificationService
-                .scheduleNotificationsForNote(updatedNote);
-          } else {
-            // Отменяем существующие напоминания
-            await _notificationService
-                .cancelNotificationsForNote(updatedNote.id);
-          }
+        // Сохраняем в базу данных
+        await _databaseService.updateNote(updatedNote);
+
+        // Находим индекс заметки в списке
+        int index = _notes.indexWhere((n) => n.id == note.id);
+
+        // Обновляем в памяти
+        if (index != -1) {
+          _notes[index] = updatedNote;
+          debugPrint('Обновлена заметка в локальном списке на позиции $index');
+
+          // Обновляем кэш
+          _noteCache[note.id] = updatedNote;
+          debugPrint('Обновлен кэш для заметки с ID ${note.id}');
+
+          // Принудительно инвалидируем фильтрованный кэш после обновления
+          _filteredNotesCache.clear();
+          debugPrint('Очищен кэш фильтрованных заметок');
+        } else {
+          // Если заметки нет в списке, добавляем её
+          debugPrint('Заметка с ID ${note.id} не найдена в списке, добавляем');
+          _notes.add(updatedNote);
+          _noteCache[note.id] = updatedNote;
+          _invalidateCache();
         }
 
         notifyListeners();
+        debugPrint('=== ОБНОВЛЕНИЕ ЗАМЕТКИ ЗАВЕРШЕНО УСПЕШНО ===');
+        return true;
+      } catch (jsonError) {
+        // Проблема с форматом JSON
+        debugPrint('Ошибка при обработке JSON: $jsonError');
+
+        // Пытаемся спасти ситуацию, создав минимально валидный контент
+        final fallbackContent = json.encode({
+          'ops': [
+            {
+              'insert':
+                  note.content.length > 0 ? note.content : 'Пустая заметка\n',
+            },
+          ],
+        });
+
+        final fallbackNote = note.copyWith(content: fallbackContent);
+        await _databaseService.updateNote(fallbackNote);
+
+        // Обновляем в памяти
+        final index = _notes.indexWhere((n) => n.id == note.id);
+        if (index != -1) {
+          _notes[index] = fallbackNote;
+          _noteCache[note.id] = fallbackNote;
+        } else {
+          _notes.add(fallbackNote);
+          _noteCache[note.id] = fallbackNote;
+        }
+
+        _invalidateCache();
+        notifyListeners();
+
+        debugPrint('Заметка восстановлена с резервным контентом');
+        return true;
       }
-      return true;
     } catch (e) {
+      debugPrint('!!! КРИТИЧЕСКАЯ ОШИБКА ОБНОВЛЕНИЯ ЗАМЕТКИ: $e !!!');
+      debugPrint('Стек вызовов: ${StackTrace.current}');
       _loadingError = true;
       _errorMessage = "Ошибка обновления заметки: ${e.toString()}";
       notifyListeners();
@@ -329,13 +601,15 @@ class NotesProvider with ChangeNotifier {
         newNote.reminderType == ReminderType.relativeTime) {
       // Если у одной заметки есть относительное напоминание, а у другой нет
       if ((oldNote.relativeReminder == null) !=
-          (newNote.relativeReminder == null)) return true;
+          (newNote.relativeReminder == null))
+        return true;
 
       // Если у обеих есть относительные напоминания, сравниваем их минуты
       if (oldNote.relativeReminder != null &&
           newNote.relativeReminder != null) {
         if (oldNote.relativeReminder!.minutes !=
-            newNote.relativeReminder!.minutes) return true;
+            newNote.relativeReminder!.minutes)
+          return true;
       }
     }
 
@@ -390,7 +664,8 @@ class NotesProvider with ChangeNotifier {
       if (!_notes[noteIndex].hasDeadline) {
         _operationLock.remove(noteId);
         throw Exception(
-            'Можно отметить как выполненную только задачу с дедлайном');
+          'Можно отметить как выполненную только задачу с дедлайном',
+        );
       }
 
       // Если уже выполнена, ничего не делаем
@@ -425,7 +700,7 @@ class NotesProvider with ChangeNotifier {
       _operationLock.remove(noteId);
     } catch (e) {
       _operationLock.remove(noteId);
-      print('Ошибка при отметке задачи как выполненной: $e');
+      debugPrint('Ошибка при отметке задачи как выполненной: $e');
       rethrow;
     }
   }
@@ -487,7 +762,7 @@ class NotesProvider with ChangeNotifier {
       _operationLock.remove(noteId);
     } catch (e) {
       _operationLock.remove(noteId);
-      print('Ошибка при отметке задачи как невыполненной: $e');
+      debugPrint('Ошибка при отметке задачи как невыполненной: $e');
       rethrow;
     }
   }
@@ -536,10 +811,10 @@ class NotesProvider with ChangeNotifier {
         // Обновляем даты напоминаний относительно нового дедлайна
         final List<DateTime> newReminderDates =
             _updateExactReminderDatesForDeadline(
-          updatedNote.reminderDates!,
-          originalDeadline,
-          newDeadline,
-        );
+              updatedNote.reminderDates!,
+              originalDeadline,
+              newDeadline,
+            );
 
         noteWithUpdatedReminders = updatedNote.copyWith(
           reminderDates: newReminderDates,
@@ -565,8 +840,9 @@ class NotesProvider with ChangeNotifier {
       // Перепланируем напоминания
       if (noteWithUpdatedReminders.hasReminders) {
         await _notificationService.cancelNotificationsForNote(id);
-        await _notificationService
-            .scheduleNotificationsForNote(noteWithUpdatedReminders);
+        await _notificationService.scheduleNotificationsForNote(
+          noteWithUpdatedReminders,
+        );
       }
 
       notifyListeners();
@@ -696,30 +972,31 @@ class NotesProvider with ChangeNotifier {
       return _filteredNotesCache[cacheKey]!;
     }
 
-    final periodNotes = _notes.where((note) {
-      // Проверяем дату создания
-      if (note.createdAt.isAfter(start) && note.createdAt.isBefore(end)) {
-        return true;
-      }
+    final periodNotes =
+        _notes.where((note) {
+          // Проверяем дату создания
+          if (note.createdAt.isAfter(start) && note.createdAt.isBefore(end)) {
+            return true;
+          }
 
-      // Проверяем дату дедлайна
-      if (note.hasDeadline &&
-          note.deadlineDate != null &&
-          note.deadlineDate!.isAfter(start) &&
-          note.deadlineDate!.isBefore(end)) {
-        return true;
-      }
+          // Проверяем дату дедлайна
+          if (note.hasDeadline &&
+              note.deadlineDate != null &&
+              note.deadlineDate!.isAfter(start) &&
+              note.deadlineDate!.isBefore(end)) {
+            return true;
+          }
 
-      // Проверяем связанную дату
-      if (note.hasDateLink &&
-          note.linkedDate != null &&
-          note.linkedDate!.isAfter(start) &&
-          note.linkedDate!.isBefore(end)) {
-        return true;
-      }
+          // Проверяем связанную дату
+          if (note.hasDateLink &&
+              note.linkedDate != null &&
+              note.linkedDate!.isAfter(start) &&
+              note.linkedDate!.isBefore(end)) {
+            return true;
+          }
 
-      return false;
-    }).toList();
+          return false;
+        }).toList();
 
     _filteredNotesCache[cacheKey] = periodNotes;
     return periodNotes;
@@ -736,9 +1013,12 @@ class NotesProvider with ChangeNotifier {
     }
 
     final lowercaseQuery = query.toLowerCase();
-    final searchResults = _notes
-        .where((note) => note.content.toLowerCase().contains(lowercaseQuery))
-        .toList();
+    final searchResults =
+        _notes
+            .where(
+              (note) => note.content.toLowerCase().contains(lowercaseQuery),
+            )
+            .toList();
 
     // Кэшируем только если запрос не очень специфичный (чтобы не засорять кэш)
     if (query.length > 2) {
@@ -765,7 +1045,7 @@ class NotesProvider with ChangeNotifier {
 
     // Запрашиваем из БД
     try {
-      final note = await _databaseService.getNote(id);
+      final note = await _databaseService.getNoteById(id);
       if (note != null) {
         _noteCache[id] = note;
       }
@@ -777,8 +1057,11 @@ class NotesProvider with ChangeNotifier {
   }
 
   // Создать новое напоминание с точным временем
-  Future<bool> addExactTimeReminderToNote(String noteId, DateTime reminderDate,
-      {String? sound}) async {
+  Future<bool> addExactTimeReminderToNote(
+    String noteId,
+    DateTime reminderDate, {
+    String? sound,
+  }) async {
     final index = _notes.indexWhere((n) => n.id == noteId);
     if (index == -1) return false;
 
@@ -794,8 +1077,9 @@ class NotesProvider with ChangeNotifier {
     if (reminderDate.isBefore(DateTime.now())) return false;
 
     // Получаем текущий список напоминаний или создаем новый
-    List<DateTime> reminderDates =
-        List<DateTime>.from(note.reminderDates ?? []);
+    List<DateTime> reminderDates = List<DateTime>.from(
+      note.reminderDates ?? [],
+    );
 
     // Добавляем новую дату напоминания
     reminderDates.add(reminderDate);
@@ -838,8 +1122,11 @@ class NotesProvider with ChangeNotifier {
 
   // Создать новое относительное напоминание
   Future<bool> setRelativeReminderToNote(
-      String noteId, int minutes, String description,
-      {String? sound}) async {
+    String noteId,
+    int minutes,
+    String description, {
+    String? sound,
+  }) async {
     final index = _notes.indexWhere((n) => n.id == noteId);
     if (index == -1) return false;
 
@@ -858,8 +1145,9 @@ class NotesProvider with ChangeNotifier {
     );
 
     // Рассчитываем фактическую дату напоминания
-    final DateTime reminderDate =
-        note.deadlineDate!.subtract(Duration(minutes: minutes));
+    final DateTime reminderDate = note.deadlineDate!.subtract(
+      Duration(minutes: minutes),
+    );
 
     // Если дата напоминания уже прошла, не добавляем
     if (reminderDate.isBefore(DateTime.now())) return false;
@@ -867,7 +1155,7 @@ class NotesProvider with ChangeNotifier {
     // Создаем обновленную копию заметки с типом относительного времени
     final updatedNote = note.copyWith(
       reminderDates: [
-        reminderDate
+        reminderDate,
       ], // Сохраняем фактическую дату для обратной совместимости
       reminderSound: sound ?? note.reminderSound,
       reminderType: ReminderType.relativeTime, // Устанавливаем тип напоминания

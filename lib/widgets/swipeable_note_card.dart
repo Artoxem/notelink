@@ -36,8 +36,9 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
 
     // Создаем константы для отступов и радиуса скругления для согласованности
     const cardMargin = EdgeInsets.symmetric(vertical: 8, horizontal: 4);
-    const borderRadius =
-        BorderRadius.all(Radius.circular(AppDimens.cardBorderRadius));
+    const borderRadius = BorderRadius.all(
+      Radius.circular(AppDimens.cardBorderRadius),
+    );
 
     // Используем Padding снаружи, чтобы сохранить пространство между карточками
     return Padding(
@@ -58,7 +59,7 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
               gradient: LinearGradient(
                 colors: [
                   AppColors.fabBackground.withOpacity(0.8),
-                  AppColors.fabBackground.withOpacity(0.6)
+                  AppColors.fabBackground.withOpacity(0.6),
                 ],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
@@ -69,11 +70,7 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
               mainAxisSize: MainAxisSize.max,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: const [
-                Icon(
-                  Icons.star,
-                  color: Colors.orange,
-                  size: 22,
-                ),
+                Icon(Icons.star, color: Colors.orange, size: 22),
               ],
             ),
           ),
@@ -103,11 +100,7 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: const [
                 Spacer(),
-                Icon(
-                  Icons.delete,
-                  color: Colors.red,
-                  size: 22,
-                ),
+                Icon(Icons.delete, color: Colors.red, size: 22),
               ],
             ),
           ),
@@ -123,7 +116,8 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
                     return AlertDialog(
                       title: const Text('Удалить заметку'),
                       content: const Text(
-                          'Вы уверены, что хотите удалить эту заметку?'),
+                        'Вы уверены, что хотите удалить эту заметку?',
+                      ),
                       actions: <Widget>[
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(false),
@@ -131,8 +125,10 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
                         ),
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(true),
-                          child: const Text('Удалить',
-                              style: TextStyle(color: Colors.red)),
+                          child: const Text(
+                            'Удалить',
+                            style: TextStyle(color: Colors.red),
+                          ),
                         ),
                       ],
                     );
@@ -180,10 +176,7 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
               margin: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
                 borderRadius: borderRadius,
-                side: BorderSide(
-                  color: borderColor,
-                  width: 2,
-                ),
+                side: BorderSide(color: borderColor, width: 2),
               ),
               elevation: AppDimens.cardElevation,
               child: InkWell(
@@ -199,8 +192,9 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            DateFormat('d MMMM yyyy')
-                                .format(widget.note.createdAt),
+                            DateFormat(
+                              'd MMMM yyyy',
+                            ).format(widget.note.createdAt),
                             style: AppTextStyles.bodySmall,
                           ),
                           if (widget.note.hasDeadline &&
@@ -231,7 +225,7 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
                         child: Text(
-                          widget.note.content,
+                          widget.note.previewText,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.bodyMedium,
@@ -253,9 +247,10 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
                 top: 12,
                 right: 12,
                 child: AnimatedOpacity(
-                  opacity: _recentlyFavorited
-                      ? 1.0
-                      : (widget.note.isFavorite ? 0.8 : 0.0),
+                  opacity:
+                      _recentlyFavorited
+                          ? 1.0
+                          : (widget.note.isFavorite ? 0.8 : 0.0),
                   duration: const Duration(milliseconds: 300),
                   child: Icon(
                     Icons.star,
@@ -274,58 +269,65 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
   Widget _buildThemeTags(List<String> themeIds) {
     return Consumer<ThemesProvider>(
       builder: (context, themesProvider, _) {
-        final themes = themeIds
-            .map((id) => themesProvider.themes.firstWhere(
-                  (t) => t.id == id,
-                  orElse: () => themesProvider.themes.firstWhere(
-                    (t) => true,
-                    orElse: () => NoteTheme(
-                      id: '',
-                      name: 'Unknown',
-                      color: AppColors.themeColors[0].value.toString(),
-                      createdAt: DateTime.now(),
-                      updatedAt: DateTime.now(),
-                      noteIds: [],
-                    ),
+        final themes =
+            themeIds
+                .map(
+                  (id) => themesProvider.themes.firstWhere(
+                    (t) => t.id == id,
+                    orElse:
+                        () => themesProvider.themes.firstWhere(
+                          (t) => true,
+                          orElse:
+                              () => NoteTheme(
+                                id: '',
+                                name: 'Unknown',
+                                color:
+                                    AppColors.themeColors[0].value.toString(),
+                                createdAt: DateTime.now(),
+                                updatedAt: DateTime.now(),
+                                noteIds: [],
+                              ),
+                        ),
                   ),
-                ))
-            .where((t) => t.id.isNotEmpty)
-            .toList();
+                )
+                .where((t) => t.id.isNotEmpty)
+                .toList();
 
         return Wrap(
           spacing: 8,
           runSpacing: 4,
-          children: themes.map((theme) {
-            Color themeColor;
-            try {
-              themeColor = Color(int.parse(theme.color));
-            } catch (e) {
-              themeColor = AppColors.themeColors[0];
-            }
+          children:
+              themes.map((theme) {
+                Color themeColor;
+                try {
+                  themeColor = Color(int.parse(theme.color));
+                } catch (e) {
+                  themeColor = AppColors.themeColors[0];
+                }
 
-            return Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
-              decoration: BoxDecoration(
-                color: themeColor.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: themeColor.withOpacity(0.5),
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                theme.name,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: themeColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            );
-          }).toList(),
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: themeColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: themeColor.withOpacity(0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    theme.name,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: themeColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              }).toList(),
         );
       },
     );
@@ -336,16 +338,18 @@ class _SwipeableNoteCardState extends State<SwipeableNoteCard> {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            NoteDetailScreen(note: note),
+        pageBuilder:
+            (context, animation, secondaryAnimation) =>
+                NoteDetailScreen(note: note),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           var begin = const Offset(1.0, 0.0);
           var end = Offset.zero;
           var curve = Curves.easeOutQuint;
 
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
 
           return SlideTransition(
             position: animation.drive(tween),

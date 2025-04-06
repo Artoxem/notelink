@@ -47,70 +47,7 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-// Добавление метода для обработки Markdown в класс _SearchScreenState
-// Скопируем регулярные выражения и метод из notes_screen.dart
-
-// Регулярные выражения для обработки Markdown
-  final RegExp _headingsRegex = RegExp(r'#{1,6}\s+');
-  final RegExp _boldRegex = RegExp(r'\*\*|__');
-  final RegExp _italicRegex = RegExp(r'\*|_(?!\*)');
-  final RegExp _linksRegex = RegExp(r'\[([^\]]+)\]\([^)]+\)');
-  final RegExp _codeRegex = RegExp(r'`[^`]+`');
-  final RegExp _voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
-
-// Улучшенное создание превью из Markdown-текста
-  String _createPreviewFromMarkdown(String markdown, int maxLength) {
-    if (markdown.isEmpty) {
-      return '';
-    }
-
-    // Предварительная проверка наличия разметки для оптимизации производительности
-    bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
-        _boldRegex.hasMatch(markdown) ||
-        _italicRegex.hasMatch(markdown) ||
-        _linksRegex.hasMatch(markdown) ||
-        _codeRegex.hasMatch(markdown);
-
-    if (!hasMarkdown) {
-      // Если разметки нет, просто обрезаем текст,
-      // но сначала удаляем ссылки на голосовые заметки
-      String cleanText = markdown.replaceAll(_voiceRegex, '');
-      return cleanText.length > maxLength
-          ? '${cleanText.substring(0, maxLength)}...'
-          : cleanText;
-    }
-
-    // Последовательно удаляем разметку
-    String text = markdown;
-
-    // Удаляем голосовые заметки полностью
-    text = text.replaceAll(_voiceRegex, '');
-
-    // Заменяем ссылки их текстовым представлением
-    text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
-
-    // Удаляем заголовки
-    text = text.replaceAll(_headingsRegex, '');
-
-    // Удаляем разметку жирного и курсивного текста
-    text = text.replaceAll(_boldRegex, '');
-    text = text.replaceAll(_italicRegex, '');
-
-    // Удаляем разметку кода
-    text = text.replaceAllMapped(_codeRegex, (match) {
-      final code = match.group(0) ?? '';
-      return code.length > 2 ? code.substring(1, code.length - 1) : '';
-    });
-
-    // Обрезаем по максимальной длине
-    if (text.length > maxLength) {
-      text = '${text.substring(0, maxLength)}...';
-    }
-
-    return text;
-  }
-
-// Обновлённый метод построения для результатов поиска
+  // Обновлённый метод построения для результатов поиска
   Widget _buildSearchResultCard(Note note) {
     // Определяем цвет индикатора в зависимости от статуса и темы
     Color indicatorColor;
@@ -131,19 +68,22 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     } else if (note.themeIds.isNotEmpty) {
       // Используем цвет первой темы заметки
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      final themesProvider = Provider.of<ThemesProvider>(
+        context,
+        listen: false,
+      );
       final themeId = note.themeIds.first;
       final theme = themesProvider.themes.firstWhere(
         (t) => t.id == themeId,
-        orElse: () => NoteTheme(
-          id: '',
-          name: 'Без темы',
-          color: AppColors.themeColors[0].value.toString(),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          noteIds: [],
-        ),
+        orElse:
+            () => NoteTheme(
+              id: '',
+              name: 'Без темы',
+              color: AppColors.themeColors[0].value.toString(),
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+              noteIds: [],
+            ),
       );
       try {
         indicatorColor = Color(int.parse(theme.color));
@@ -156,7 +96,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // Преобразуем контент с учётом markdown форматирования
     final String formattedContent =
-        _createPreviewFromMarkdown(note.content, 250);
+        note.content.length > 250
+            ? '${note.content.substring(0, 250)}...'
+            : note.content;
 
     // Ищем совпадения для подсветки
     final List<TextSpan> highlightedContent = _highlightOccurrences(
@@ -222,9 +164,10 @@ class _SearchScreenState extends State<SearchScreen> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: note.isCompleted
-                                  ? AppColors.deadlineBgGray
-                                  : AppColors.deadlineBgGreen,
+                              color:
+                                  note.isCompleted
+                                      ? AppColors.deadlineBgGray
+                                      : AppColors.deadlineBgGreen,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -239,9 +182,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
                     // Подсвеченное содержимое
                     RichText(
-                      text: TextSpan(
-                        children: highlightedContent,
-                      ),
+                      text: TextSpan(children: highlightedContent),
                       maxLines: 5,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -255,20 +196,29 @@ class _SearchScreenState extends State<SearchScreen> {
                           if (note.hasImages)
                             const Padding(
                               padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.photo,
-                                  size: 16, color: AppColors.textOnLight),
+                              child: Icon(
+                                Icons.photo,
+                                size: 16,
+                                color: AppColors.textOnLight,
+                              ),
                             ),
                           if (note.hasAudio)
                             const Padding(
                               padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.mic,
-                                  size: 16, color: AppColors.textOnLight),
+                              child: Icon(
+                                Icons.mic,
+                                size: 16,
+                                color: AppColors.textOnLight,
+                              ),
                             ),
                           if (note.hasFiles)
                             const Padding(
                               padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.attach_file,
-                                  size: 16, color: AppColors.textOnLight),
+                              child: Icon(
+                                Icons.attach_file,
+                                size: 16,
+                                color: AppColors.textOnLight,
+                              ),
                             ),
                           if (note.themeIds.isNotEmpty)
                             Expanded(
@@ -306,16 +256,19 @@ class _SearchScreenState extends State<SearchScreen> {
     final query = _searchQuery.toLowerCase();
 
     setState(() {
-      _searchResults = notesProvider.notes.where((note) {
-        // Поиск в содержимом заметки
-        return note.content.toLowerCase().contains(query);
-      }).toList();
+      _searchResults =
+          notesProvider.notes.where((note) {
+            // Поиск в содержимом заметки
+            return note.content.toLowerCase().contains(query);
+          }).toList();
     });
 
     // Добавляем запрос в историю поиска (если не пустой)
     if (query.isNotEmpty) {
-      Provider.of<AppProvider>(context, listen: false)
-          .addToSearchHistory(query);
+      Provider.of<AppProvider>(
+        context,
+        listen: false,
+      ).addToSearchHistory(query);
     }
   }
 
@@ -346,10 +299,7 @@ class _SearchScreenState extends State<SearchScreen> {
         title: const Text('Поиск'),
         actions: [
           if (_isSearching)
-            IconButton(
-              icon: const Icon(Icons.clear),
-              onPressed: _clearSearch,
-            ),
+            IconButton(icon: const Icon(Icons.clear), onPressed: _clearSearch),
         ],
       ),
       body: Column(
@@ -369,8 +319,10 @@ class _SearchScreenState extends State<SearchScreen> {
                 style: AppTextStyles.bodyMediumLight,
                 decoration: InputDecoration(
                   hintText: 'Поиск по заметкам...',
-                  prefixIcon:
-                      const Icon(Icons.search, color: AppColors.accentPrimary),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: AppColors.accentPrimary,
+                  ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: AppDimens.mediumPadding,
@@ -391,7 +343,8 @@ class _SearchScreenState extends State<SearchScreen> {
               appProvider.searchHistory.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.mediumPadding),
+                horizontal: AppDimens.mediumPadding,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -416,21 +369,25 @@ class _SearchScreenState extends State<SearchScreen> {
                   Wrap(
                     spacing: AppDimens.smallPadding,
                     runSpacing: AppDimens.smallPadding,
-                    children: appProvider.searchHistory.map((query) {
-                      return Chip(
-                        backgroundColor: AppColors.secondary.withOpacity(0.7),
-                        label: Text(query, style: AppTextStyles.bodySmall),
-                        onDeleted: () {
-                          appProvider.removeFromSearchHistory(query);
-                        },
-                        deleteIcon: const Icon(Icons.clear, size: 16),
-                        padding: const EdgeInsets.all(4),
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ).paddedChip(
-                        onTap: () => _selectHistoryItem(query),
-                      );
-                    }).toList(),
+                    children:
+                        appProvider.searchHistory.map((query) {
+                          return Chip(
+                            backgroundColor: AppColors.secondary.withOpacity(
+                              0.7,
+                            ),
+                            label: Text(query, style: AppTextStyles.bodySmall),
+                            onDeleted: () {
+                              appProvider.removeFromSearchHistory(query);
+                            },
+                            deleteIcon: const Icon(Icons.clear, size: 16),
+                            padding: const EdgeInsets.all(4),
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ).paddedChip(onTap: () => _selectHistoryItem(query));
+                        }).toList(),
                   ),
                 ],
               ),
@@ -438,24 +395,31 @@ class _SearchScreenState extends State<SearchScreen> {
 
           // Индикатор загрузки или результаты поиска
           Expanded(
-            child: _isSearching
-                ? _searchResults.isEmpty
-                    ? const Center(
-                        child: Text('Ничего не найдено',
-                            style: AppTextStyles.bodyLarge),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(AppDimens.mediumPadding),
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final note = _searchResults[index];
-                          return _buildSearchResultCard(note);
-                        },
-                      )
-                : const Center(
-                    child: Text('Введите текст для поиска',
-                        style: AppTextStyles.bodyLarge),
-                  ),
+            child:
+                _isSearching
+                    ? _searchResults.isEmpty
+                        ? const Center(
+                          child: Text(
+                            'Ничего не найдено',
+                            style: AppTextStyles.bodyLarge,
+                          ),
+                        )
+                        : ListView.builder(
+                          padding: const EdgeInsets.all(
+                            AppDimens.mediumPadding,
+                          ),
+                          itemCount: _searchResults.length,
+                          itemBuilder: (context, index) {
+                            final note = _searchResults[index];
+                            return _buildSearchResultCard(note);
+                          },
+                        )
+                    : const Center(
+                      child: Text(
+                        'Введите текст для поиска',
+                        style: AppTextStyles.bodyLarge,
+                      ),
+                    ),
           ),
         ],
       ),
@@ -465,7 +429,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<TextSpan> _highlightOccurrences(String text, String query) {
     if (query.isEmpty) {
       return [
-        TextSpan(text: text, style: AppTextStyles.bodyMediumLight)
+        TextSpan(text: text, style: AppTextStyles.bodyMediumLight),
       ]; // Темный текст
     }
 
@@ -479,20 +443,24 @@ class _SearchScreenState extends State<SearchScreen> {
     while (currentIndex != -1) {
       // Добавляем текст до совпадения
       if (currentIndex > lastIndex) {
-        spans.add(TextSpan(
-          text: text.substring(lastIndex, currentIndex),
-          style: AppTextStyles.bodyMediumLight, // Темный текст
-        ));
+        spans.add(
+          TextSpan(
+            text: text.substring(lastIndex, currentIndex),
+            style: AppTextStyles.bodyMediumLight, // Темный текст
+          ),
+        );
       }
 
       // Добавляем подсвеченное совпадение
-      spans.add(TextSpan(
-        text: text.substring(currentIndex, currentIndex + query.length),
-        style: AppTextStyles.bodyMediumLight.copyWith(
-          backgroundColor: AppColors.accentSecondary.withOpacity(0.3),
-          fontWeight: FontWeight.bold,
+      spans.add(
+        TextSpan(
+          text: text.substring(currentIndex, currentIndex + query.length),
+          style: AppTextStyles.bodyMediumLight.copyWith(
+            backgroundColor: AppColors.accentSecondary.withOpacity(0.3),
+            fontWeight: FontWeight.bold,
+          ),
         ),
-      ));
+      );
 
       // Обновляем индексы
       lastIndex = currentIndex + query.length;
@@ -501,10 +469,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // Добавляем оставшийся текст
     if (lastIndex < text.length) {
-      spans.add(TextSpan(
-        text: text.substring(lastIndex),
-        style: AppTextStyles.bodyMediumLight, // Темный текст
-      ));
+      spans.add(
+        TextSpan(
+          text: text.substring(lastIndex),
+          style: AppTextStyles.bodyMediumLight, // Темный текст
+        ),
+      );
     }
 
     return spans;

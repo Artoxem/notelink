@@ -235,6 +235,7 @@ class AppDimens {
   // Скругления
   static const double cardBorderRadius = 12.0;
   static const double buttonBorderRadius = 8.0;
+  static const double smallBorderRadius = 4.0;
   static const double chipBorderRadius = 16.0;
 
   // Размеры элементов
@@ -354,20 +355,6 @@ class AppShadows {
     blurRadius: 10,
     offset: Offset(0, 4),
   );
-}
-
-// Класс с константами для Markdown
-class MarkdownSyntax {
-  static const String bold = '**';
-  static const String italic = '*';
-  static const String heading1 = '# ';
-  static const String heading2 = '## ';
-  static const String heading3 = '### ';
-  static const String bulletList = '- ';
-  static const String numberedList = '1. ';
-  static const String quote = '> ';
-  static const String codeBlock = '```';
-  static const String inlineCode = '`';
 }
 
 // Добавляем перечисление для типов отображения заметок

@@ -31,11 +31,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     const ThemesScreen(),
   ];
 
-  final List<String> _titles = [
-    'Заметки',
-    'Календарь',
-    'Темы',
-  ];
+  final List<String> _titles = ['Заметки', 'Календарь', 'Темы'];
 
   @override
   void initState() {
@@ -48,17 +44,11 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
 
     _fabScaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
-      CurvedAnimation(
-        parent: _fabAnimationController,
-        curve: Curves.easeOut,
-      ),
+      CurvedAnimation(parent: _fabAnimationController, curve: Curves.easeOut),
     );
 
     _fabRotateAnimation = Tween<double>(begin: 0.0, end: math.pi / 12).animate(
-      CurvedAnimation(
-        parent: _fabAnimationController,
-        curve: Curves.easeOut,
-      ),
+      CurvedAnimation(parent: _fabAnimationController, curve: Curves.easeOut),
     );
   }
 
@@ -80,9 +70,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SearchScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SearchScreen()),
               );
             },
           ),
@@ -95,9 +83,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
               print('📌 Нажата кнопка Избранное');
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const FavoriteScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const FavoriteScreen()),
               );
             },
           ),
@@ -112,12 +98,15 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                         ? AppIcons.list
                         : AppIcons.grid,
                   ),
-                  tooltip: appProvider.noteViewMode == NoteViewMode.card
-                      ? 'Список'
-                      : 'Карточки',
+                  tooltip:
+                      appProvider.noteViewMode == NoteViewMode.card
+                          ? 'Список'
+                          : 'Карточки',
                   onPressed: () {
-                    Provider.of<AppProvider>(context, listen: false)
-                        .toggleNoteViewMode();
+                    Provider.of<AppProvider>(
+                      context,
+                      listen: false,
+                    ).toggleNoteViewMode();
                   },
                 );
               },
@@ -154,10 +143,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
             },
             type: BottomNavigationBarType.fixed,
             items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.note),
-                label: 'Заметки',
-              ),
+              BottomNavigationBarItem(icon: Icon(Icons.note), label: 'Заметки'),
               BottomNavigationBarItem(
                 icon: Icon(AppIcons.calendar),
                 label: 'Календарь',
@@ -171,47 +157,49 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         ),
       ),
 
-      floatingActionButton: _currentIndex != 1
-          ? MouseRegion(
-              onEnter: (_) => _fabAnimationController.forward(),
-              onExit: (_) => _fabAnimationController.reverse(),
-              child: GestureDetector(
-                onTapDown: (_) => _fabAnimationController.forward(),
-                onTapUp: (_) => _fabAnimationController.reverse(),
-                onTapCancel: () => _fabAnimationController.reverse(),
-                child: AnimatedBuilder(
-                  animation: _fabAnimationController,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _fabScaleAnimation.value,
-                      child: Transform.rotate(
-                        angle: _fabRotateAnimation.value,
-                        child: FloatingActionButton(
-                          onPressed: () {
-                            switch (_currentIndex) {
-                              case 0: // Notes
-                                _showAddNoteDialog();
-                                break;
-                              case 2: // Themes
-                                _showAddThemeDialog();
-                                break;
-                            }
-                          },
-                          backgroundColor: AppColors.accentSecondary,
-                          foregroundColor: AppColors.textOnDark,
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+      floatingActionButton:
+          _currentIndex != 1
+              ? MouseRegion(
+                onEnter: (_) => _fabAnimationController.forward(),
+                onExit: (_) => _fabAnimationController.reverse(),
+                child: GestureDetector(
+                  onTapDown: (_) => _fabAnimationController.forward(),
+                  onTapUp: (_) => _fabAnimationController.reverse(),
+                  onTapCancel: () => _fabAnimationController.reverse(),
+                  child: AnimatedBuilder(
+                    animation: _fabAnimationController,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: _fabScaleAnimation.value,
+                        child: Transform.rotate(
+                          angle: _fabRotateAnimation.value,
+                          child: FloatingActionButton(
+                            onPressed: () {
+                              switch (_currentIndex) {
+                                case 0: // Notes
+                                  _showAddNoteDialog();
+                                  break;
+                                case 2: // Themes
+                                  _showAddThemeDialog();
+                                  break;
+                              }
+                            },
+                            heroTag: 'mainScreenFAB',
+                            backgroundColor: AppColors.accentSecondary,
+                            foregroundColor: AppColors.textOnDark,
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(Icons.add, size: 28),
                           ),
-                          child: const Icon(Icons.add, size: 28),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            )
-          : null, // null для экрана календаря,
+              )
+              : null, // null для экрана календаря,
     );
   }
 
@@ -219,16 +207,18 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const NoteDetailScreen(),
+        pageBuilder:
+            (context, animation, secondaryAnimation) =>
+                const NoteDetailScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           var begin = const Offset(0.0, 1.0);
           var end = Offset.zero;
           var curve = Curves.easeOutQuint;
 
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
 
           return SlideTransition(
             position: animation.drive(tween),

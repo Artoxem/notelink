@@ -5,51 +5,108 @@ import 'providers/app_provider.dart';
 import 'providers/notes_provider.dart';
 import 'providers/themes_provider.dart';
 import 'screens/main_screen.dart';
-import 'services/database_service.dart';
 import 'services/notification_service.dart'; // Добавляем импорт сервиса уведомлений
 import 'utils/constants.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Добавляем для хранения флага первого запуска
 
 void main() async {
-  // Инициализируем Flutter
-  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    // Инициализируем Flutter
+    WidgetsFlutterBinding.ensureInitialized();
+    debugPrint('Flutter инициализирован');
 
-  // Инициализируем данные форматирования даты
-  await initializeDateFormatting('ru', null);
+    // Инициализируем данные форматирования даты
+    await initializeDateFormatting('ru', null);
+    debugPrint('Локализация инициализирована');
 
-  // Инициализация базы данных
-  final databaseService = DatabaseService();
-  await databaseService.database;
+    // Инициализация сервиса уведомлений
+    debugPrint('Инициализация сервиса уведомлений...');
+    final notificationService = NotificationService();
+    await notificationService.init();
+    debugPrint('Сервис уведомлений инициализирован');
 
-  // Инициализация сервиса уведомлений
-  final notificationService = NotificationService();
-  await notificationService.init();
+    // Создаем провайдеры заранее
+    debugPrint('Создание провайдеров...');
+    final appProvider = AppProvider();
+    final notesProvider = NotesProvider();
+    final themesProvider = ThemesProvider();
+    debugPrint('Провайдеры созданы');
 
-  // Создаем провайдеры заранее
-  final appProvider = AppProvider();
-  final notesProvider = NotesProvider();
-  final themesProvider = ThemesProvider();
+    // Инициализируем настройки
+    debugPrint('Инициализация настроек приложения...');
+    await appProvider.initSettings();
+    debugPrint('Настройки инициализированы');
 
-  // Инициализируем настройки
-  await appProvider.initSettings();
+    // Настраиваем синхронизацию между провайдерами
+    debugPrint('Настройка синхронизации провайдеров...');
+    themesProvider.initSync(notesProvider);
+    debugPrint('Синхронизация настроена');
 
-  // Настраиваем синхронизацию между провайдерами
-  themesProvider.initSync(notesProvider);
+    // Загружаем существующие данные
+    debugPrint('Загружаем существующие данные...');
+    await notesProvider.loadNotes(force: true);
+    debugPrint('Заметки загружены');
+    await themesProvider.loadThemes();
+    debugPrint('Темы загружены');
 
-  // Загружаем существующие данные
-  print('Загружаем существующие данные...');
-  await notesProvider.loadNotes(force: true);
-  await themesProvider.loadThemes();
+    debugPrint(
+      'Количество существующих заметок: ${notesProvider.notes.length}',
+    );
+    debugPrint('Количество существующих тем: ${themesProvider.themes.length}');
 
-  print('Количество существующих заметок: ${notesProvider.notes.length}');
-  print('Количество существующих тем: ${themesProvider.themes.length}');
+    // Запускаем приложение с готовыми провайдерами
+    debugPrint('Запуск приложения...');
+    runApp(
+      MyApp(
+        appProvider: appProvider,
+        notesProvider: notesProvider,
+        themesProvider: themesProvider,
+      ),
+    );
+  } catch (e, stackTrace) {
+    // Логируем ошибку в консоль для отладки
+    debugPrint('КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ: $e');
+    debugPrint('Стек вызовов: $stackTrace');
 
-  // Запускаем приложение с готовыми провайдерами
-  runApp(MyApp(
-    appProvider: appProvider,
-    notesProvider: notesProvider,
-    themesProvider: themesProvider,
-  ));
+    // Запускаем приложение с сообщением об ошибке
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'При запуске приложения произошла ошибка',
+                    style: TextStyle(fontSize: 18),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    e.toString(),
+                    style: const TextStyle(fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      main();
+                    },
+                    child: const Text('Попробовать снова'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -88,7 +145,9 @@ class MyApp extends StatelessWidget {
               Locale('en', 'US'), // English
             ],
             locale: const Locale(
-                'ru', 'RU'), // Установка русской локализации по умолчанию
+              'ru',
+              'RU',
+            ), // Установка русской локализации по умолчанию
             theme: ThemeData(
               primaryColor: AppColors.primary,
               scaffoldBackgroundColor: AppColors.primary,
@@ -98,8 +157,9 @@ class MyApp extends StatelessWidget {
                 color: AppColors.cardBackground, // White Asparagus
                 elevation: AppDimens.cardElevation,
                 shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.cardBorderRadius),
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.cardBorderRadius,
+                  ),
                 ),
                 shadowColor: Colors.black.withOpacity(0.3),
               ),
@@ -118,8 +178,9 @@ class MyApp extends StatelessWidget {
                   elevation: 3,
                   shadowColor: Colors.black.withOpacity(0.3),
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppDimens.buttonBorderRadius),
+                    borderRadius: BorderRadius.circular(
+                      AppDimens.buttonBorderRadius,
+                    ),
                   ),
                   padding: const EdgeInsets.symmetric(
                     vertical: AppDimens.smallPadding,
@@ -132,8 +193,9 @@ class MyApp extends StatelessWidget {
                 fillColor: AppColors.textBackground,
                 contentPadding: const EdgeInsets.all(AppDimens.mediumPadding),
                 border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.buttonBorderRadius),
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.buttonBorderRadius,
+                  ),
                   borderSide: BorderSide.none,
                 ),
                 hintStyle: AppTextStyles.bodyMediumLight.copyWith(
@@ -152,8 +214,9 @@ class MyApp extends StatelessWidget {
               bottomNavigationBarTheme: BottomNavigationBarThemeData(
                 backgroundColor: AppColors.primary.withOpacity(0.95),
                 selectedItemColor: AppColors.navSelectedItem,
-                unselectedItemColor:
-                    AppColors.navUnselectedItem.withOpacity(0.6),
+                unselectedItemColor: AppColors.navUnselectedItem.withOpacity(
+                  0.6,
+                ),
                 showSelectedLabels: true,
                 showUnselectedLabels: true,
                 type: BottomNavigationBarType.fixed,
@@ -209,8 +272,9 @@ class MyApp extends StatelessWidget {
               cardColor: AppColors.cardBackground,
               textButtonTheme: TextButtonThemeData(
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors
-                      .textOnLight, // Темный цвет для текстовых кнопок на карточках
+                  foregroundColor:
+                      AppColors
+                          .textOnLight, // Темный цвет для текстовых кнопок на карточках
                 ),
               ),
             ),
@@ -223,8 +287,9 @@ class MyApp extends StatelessWidget {
                 color: AppColors.cardBackground,
                 elevation: AppDimens.cardElevation,
                 shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.cardBorderRadius),
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.cardBorderRadius,
+                  ),
                 ),
                 shadowColor: Colors.black.withOpacity(0.3),
               ),
@@ -243,8 +308,9 @@ class MyApp extends StatelessWidget {
                   elevation: 3,
                   shadowColor: Colors.black.withOpacity(0.3),
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppDimens.buttonBorderRadius),
+                    borderRadius: BorderRadius.circular(
+                      AppDimens.buttonBorderRadius,
+                    ),
                   ),
                   padding: const EdgeInsets.symmetric(
                     vertical: AppDimens.smallPadding,
@@ -257,8 +323,9 @@ class MyApp extends StatelessWidget {
                 fillColor: AppColors.textBackground,
                 contentPadding: const EdgeInsets.all(AppDimens.mediumPadding),
                 border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.buttonBorderRadius),
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.buttonBorderRadius,
+                  ),
                   borderSide: BorderSide.none,
                 ),
                 hintStyle: AppTextStyles.bodyMediumLight.copyWith(
@@ -317,9 +384,10 @@ class MyApp extends StatelessWidget {
                 bodySmall: AppTextStyles.bodySmall,
               ),
             ),
-            themeMode: appProvider.themeMode == AppThemeMode.light
-                ? ThemeMode.light
-                : appProvider.themeMode == AppThemeMode.dark
+            themeMode:
+                appProvider.themeMode == AppThemeMode.light
+                    ? ThemeMode.light
+                    : appProvider.themeMode == AppThemeMode.dark
                     ? ThemeMode.dark
                     : ThemeMode.system,
             home: const MainScreen(key: PageStorageKey('main_screen')),

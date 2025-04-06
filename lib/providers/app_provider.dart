@@ -20,7 +20,6 @@ class AppProvider with ChangeNotifier {
   NoteViewMode _noteViewMode = NoteViewMode.card;
   NoteSortMode _noteSortMode = NoteSortMode.dateDesc;
   bool _showCalendarHeatmap = true;
-  bool _enableMarkdownFormatting = true;
   bool _showNoteLinkPreviews = true;
 
   // Настройки поиска
@@ -49,7 +48,6 @@ class AppProvider with ChangeNotifier {
   bool get showSearchHistory => _showSearchHistory;
   List<String> get searchHistory => _searchHistory;
   int get maxSearchHistoryItems => _maxSearchHistoryItems;
-  bool get enableMarkdownFormatting => _enableMarkdownFormatting;
   bool get enableFocusMode => _enableFocusMode;
   bool get showNoteLinkPreviews => _showNoteLinkPreviews;
   bool get showCalendarHeatmap => _showCalendarHeatmap;
@@ -98,8 +96,6 @@ class AppProvider with ChangeNotifier {
       final noteSortModeStr = prefs.getString('noteSortMode') ?? 'dateDesc';
       _noteSortMode = _getNoteSortModeFromString(noteSortModeStr);
       _showCalendarHeatmap = prefs.getBool('showCalendarHeatmap') ?? true;
-      _enableMarkdownFormatting =
-          prefs.getBool('enableMarkdownFormatting') ?? true;
       _showNoteLinkPreviews = prefs.getBool('showNoteLinkPreviews') ?? true;
 
       // Загрузка настроек поиска
@@ -221,17 +217,22 @@ class AppProvider with ChangeNotifier {
 
     _noteViewMode = mode;
     bool success = await _saveSetting(
-        'noteViewMode', mode == NoteViewMode.card ? 'card' : 'list');
+      'noteViewMode',
+      mode == NoteViewMode.card ? 'card' : 'list',
+    );
     notifyListeners();
     return success;
   }
 
   Future<bool> toggleNoteViewMode() async {
-    _noteViewMode = _noteViewMode == NoteViewMode.card
-        ? NoteViewMode.list
-        : NoteViewMode.card;
+    _noteViewMode =
+        _noteViewMode == NoteViewMode.card
+            ? NoteViewMode.list
+            : NoteViewMode.card;
     bool success = await _saveSetting(
-        'noteViewMode', _noteViewMode == NoteViewMode.card ? 'card' : 'list');
+      'noteViewMode',
+      _noteViewMode == NoteViewMode.card ? 'card' : 'list',
+    );
     notifyListeners();
     return success;
   }
@@ -240,8 +241,10 @@ class AppProvider with ChangeNotifier {
     if (_noteSortMode == mode) return true;
 
     _noteSortMode = mode;
-    bool success =
-        await _saveSetting('noteSortMode', _getNoteSortModeString(mode));
+    bool success = await _saveSetting(
+      'noteSortMode',
+      _getNoteSortModeString(mode),
+    );
     notifyListeners();
     return success;
   }
@@ -307,15 +310,6 @@ class AppProvider with ChangeNotifier {
     }
 
     bool success = await _saveSetting('maxSearchHistoryItems', max);
-    notifyListeners();
-    return success;
-  }
-
-  Future<bool> toggleMarkdownFormatting(bool enable) async {
-    if (_enableMarkdownFormatting == enable) return true;
-
-    _enableMarkdownFormatting = enable;
-    bool success = await _saveSetting('enableMarkdownFormatting', enable);
     notifyListeners();
     return success;
   }
@@ -435,7 +429,6 @@ class AppProvider with ChangeNotifier {
     _showSearchHistory = true;
     _searchHistory = [];
     _maxSearchHistoryItems = 10;
-    _enableMarkdownFormatting = true;
     _enableFocusMode = false;
     _showNoteLinkPreviews = true;
     _showCalendarHeatmap = true;
@@ -461,21 +454,27 @@ class AppProvider with ChangeNotifier {
       await prefs.setString('notificationSound', _notificationSound);
       await prefs.setBool('showOnLockScreen', _showOnLockScreen);
       await prefs.setString(
-          'activeNotificationSound', _activeNotificationSound);
+        'activeNotificationSound',
+        _activeNotificationSound,
+      );
       await prefs.setString(
-          'deadlineNotificationSound', _deadlineNotificationSound);
+        'deadlineNotificationSound',
+        _deadlineNotificationSound,
+      );
       await prefs.setInt('deadlineWarningDays', _deadlineWarningDays);
 
       // Сохранение настроек внешнего вида
       await prefs.setDouble('lineThickness', _lineThickness);
       await prefs.setBool('showThemeLines', _showThemeLines);
       await prefs.setString(
-          'noteViewMode', _noteViewMode == NoteViewMode.card ? 'card' : 'list');
+        'noteViewMode',
+        _noteViewMode == NoteViewMode.card ? 'card' : 'list',
+      );
       await prefs.setString(
-          'noteSortMode', _getNoteSortModeString(_noteSortMode));
+        'noteSortMode',
+        _getNoteSortModeString(_noteSortMode),
+      );
       await prefs.setBool('showCalendarHeatmap', _showCalendarHeatmap);
-      await prefs.setBool(
-          'enableMarkdownFormatting', _enableMarkdownFormatting);
       await prefs.setBool('showNoteLinkPreviews', _showNoteLinkPreviews);
 
       // Сохранение настроек поиска

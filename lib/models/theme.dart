@@ -110,7 +110,7 @@ class NoteTheme {
       'color': color,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
-      'noteIds': noteIds,
+      'noteIds': json.encode(noteIds),
       'logoType': logoType.index,
     };
   }
@@ -130,14 +130,34 @@ class NoteTheme {
       parsedLogoType = ThemeLogoType.icon01;
     }
 
+    // Безопасное декодирование списка строк
+    List<String> safeDecodeStringList(dynamic value) {
+      if (value == null) return [];
+
+      try {
+        if (value is List) return List<String>.from(value);
+        if (value is String) return List<String>.from(json.decode(value));
+        return [];
+      } catch (e) {
+        print('Ошибка при декодировании списка: $e');
+        return [];
+      }
+    }
+
     return NoteTheme(
-      id: map['id'],
-      name: map['name'],
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
       description: map['description'],
-      color: map['color'],
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt']),
-      noteIds: List<String>.from(map['noteIds']),
+      color: map['color'] ?? '#FF000000',
+      createdAt:
+          map['createdAt'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'])
+              : DateTime.now(),
+      updatedAt:
+          map['updatedAt'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(map['updatedAt'])
+              : DateTime.now(),
+      noteIds: safeDecodeStringList(map['noteIds']),
       logoType: parsedLogoType,
     );
   }

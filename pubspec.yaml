@@ -4,38 +4,42 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.7.2 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  provider: ^6.1.2 # Управление состоянием приложения
-  uuid: ^4.0.0+1 # Генерация уникальных идентификаторов
-  intl: ^0.19.0 # Локализация и форматирование дат
-  table_calendar: ^3.1.0 # Календарь
-  sqflite: ^2.3.0+1 # Локальная база данных SQLite
+  provider: ^6.1.4 # Управление состоянием приложения
+  uuid: ^4.3.1 # Генерация уникальных идентификаторов
+  cupertino_icons: ^1.0.6
+  intl: ^0.19.0 # Привязан к flutter_localizations
+  table_calendar: ^3.1.3 # Календарь
+  sqflite: ^2.3.2 # Локальная база данных SQLite
   path: ^1.9.0 # Работа с путями файлов
-  shared_preferences: ^2.2.2 # Хранение ключ-значение
-  flutter_markdown: ^0.7.1 # Отображение Markdown
-  url_launcher: ^6.3.0 # Запуск URL
+  shared_preferences: ^2.5.3 # Хранение ключ-значение
+  url_launcher: ^6.2.5 # Запуск URL
   tuple: ^2.0.2 # Кортежи для пар данных
-  record: ^5.1.0 # Аудиозапись
-  just_audio: ^0.9.39 # Аудиоплеер
-  permission_handler: ^11.4.0 # Обработка разрешений
-  path_provider: ^2.1.3 # Получение путей к файлам
-  file_picker: ^9.0.2
-  image_picker: ^0.8.7+5
-  mime: ^1.0.4
+  record: ^5.2.1 # Аудиозапись (версия 6.0.0 может быть несовместима)
+  just_audio: ^0.9.36 # Аудиоплеер
+  permission_handler: ^11.3.0 # Обработка разрешений
+  path_provider: ^2.1.2 # Получение путей к файлам
+  file_picker: ^10.0.0 # Используем последнюю версию
+  image_picker: ^1.0.7
+  mime: ^1.0.6
   open_file: ^3.3.2
-  flutter_local_notifications: ^16.3.2 # Локальные уведомления
-  timezone: ^0.9.2 # Работа с часовыми поясами
+  flutter_local_notifications: ^16.3.3 # Локальные уведомления
+  timezone: ^0.9.4 # Работа с часовыми поясами
+  
+  # WYSIWYG-редактор версии 11.2.0 с полной поддержкой панели инструментов
+  flutter_quill: ^11.2.0
+  flutter_quill_extensions: ^11.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^3.0.2
   effective_dart: ^1.3.2 # Анализ стиля кода
 
 flutter:

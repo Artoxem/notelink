@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'dart:convert';
 import '../models/note.dart';
 import '../models/theme.dart';
 import '../providers/notes_provider.dart';
@@ -15,7 +17,6 @@ import '../widgets/audio_wave_preview.dart';
 import '../widgets/media_badge.dart';
 import 'note_detail_screen.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/note_list.dart';
 
@@ -26,16 +27,18 @@ class NotesScreen extends StatefulWidget {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const NoteDetailScreen(),
+        pageBuilder:
+            (context, animation, secondaryAnimation) =>
+                const NoteDetailScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           var begin = const Offset(0.0, 1.0);
           var end = Offset.zero;
           var curve = Curves.easeOutQuint;
 
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
 
           return SlideTransition(
             position: animation.drive(tween),
@@ -71,14 +74,6 @@ class _NotesScreenState extends State<NotesScreen>
   // Время последнего обновления для инвалидации кэшей
   DateTime _lastCacheUpdate = DateTime.now();
 
-  // Регулярные выражения для обработки Markdown (вынесены на уровень класса)
-  final RegExp _headingsRegex = RegExp(r'#{1,6}\s+');
-  final RegExp _boldRegex = RegExp(r'\*\*|__');
-  final RegExp _italicRegex = RegExp(r'\*|_(?!\*)');
-  final RegExp _linksRegex = RegExp(r'\[([^\]]+)\]\([^)]+\)');
-  final RegExp _codeRegex = RegExp(r'`[^`]+`');
-  final RegExp _voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
-
   // Контролируем состояние загрузки
   bool _isRefreshing = false;
 
@@ -111,7 +106,9 @@ class _NotesScreenState extends State<NotesScreen>
     }
 
     // Подсчитываем голосовые заметки из содержимого
-    final voiceMatches = _voiceRegex.allMatches(note.content);
+    final voiceMatches = RegExp(
+      r'!\[voice\]\(voice:[^)]+\)',
+    ).allMatches(note.content);
     voiceCount = voiceMatches.length;
 
     // Сохраняем результат в кэш
@@ -167,84 +164,6 @@ class _NotesScreenState extends State<NotesScreen>
     _mediaCountCache.remove(noteId);
   }
 
-  Widget _buildNoteContentPreview(Note note) {
-    // Регулярное выражение для поиска маркеров голосовых заметок
-    final RegExp voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
-    final String content = note.content;
-
-    // Проверяем наличие голосовых заметок
-    final bool hasVoiceNote = voiceRegex.hasMatch(content);
-
-    // Получаем текст для превью (без маркеров голосовых заметок)
-    String previewText = _createPreviewFromMarkdown(content, 150);
-
-    if (hasVoiceNote) {
-      // Если есть голосовая заметка, показываем индикатор + текст
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Индикатор голосовой заметки
-          Container(
-            width: 24,
-            height: 24,
-            margin: const EdgeInsets.only(right: 8, top: 2),
-            decoration: BoxDecoration(
-              color: Colors.purple.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.mic,
-              size: 14,
-              color: Colors.purple,
-            ),
-          ),
-
-          // Текст превью
-          Expanded(
-            child: ShaderMask(
-              shaderCallback: (Rect bounds) {
-                return LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black, Colors.transparent],
-                  stops: const [0.7, 1.0],
-                ).createShader(bounds);
-              },
-              blendMode: BlendMode.dstIn,
-              child: Text(
-                previewText.trim(),
-                style: AppTextStyles.bodySmallLight.copyWith(
-                  fontSize: 14,
-                ),
-                maxLines: 2,
-              ),
-            ),
-          ),
-        ],
-      );
-    } else {
-      // Стандартное отображение без голосовой заметки
-      return ShaderMask(
-        shaderCallback: (Rect bounds) {
-          return LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.black, Colors.transparent],
-            stops: const [0.7, 1.0],
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.dstIn,
-        child: Text(
-          previewText,
-          style: AppTextStyles.bodySmallLight.copyWith(
-            fontSize: 14,
-          ),
-          maxLines: 3,
-        ),
-      );
-    }
-  }
-
   // Метод для получения цвета темы с кэшированием
   Color _getThemeColor(String themeId, {Color defaultColor = Colors.blue}) {
     // Проверяем кэш
@@ -254,7 +173,8 @@ class _NotesScreenState extends State<NotesScreen>
 
     // Получаем из провайдера
     final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
-    final theme = themesProvider.getThemeById(themeId) ??
+    final theme =
+        themesProvider.getThemeById(themeId) ??
         NoteTheme(
           id: '',
           name: 'Без темы',
@@ -285,8 +205,10 @@ class _NotesScreenState extends State<NotesScreen>
     try {
       // Загружаем заметки, темы и связи между ними
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      final themesProvider = Provider.of<ThemesProvider>(
+        context,
+        listen: false,
+      );
 
       try {
         // Используем принудительную перезагрузку данных
@@ -316,10 +238,7 @@ class _NotesScreenState extends State<NotesScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Ошибка загрузки данных'),
-            action: SnackBarAction(
-              label: 'Повторить',
-              onPressed: _loadData,
-            ),
+            action: SnackBarAction(label: 'Повторить', onPressed: _loadData),
             duration: const Duration(seconds: 5),
           ),
         );
@@ -380,10 +299,9 @@ class _NotesScreenState extends State<NotesScreen>
   Widget build(BuildContext context) {
     // Выбираем только те свойства, которые влияют на отображение
     return Selector2<AppProvider, NotesProvider, Tuple2<NoteViewMode, bool>>(
-      selector: (_, appProvider, notesProvider) => Tuple2(
-        appProvider.noteViewMode,
-        notesProvider.isLoading,
-      ),
+      selector:
+          (_, appProvider, notesProvider) =>
+              Tuple2(appProvider.noteViewMode, notesProvider.isLoading),
       builder: (context, data, _) {
         final noteViewMode = data.item1;
         final isLoading = data.item2;
@@ -408,58 +326,65 @@ class _NotesScreenState extends State<NotesScreen>
         }
 
         // Отображаем список заметок в выбранном режиме
-        return _buildNotesList(displayNotes, noteViewMode,
-            Provider.of<NotesProvider>(context, listen: false));
+        return _buildNotesList(
+          displayNotes,
+          noteViewMode,
+          Provider.of<NotesProvider>(context, listen: false),
+        );
       },
     );
   }
 
   // Оптимизированное построение списка заметок
   Widget _buildNotesList(
-      List<Note> notes, NoteViewMode viewMode, NotesProvider notesProvider) {
+    List<Note> notes,
+    NoteViewMode viewMode,
+    NotesProvider notesProvider,
+  ) {
     // Используем кастомный ключ для сохранения состояния скролла
     final key = PageStorageKey<String>('notes_list_$viewMode');
 
     // Используем тернарный оператор вместо if-else для гарантированной инициализации
-    final Widget listWidget = (viewMode == NoteViewMode.card)
-        ? GridView.builder(
-            key: key,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 220,
-              crossAxisSpacing: 6,
-              mainAxisSpacing: 6,
-              childAspectRatio: 0.98,
-            ),
-            padding: const EdgeInsets.all(AppDimens.mediumPadding),
-            itemCount: notes.length,
-            cacheExtent: 1000,
-            addAutomaticKeepAlives: true,
-            itemBuilder: (context, index) {
-              final note = notes[index];
-              return RepaintBoundary(
-                key: ValueKey('note_card_${note.id}'),
-                child: _buildNoteCard(note, notesProvider),
-              );
-            },
-          )
-        : NoteListWidget(
-            key: key,
-            notes: notes,
-            emptyMessage: 'Нет заметок',
-            showThemeBadges: true,
-            useCachedAnimation: true,
-            swipeDirection: SwipeDirection.both,
-            showOptionsOnLongPress: true,
-            onNoteDeleted: (note) async {
-              await notesProvider.deleteNote(note.id);
-            },
-            onNoteFavoriteToggled: (note) async {
-              // Переключение избранного будет обработано локально
-            },
-            onNoteTap: (note) {
-              _viewNoteDetails(note);
-            },
-          );
+    final Widget listWidget =
+        (viewMode == NoteViewMode.card)
+            ? GridView.builder(
+              key: key,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 220,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+                childAspectRatio: 0.98,
+              ),
+              padding: const EdgeInsets.all(AppDimens.mediumPadding),
+              itemCount: notes.length,
+              cacheExtent: 1000,
+              addAutomaticKeepAlives: true,
+              itemBuilder: (context, index) {
+                final note = notes[index];
+                return RepaintBoundary(
+                  key: ValueKey('note_card_${note.id}'),
+                  child: _buildNoteCard(note, notesProvider),
+                );
+              },
+            )
+            : NoteListWidget(
+              key: key,
+              notes: notes,
+              emptyMessage: 'Нет заметок',
+              showThemeBadges: true,
+              useCachedAnimation: true,
+              swipeDirection: SwipeDirection.both,
+              showOptionsOnLongPress: true,
+              onNoteDeleted: (note) async {
+                await notesProvider.deleteNote(note.id);
+              },
+              onNoteFavoriteToggled: (note) async {
+                // Переключение избранного будет обработано локально
+              },
+              onNoteTap: (note) {
+                _viewNoteDetails(note);
+              },
+            );
 
     // Оборачиваем в RefreshIndicator
     return RefreshIndicator(
@@ -470,7 +395,7 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-// Оптимизированное получение цвета индикатора заметки
+  // Оптимизированное получение цвета индикатора заметки
   Color _getNoteStatusColor(Note note) {
     // Проверяем кэш
     if (_noteColorCache.containsKey(note.id)) {
@@ -507,18 +432,15 @@ class _NotesScreenState extends State<NotesScreen>
     // Получаем статистику медиа
     final mediaCounts = _getMediaCounts(note);
 
-    // Очищаем контент только от меток голосовых заметок, сохраняя другое форматирование
-    String cleanContent = note.content.replaceAll(_voiceRegex, '');
+    // Используем геттер из модели Note
+    String previewText = note.plainTextContent;
 
     return AnimatedBuilder(
       animation: animation,
       builder: (context, child) {
         return Transform.translate(
           offset: Offset(0, 50 * (1 - animation.value)),
-          child: Opacity(
-            opacity: animation.value,
-            child: child,
-          ),
+          child: Opacity(opacity: animation.value, child: child),
         );
       },
       child: _buildDismissibleNote(
@@ -546,8 +468,9 @@ class _NotesScreenState extends State<NotesScreen>
                         color: indicatorColor,
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(AppDimens.cardBorderRadius),
-                          bottomLeft:
-                              Radius.circular(AppDimens.cardBorderRadius),
+                          bottomLeft: Radius.circular(
+                            AppDimens.cardBorderRadius,
+                          ),
                         ),
                       ),
                     ),
@@ -570,12 +493,11 @@ class _NotesScreenState extends State<NotesScreen>
                                   children: [
                                     // Дата создания
                                     Text(
-                                      DateFormat('d MMM yyyy')
-                                          .format(note.createdAt),
-                                      style:
-                                          AppTextStyles.bodySmallLight.copyWith(
-                                        fontSize: 13,
-                                      ),
+                                      DateFormat(
+                                        'd MMM yyyy',
+                                      ).format(note.createdAt),
+                                      style: AppTextStyles.bodySmallLight
+                                          .copyWith(fontSize: 13),
                                     ),
 
                                     // Минимальный вертикальный отступ
@@ -593,9 +515,14 @@ class _NotesScreenState extends State<NotesScreen>
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color.fromRGBO(
-                                              255, 255, 7, 0.35),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
+                                            255,
+                                            255,
+                                            7,
+                                            0.35,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -642,7 +569,7 @@ class _NotesScreenState extends State<NotesScreen>
 
                             const SizedBox(height: 8),
 
-                            // Содержимое заметки с поддержкой markdown
+                            // Содержимое заметки
                             Expanded(
                               child: ShaderMask(
                                 shaderCallback: (Rect bounds) {
@@ -655,43 +582,12 @@ class _NotesScreenState extends State<NotesScreen>
                                 },
                                 blendMode: BlendMode.dstIn,
                                 child: ClipRect(
-                                  child: MarkdownBody(
-                                    data: cleanContent.trim(),
-                                    selectable: false,
-                                    shrinkWrap: true,
-                                    softLineBreak: true,
-                                    styleSheet: MarkdownStyleSheet(
-                                      p: AppTextStyles.bodyMediumLight
-                                          .copyWith(fontSize: 13),
-                                      h1: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textOnLight,
-                                      ),
-                                      h2: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textOnLight,
-                                      ),
-                                      h3: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textOnLight,
-                                      ),
-                                      em: TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                        color: AppColors.textOnLight,
-                                      ),
-                                      strong: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textOnLight,
-                                      ),
-                                      listBullet: AppTextStyles.bodyMediumLight
-                                          .copyWith(
-                                        fontSize: 13,
-                                        color: AppColors.textOnLight,
-                                      ),
-                                    ),
+                                  child: Text(
+                                    previewText,
+                                    style: AppTextStyles.bodyMediumLight
+                                        .copyWith(fontSize: 13),
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ),
@@ -738,16 +634,13 @@ class _NotesScreenState extends State<NotesScreen>
                   color: Colors.amber,
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(AppDimens.cardBorderRadius),
-                    bottomRight:
-                        Radius.circular(AppDimens.cardBorderRadius - 1),
+                    bottomRight: Radius.circular(
+                      AppDimens.cardBorderRadius - 1,
+                    ),
                   ),
                   child: const Padding(
                     padding: EdgeInsets.all(3.0),
-                    child: Icon(
-                      Icons.star,
-                      color: Colors.white,
-                      size: 16,
-                    ),
+                    child: Icon(Icons.star, color: Colors.white, size: 16),
                   ),
                 ),
               ),
@@ -764,8 +657,9 @@ class _NotesScreenState extends State<NotesScreen>
     required Widget child,
     bool isListItem = false,
   }) {
-    final dismissKey =
-        ValueKey('dismissible_${isListItem ? 'list_' : ''}${note.id}');
+    final dismissKey = ValueKey(
+      'dismissible_${isListItem ? 'list_' : ''}${note.id}',
+    );
 
     return Dismissible(
       key: dismissKey,
@@ -783,24 +677,19 @@ class _NotesScreenState extends State<NotesScreen>
             gradient: LinearGradient(
               colors: [
                 AppColors.accentSecondary.withOpacity(0.8),
-                AppColors.accentSecondary.withOpacity(0.6)
+                AppColors.accentSecondary.withOpacity(0.6),
               ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
-            borderRadius:
-                const BorderRadius.horizontal(left: Radius.circular(22)),
+            borderRadius: const BorderRadius.horizontal(
+              left: Radius.circular(22),
+            ),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.star,
-                color: Colors.orange,
-                size: 22,
-              ),
-            ],
+            children: [Icon(Icons.star, color: Colors.orange, size: 22)],
           ),
         ),
       ),
@@ -822,19 +711,16 @@ class _NotesScreenState extends State<NotesScreen>
               begin: Alignment.centerRight,
               end: Alignment.centerLeft,
             ),
-            borderRadius:
-                const BorderRadius.horizontal(right: Radius.circular(22)),
+            borderRadius: const BorderRadius.horizontal(
+              right: Radius.circular(22),
+            ),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Spacer(),
-              Icon(
-                Icons.delete,
-                color: Colors.red,
-                size: 22,
-              ),
+              Icon(Icons.delete, color: Colors.red, size: 22),
             ],
           ),
         ),
@@ -849,8 +735,10 @@ class _NotesScreenState extends State<NotesScreen>
             // Код для удаления без изменений...
           } else if (direction == DismissDirection.startToEnd) {
             // Получаем провайдер из контекста
-            final notesProvider =
-                Provider.of<NotesProvider>(context, listen: false);
+            final notesProvider = Provider.of<NotesProvider>(
+              context,
+              listen: false,
+            );
 
             // Свайп вправо - добавление/удаление из избранного
             await notesProvider.toggleFavorite(note.id);
@@ -871,9 +759,11 @@ class _NotesScreenState extends State<NotesScreen>
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(updatedNote.isFavorite
-                      ? 'Заметка добавлена в избранное'
-                      : 'Заметка удалена из избранного'),
+                  content: Text(
+                    updatedNote.isFavorite
+                        ? 'Заметка добавлена в избранное'
+                        : 'Заметка удалена из избранного',
+                  ),
                   duration: const Duration(seconds: 2),
                   backgroundColor: AppColors.accentSecondary,
                 ),
@@ -923,8 +813,10 @@ class _NotesScreenState extends State<NotesScreen>
                       // В будущем здесь можно реализовать отмену удаления
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content: Text(
-                                'Функция восстановления будет доступна в будущем')),
+                          content: Text(
+                            'Функция восстановления будет доступна в будущем',
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -949,28 +841,6 @@ class _NotesScreenState extends State<NotesScreen>
       },
       child: child,
     );
-  }
-
-  // Вспомогательные методы для извлечения заголовка и содержимого
-  String _getFirstLine(String content) {
-    // Сначала удаляем голосовые метки
-    String cleanContent = content.replaceAll(_voiceRegex, '');
-
-    final firstLineEnd = cleanContent.indexOf('\n');
-    if (firstLineEnd == -1) return cleanContent;
-    return cleanContent
-        .substring(0, firstLineEnd)
-        .trim()
-        .replaceAll(RegExp(r'^#+\s+'), '');
-  }
-
-  String _getContentWithoutFirstLine(String content) {
-    // Сначала удаляем голосовые метки
-    String cleanContent = content.replaceAll(_voiceRegex, '');
-
-    final firstLineEnd = cleanContent.indexOf('\n');
-    if (firstLineEnd == -1) return '';
-    return cleanContent.substring(firstLineEnd + 1).trim();
   }
 
   // Метод построения меню действий с заметкой с анимациями
@@ -1016,9 +886,10 @@ class _NotesScreenState extends State<NotesScreen>
               _buildAnimatedActionTile(
                 icon: note.isFavorite ? Icons.star_border : Icons.star,
                 color: Colors.amber,
-                text: note.isFavorite
-                    ? 'Удалить из избранного'
-                    : 'Добавить в избранное',
+                text:
+                    note.isFavorite
+                        ? 'Удалить из избранного'
+                        : 'Добавить в избранное',
                 onTap: () async {
                   HapticFeedback.lightImpact();
                   Navigator.pop(context);
@@ -1042,17 +913,19 @@ class _NotesScreenState extends State<NotesScreen>
                       setState(() {});
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(updatedNote.isFavorite
-                              ? 'Заметка добавлена в избранное'
-                              : 'Заметка удалена из избранного'),
+                          content: Text(
+                            updatedNote.isFavorite
+                                ? 'Заметка добавлена в избранное'
+                                : 'Заметка удалена из избранного',
+                          ),
                         ),
                       );
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Ошибка: $e')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
                     }
                   }
                 },
@@ -1073,14 +946,15 @@ class _NotesScreenState extends State<NotesScreen>
                         setState(() {});
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text('Задача отмечена как выполненная')),
+                            content: Text('Задача отмечена как выполненная'),
+                          ),
                         );
                       }
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Ошибка: $e')),
-                        );
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
                       }
                     }
                   },
@@ -1112,7 +986,9 @@ class _NotesScreenState extends State<NotesScreen>
                     if (selectedDate != null && mounted) {
                       try {
                         await notesProvider.extendDeadline(
-                            note.id, selectedDate);
+                          note.id,
+                          selectedDate,
+                        );
 
                         // Инвалидируем кэш для этой заметки
                         _invalidateNoteCache(note.id);
@@ -1122,14 +998,15 @@ class _NotesScreenState extends State<NotesScreen>
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                                'Дедлайн продлен до ${DateFormat('d MMMM yyyy').format(selectedDate)}'),
+                              'Дедлайн продлен до ${DateFormat('d MMMM yyyy').format(selectedDate)}',
+                            ),
                           ),
                         );
                       } catch (e) {
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Ошибка: $e')),
-                          );
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
                         }
                       }
                     }
@@ -1139,9 +1016,10 @@ class _NotesScreenState extends State<NotesScreen>
               _buildAnimatedActionTile(
                 icon: note.isFavorite ? Icons.star_border : Icons.star,
                 color: Colors.amber,
-                text: note.isFavorite
-                    ? 'Удалить из избранного'
-                    : 'Добавить в избранное',
+                text:
+                    note.isFavorite
+                        ? 'Удалить из избранного'
+                        : 'Добавить в избранное',
                 onTap: () async {
                   HapticFeedback.lightImpact();
                   Navigator.pop(context);
@@ -1163,9 +1041,9 @@ class _NotesScreenState extends State<NotesScreen>
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Ошибка: $e')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
                     }
                   }
                 },
@@ -1205,9 +1083,7 @@ class _NotesScreenState extends State<NotesScreen>
           leading: Icon(icon, color: color),
           title: Text(
             text,
-            style: TextStyle(
-              color: textColor ?? AppColors.textOnLight,
-            ),
+            style: TextStyle(color: textColor ?? AppColors.textOnLight),
           ),
         ),
       ),
@@ -1264,62 +1140,9 @@ class _NotesScreenState extends State<NotesScreen>
   String _createComparisonText(String content) {
     return content
         .toLowerCase()
-        .replaceAll(_voiceRegex, '') // Удаляем голосовые метки
         .replaceAll(RegExp(r'[#*_`\[\]\(\)]+'), '') // Удаляем Markdown символы
         .replaceAll(RegExp(r'\s+'), ' ') // Нормализуем пробелы
         .trim();
-  }
-
-  // Улучшенное создание превью из Markdown-текста
-  String _createPreviewFromMarkdown(String markdown, int maxLength) {
-    if (markdown.isEmpty) {
-      return '';
-    }
-
-    // Предварительная проверка наличия разметки
-    bool hasMarkdown = _headingsRegex.hasMatch(markdown) ||
-        _boldRegex.hasMatch(markdown) ||
-        _italicRegex.hasMatch(markdown) ||
-        _linksRegex.hasMatch(markdown) ||
-        _codeRegex.hasMatch(markdown);
-
-    if (!hasMarkdown) {
-      // Если разметки нет, удаляем только ссылки на голосовые заметки
-      String cleanText =
-          markdown.replaceAll(_voiceRegex, '[голосовая заметка] ');
-      return cleanText.length > maxLength
-          ? '${cleanText.substring(0, maxLength)}...'
-          : cleanText;
-    }
-
-    // Последовательно удаляем разметку
-    String text = markdown;
-
-    // Удаляем голосовые заметки и заменяем их маркером
-    text = text.replaceAll(_voiceRegex, '[голосовая заметка] ');
-
-    // Заменяем ссылки их текстовым представлением
-    text = text.replaceAllMapped(_linksRegex, (match) => match.group(1) ?? '');
-
-    // Удаляем заголовки
-    text = text.replaceAll(_headingsRegex, '');
-
-    // Удаляем разметку жирного и курсивного текста
-    text = text.replaceAll(_boldRegex, '');
-    text = text.replaceAll(_italicRegex, '');
-
-    // Удаляем разметку кода
-    text = text.replaceAllMapped(_codeRegex, (match) {
-      final code = match.group(0) ?? '';
-      return code.length > 2 ? code.substring(1, code.length - 1) : '';
-    });
-
-    // Обрезаем по максимальной длине
-    if (text.length > maxLength) {
-      text = '${text.substring(0, maxLength)}...';
-    }
-
-    return text;
   }
 
   // Улучшенное состояние "нет заметок"
@@ -1328,8 +1151,11 @@ class _NotesScreenState extends State<NotesScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.note_add,
-              size: 80, color: AppColors.secondary.withOpacity(0.7)),
+          Icon(
+            Icons.note_add,
+            size: 80,
+            color: AppColors.secondary.withOpacity(0.7),
+          ),
           const SizedBox(height: 16),
           const Text(
             'Нет заметок',
@@ -1368,16 +1194,18 @@ class _NotesScreenState extends State<NotesScreen>
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            NoteDetailScreen(note: note),
+        pageBuilder:
+            (context, animation, secondaryAnimation) =>
+                NoteDetailScreen(note: note),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           var begin = const Offset(1.0, 0.0);
           var end = Offset.zero;
           var curve = Curves.easeOutQuint;
 
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
 
           return SlideTransition(
             position: animation.drive(tween),
@@ -1404,60 +1232,68 @@ class _NotesScreenState extends State<NotesScreen>
     HapticFeedback.heavyImpact();
 
     // Проверка, содержит ли заметка важный контент
-    final isImportant = note.hasDeadline ||
+    final isImportant =
+        note.hasDeadline ||
         note.content.length > 200 ||
         note.mediaUrls.isNotEmpty;
 
-    final shouldDelete = await showDialog<bool>(
+    final shouldDelete =
+        await showDialog<bool>(
           context: context,
           barrierDismissible:
               !isImportant, // Можно закрыть касанием фона только для неважных заметок
-          builder: (context) => AlertDialog(
-            title: const Text('Удалить заметку'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                    'Вы уверены, что хотите удалить эту заметку? Это действие нельзя будет отменить.'),
+          builder:
+              (context) => AlertDialog(
+                title: const Text('Удалить заметку'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Вы уверены, что хотите удалить эту заметку? Это действие нельзя будет отменить.',
+                    ),
 
-                // Предпросмотр только для важных заметок
-                if (isImportant) ...[
-                  const SizedBox(height: 16),
-                  const Text('Содержимое заметки:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
+                    // Предпросмотр только для важных заметок
+                    if (isImportant) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Содержимое заметки:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          note.content.length > 100
+                              ? '${note.content.substring(0, 100)}...'
+                              : note.content,
+                          style: const TextStyle(fontSize: 13),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Отмена'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
                     ),
-                    child: Text(
-                      _createPreviewFromMarkdown(note.content, 100),
-                      style: const TextStyle(fontSize: 13),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Удалить'),
                   ),
                 ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Отмена'),
               ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Удалить'),
-              ),
-            ],
-          ),
         ) ??
         false;
 

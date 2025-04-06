@@ -1,39 +1,29 @@
 // lib/models/note.dart
 import 'dart:convert';
+import 'package:flutter_quill/flutter_quill.dart'
+    as quill; // Возвращаем импорт с префиксом
+import 'package:flutter_quill/quill_delta.dart'; // Оставляем для Delta
+import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 
 // Перечисление для типа напоминания
 enum ReminderType {
   exactTime, // Точное время
-  relativeTime, // Относительное время (до дедлайна)
-  recurring // Повторяющееся
+  relativeTime, // Относительно дедлайна
+  recurring, // Повторяющееся напоминание
 }
 
-// Перечисление для типа повторения
-enum RepeatType {
-  daily, // Ежедневно
-  weekdays, // По будням
-  weekly, // Еженедельно
-  monthly, // Ежемесячно
-  custom // Пользовательское (каждые N дней)
-}
-
-// Класс для относительного напоминания
+// Класс для хранения относительного напоминания
+@immutable
 class RelativeReminder {
-  final int minutes; // количество минут до дедлайна
-  final String description; // описание, например "За 1 час"
+  final int minutes; // За сколько минут до дедлайна
+  final String description; // Описание (например, "За 1 час до")
 
-  RelativeReminder({
-    required this.minutes,
-    required this.description,
-  });
+  const RelativeReminder({required this.minutes, required this.description});
 
-  Map<String, dynamic> toMap() {
-    return {
-      'minutes': minutes,
-      'description': description,
-    };
-  }
-
+  // Методы fromMap и toMap
   factory RelativeReminder.fromMap(Map<String, dynamic> map) {
     return RelativeReminder(
       minutes: map['minutes'] as int,
@@ -41,94 +31,357 @@ class RelativeReminder {
     );
   }
 
-  String toJson() => json.encode(toMap());
-
-  factory RelativeReminder.fromJson(String source) =>
-      RelativeReminder.fromMap(json.decode(source));
+  Map<String, dynamic> toMap() {
+    return {'minutes': minutes, 'description': description};
+  }
 }
 
-// Класс для повторяющегося напоминания
-class RecurringReminder {
-  final RepeatType repeatType; // Тип повторения
-  final int interval; // Интервал (для custom)
-  final List<bool> weekdays; // Дни недели (для weekly)
-  final DateTime? endDate; // Дата окончания повторений
+// Перечисление для периода повторения напоминания
+enum RecurringPeriod {
+  daily, // Ежедневно
+  weekly, // Еженедельно
+  monthly, // Ежемесячно
+  custom, // Пользовательский период (в днях)
+}
 
-  RecurringReminder({
-    required this.repeatType,
-    this.interval = 1,
-    this.weekdays = const [false, false, false, false, false, false, false],
+// Класс для хранения повторяющегося напоминания
+@immutable
+class RecurringReminder {
+  final RecurringPeriod period;
+  final int
+  customDays; // Используется только при period == RecurringPeriod.custom
+  final TimeOfDay timeOfDay;
+  final DateTime startDate;
+  final DateTime? endDate; // Опционально, до какой даты повторять
+
+  const RecurringReminder({
+    required this.period,
+    this.customDays = 1,
+    required this.timeOfDay,
+    required this.startDate,
     this.endDate,
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'repeatType': repeatType.index,
-      'interval': interval,
-      'weekdays': weekdays,
-      'endDate': endDate?.millisecondsSinceEpoch,
-    };
-  }
-
+  // Методы fromMap и toMap
   factory RecurringReminder.fromMap(Map<String, dynamic> map) {
     return RecurringReminder(
-      repeatType: RepeatType.values[map['repeatType'] as int],
-      interval: map['interval'] as int,
-      weekdays: List<bool>.from(map['weekdays']),
-      endDate: map['endDate'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['endDate'] as int)
-          : null,
+      period: RecurringPeriod.values[map['period'] as int],
+      customDays: map['customDays'] as int? ?? 1,
+      timeOfDay: TimeOfDay(
+        hour: map['hour'] as int,
+        minute: map['minute'] as int,
+      ),
+      startDate: DateTime.parse(map['startDate'] as String),
+      endDate:
+          map['endDate'] != null
+              ? DateTime.parse(map['endDate'] as String)
+              : null,
     );
   }
 
-  String toJson() => json.encode(toMap());
-
-  factory RecurringReminder.fromJson(String source) =>
-      RecurringReminder.fromMap(json.decode(source));
+  Map<String, dynamic> toMap() {
+    return {
+      'period': period.index,
+      'customDays': customDays,
+      'hour': timeOfDay.hour,
+      'minute': timeOfDay.minute,
+      'startDate': startDate.toIso8601String(),
+      'endDate': endDate?.toIso8601String(),
+    };
+  }
 }
 
+// Класс для хранения истории продления дедлайна
+@immutable
+class DeadlineExtension {
+  final DateTime originalDate;
+  final DateTime newDate;
+  final DateTime extendedAt;
+
+  const DeadlineExtension({
+    required this.originalDate,
+    required this.newDate,
+    required this.extendedAt,
+  });
+
+  factory DeadlineExtension.fromMap(Map<String, dynamic> map) {
+    return DeadlineExtension(
+      originalDate: DateTime.parse(map['originalDate'] as String),
+      newDate: DateTime.parse(map['newDate'] as String),
+      extendedAt: DateTime.parse(map['extendedAt'] as String),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'originalDate': originalDate.toIso8601String(),
+      'newDate': newDate.toIso8601String(),
+      'extendedAt': extendedAt.toIso8601String(),
+    };
+  }
+}
+
+@immutable
 class Note {
   final String id;
-  String content;
-  List<String> themeIds;
-  DateTime createdAt;
-  DateTime updatedAt;
-  bool hasDeadline;
-  DateTime? deadlineDate;
-  bool hasDateLink;
-  DateTime? linkedDate;
-  bool isCompleted;
-  List<String> mediaUrls;
-  String? emoji;
+  final String content; // Содержимое в формате JSON Delta
+  final List<String> themeIds;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final bool hasDeadline;
+  final DateTime? deadlineDate;
+  final bool hasDateLink;
+  final DateTime? linkedDate;
+  final bool isCompleted;
+  final bool isFavorite;
+  final List<String> mediaUrls;
+  final String? emoji;
+  final List<DateTime>? reminderDates;
+  final String? reminderSound;
+  final ReminderType reminderType;
+  final RelativeReminder? relativeReminder;
+  final RecurringReminder? recurringReminder;
+  final List<DeadlineExtension>? deadlineExtensions;
+  final List<String> voiceNotes; // Список ID голосовых заметок
 
-  // Поля для напоминаний
-  List<DateTime>? reminderDates; // Сохраняем для обратной совместимости
-  String? reminderSound;
+  // Геттер для проверки наличия напоминаний
+  bool get hasReminders =>
+      (reminderDates != null && reminderDates!.isNotEmpty) ||
+      relativeReminder != null ||
+      recurringReminder != null;
 
-  // Тип напоминания
-  ReminderType reminderType = ReminderType.exactTime;
+  // Геттер для определения быстрой заметки (без тем и связанных дат)
+  bool get isQuickNote => themeIds.isEmpty && !hasDateLink && !hasDeadline;
 
-  // Данные для разных типов напоминаний
-  RelativeReminder? relativeReminder; // Для относительного типа
-  RecurringReminder? recurringReminder; // Для повторяющегося типа
+  // Геттеры для проверки типов медиа
+  bool get hasImages => mediaUrls.any(
+    (url) =>
+        url.toLowerCase().endsWith('.jpg') ||
+        url.toLowerCase().endsWith('.jpeg') ||
+        url.toLowerCase().endsWith('.png'),
+  );
 
-  List<DeadlineExtension>? deadlineExtensions;
-  bool isFavorite;
-  List<String> voiceNotes;
+  bool get hasAudio => mediaUrls.any(
+    (url) =>
+        url.toLowerCase().endsWith('.mp3') ||
+        url.toLowerCase().endsWith('.wav') ||
+        url.toLowerCase().endsWith('.m4a'),
+  );
 
-  Note({
+  bool get hasFiles => mediaUrls.any(
+    (url) =>
+        !url.toLowerCase().endsWith('.jpg') &&
+        !url.toLowerCase().endsWith('.jpeg') &&
+        !url.toLowerCase().endsWith('.png') &&
+        !url.toLowerCase().endsWith('.mp3') &&
+        !url.toLowerCase().endsWith('.wav') &&
+        !url.toLowerCase().endsWith('.m4a'),
+  );
+
+  // Проверка наличия голосовых заметок
+  bool get hasVoiceNotes => voiceNotes.isNotEmpty;
+
+  // Общий флаг наличия медиа
+  bool get hasMedia => mediaUrls.isNotEmpty || hasVoiceNotes;
+
+  // Заменяем геттер на исправленную версию
+  String get plainTextContent {
+    if (content.isEmpty) {
+      return '';
+    }
+    try {
+      final decoded = json.decode(content);
+      Delta? delta;
+
+      if (decoded is Map && decoded.containsKey('ops')) {
+        final opsList = decoded['ops'];
+        if (opsList is List) {
+          delta = Delta.fromJson(opsList);
+        } else {
+          print('Ошибка в plainTextContent: поле "ops" не является списком.');
+          return '';
+        }
+      } else if (decoded is List) {
+        delta = Delta.fromJson(decoded);
+      }
+
+      if (delta != null) {
+        // Используем quill.Document
+        final doc = quill.Document.fromDelta(delta);
+        final plainText = doc.toPlainText().trim();
+        return (plainText.isEmpty || plainText == '\n') ? '' : plainText;
+      }
+
+      // Если не удалось создать дельту, проверяем текст напрямую
+      if (decoded is String) {
+        return decoded.trim();
+      }
+
+      print('Ошибка в plainTextContent: не удалось создать Delta.');
+      return '';
+    } catch (e) {
+      print('Ошибка при получении текста из Delta в Note: $e');
+      // Проверяем, является ли content простой пустой Delta
+      try {
+        const emptyDeltaJson = '{"ops":[{"insert":"\\n"}]}';
+        final emptyDeltaJsonWithoutNewline = '{"ops":[{"insert":""}]}';
+        if (content == emptyDeltaJson ||
+            content == emptyDeltaJsonWithoutNewline) {
+          return '';
+        }
+
+        // Если content не похож на JSON, возвращаем его как есть
+        if (!content.contains('{') && !content.contains('"ops"')) {
+          return content.trim();
+        }
+
+        return '';
+      } catch (innerError) {
+        print('Вложенная ошибка при обработке контента: $innerError');
+        return '';
+      }
+    }
+  }
+
+  // Метод для получения следующих дат повторяющегося напоминания
+  List<DateTime> getNextRecurringDates(int count) {
+    if (recurringReminder == null) return [];
+
+    final result = <DateTime>[];
+    final reminder = recurringReminder!;
+    DateTime currentDate = reminder.startDate;
+
+    // Проверяем, не превысила ли startDate текущую дату
+    if (currentDate.isBefore(DateTime.now())) {
+      // Рассчитываем следующую дату после текущей
+      final now = DateTime.now();
+
+      switch (reminder.period) {
+        case RecurringPeriod.daily:
+          // Рассчитываем количество дней, прошедших с начала
+          final daysDiff = now.difference(currentDate).inDays;
+          currentDate = currentDate.add(Duration(days: daysDiff + 1));
+          break;
+        case RecurringPeriod.weekly:
+          // Рассчитываем количество недель, прошедших с начала
+          final weeksDiff = now.difference(currentDate).inDays ~/ 7;
+          currentDate = currentDate.add(Duration(days: (weeksDiff + 1) * 7));
+          break;
+        case RecurringPeriod.monthly:
+          // Прибавляем месяцы к исходной дате, пока не получим будущую дату
+          var months = 0;
+          while (currentDate.isBefore(now)) {
+            months++;
+            currentDate = DateTime(
+              currentDate.year + (currentDate.month + months) ~/ 12,
+              (currentDate.month + months) % 12 == 0
+                  ? 12
+                  : (currentDate.month + months) % 12,
+              currentDate.day,
+            );
+          }
+          break;
+        case RecurringPeriod.custom:
+          // Рассчитываем количество кастомных периодов
+          final customPeriodsDiff =
+              now.difference(currentDate).inDays ~/ reminder.customDays;
+          currentDate = currentDate.add(
+            Duration(days: (customPeriodsDiff + 1) * reminder.customDays),
+          );
+          break;
+      }
+    }
+
+    // Установить правильное время дня
+    currentDate = DateTime(
+      currentDate.year,
+      currentDate.month,
+      currentDate.day,
+      reminder.timeOfDay.hour,
+      reminder.timeOfDay.minute,
+    );
+
+    // Генерируем следующие даты
+    for (var i = 0; i < count; i++) {
+      if (reminder.endDate != null && currentDate.isAfter(reminder.endDate!)) {
+        break; // Прекращаем, если достигли конечной даты
+      }
+
+      result.add(currentDate);
+
+      // Вычисляем следующую дату
+      switch (reminder.period) {
+        case RecurringPeriod.daily:
+          currentDate = currentDate.add(const Duration(days: 1));
+          break;
+        case RecurringPeriod.weekly:
+          currentDate = currentDate.add(const Duration(days: 7));
+          break;
+        case RecurringPeriod.monthly:
+          // Переходим к следующему месяцу, сохраняя тот же день
+          var nextMonth = currentDate.month + 1;
+          var nextYear = currentDate.year;
+          if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear++;
+          }
+
+          // Проверяем количество дней в следующем месяце
+          var daysInNextMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+          var day = currentDate.day;
+          if (day > daysInNextMonth) {
+            day = daysInNextMonth; // Устанавливаем последний день месяца
+          }
+
+          currentDate = DateTime(
+            nextYear,
+            nextMonth,
+            day,
+            reminder.timeOfDay.hour,
+            reminder.timeOfDay.minute,
+          );
+          break;
+        case RecurringPeriod.custom:
+          currentDate = currentDate.add(Duration(days: reminder.customDays));
+          break;
+      }
+    }
+
+    return result;
+  }
+
+  // Геттер для получения текста предпросмотра заметки
+  String get previewText {
+    final text = plainTextContent.trim();
+    if (text.isEmpty) return '';
+
+    // Берем только первую строку текста
+    final firstLineBreak = text.indexOf('\n');
+    if (firstLineBreak > 0) {
+      return text.substring(0, firstLineBreak);
+    }
+
+    // Ограничиваем длину превью
+    if (text.length > 100) {
+      return '${text.substring(0, 100)}...';
+    }
+
+    return text;
+  }
+
+  const Note({
     required this.id,
     required this.content,
     required this.themeIds,
     required this.createdAt,
     required this.updatedAt,
-    required this.hasDeadline,
+    this.hasDeadline = false,
     this.deadlineDate,
-    required this.hasDateLink,
+    this.hasDateLink = false,
     this.linkedDate,
-    required this.isCompleted,
+    this.isCompleted = false,
     this.isFavorite = false,
-    required this.mediaUrls,
+    this.mediaUrls = const [],
     this.emoji,
     this.reminderDates,
     this.reminderSound,
@@ -138,31 +391,6 @@ class Note {
     this.deadlineExtensions,
     this.voiceNotes = const [],
   });
-
-  bool get isQuickNote => !hasDeadline && !hasDateLink;
-
-  // Хелперы для определения типов контента в заметке
-  bool get hasImages => mediaUrls.any((url) =>
-      url.endsWith('.jpg') || url.endsWith('.png') || url.endsWith('.jpeg'));
-  bool get hasAudio => mediaUrls.any((url) =>
-      url.endsWith('.mp3') || url.endsWith('.wav') || url.endsWith('.m4a'));
-  bool get hasFiles => mediaUrls.any((url) =>
-      url.endsWith('.pdf') || url.endsWith('.doc') || url.endsWith('.txt'));
-  bool get hasVoiceNotes => voiceNotes.isNotEmpty;
-
-  // Хелпер для проверки наличия напоминаний
-  bool get hasReminders =>
-      (reminderDates != null && reminderDates!.isNotEmpty) ||
-      relativeReminder != null ||
-      recurringReminder != null;
-
-  // Хелпер для получения "заголовка" из контента
-  String get previewText {
-    if (content.isEmpty) return "Empty note";
-    final preview =
-        content.length <= 50 ? content : '${content.substring(0, 47)}...';
-    return preview;
-  }
 
   Note copyWith({
     String? id,
@@ -210,268 +438,155 @@ class Note {
     );
   }
 
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is Note &&
+        other.id == id &&
+        other.content == content &&
+        listEquals(other.themeIds, themeIds) &&
+        other.createdAt == createdAt &&
+        other.updatedAt == updatedAt &&
+        other.hasDeadline == hasDeadline &&
+        other.deadlineDate == deadlineDate &&
+        other.hasDateLink == hasDateLink &&
+        other.linkedDate == linkedDate &&
+        other.isCompleted == isCompleted &&
+        other.isFavorite == isFavorite &&
+        listEquals(other.mediaUrls, mediaUrls) &&
+        other.emoji == emoji &&
+        listEquals(other.reminderDates, reminderDates) &&
+        other.reminderSound == reminderSound &&
+        other.reminderType == reminderType &&
+        other.relativeReminder == relativeReminder &&
+        other.recurringReminder == recurringReminder &&
+        listEquals(other.deadlineExtensions, deadlineExtensions) &&
+        listEquals(other.voiceNotes, voiceNotes);
+  }
+
+  @override
+  int get hashCode {
+    return id.hashCode ^
+        content.hashCode ^
+        themeIds.hashCode ^
+        createdAt.hashCode ^
+        updatedAt.hashCode ^
+        hasDeadline.hashCode ^
+        deadlineDate.hashCode ^
+        hasDateLink.hashCode ^
+        linkedDate.hashCode ^
+        isCompleted.hashCode ^
+        isFavorite.hashCode ^
+        mediaUrls.hashCode ^
+        emoji.hashCode ^
+        reminderDates.hashCode ^
+        reminderSound.hashCode ^
+        reminderType.hashCode ^
+        relativeReminder.hashCode ^
+        recurringReminder.hashCode ^
+        deadlineExtensions.hashCode ^
+        voiceNotes.hashCode;
+  }
+
+  @override
+  String toString() {
+    return 'Note(id: $id, content: ${content.substring(0, 20)}..., themes: ${themeIds.length}, deadline: $hasDeadline, linked: $hasDateLink, fav: $isFavorite)';
+  }
+
+  // Методы fromMap и toMap
+  factory Note.fromMap(Map<String, dynamic> map) {
+    return Note(
+      id: map['id'] as String,
+      content: map['content'] as String,
+      themeIds: List<String>.from(
+        (map['themeIds'] as List<dynamic>? ?? []).cast<String>(),
+      ),
+      createdAt: DateTime.parse(map['createdAt'] as String),
+      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      hasDeadline: (map['hasDeadline'] as int? ?? 0) == 1,
+      deadlineDate:
+          map['deadlineDate'] != null
+              ? DateTime.parse(map['deadlineDate'] as String)
+              : null,
+      hasDateLink: (map['hasDateLink'] as int? ?? 0) == 1,
+      linkedDate:
+          map['linkedDate'] != null
+              ? DateTime.parse(map['linkedDate'] as String)
+              : null,
+      isCompleted: (map['isCompleted'] as int? ?? 0) == 1,
+      isFavorite: (map['isFavorite'] as int? ?? 0) == 1,
+      mediaUrls: List<String>.from(
+        (map['mediaUrls'] as List<dynamic>? ?? []).cast<String>(),
+      ),
+      emoji: map['emoji'] as String?,
+      reminderDates:
+          (map['reminderDates'] as List<dynamic>?)
+              ?.map((e) => DateTime.parse(e as String))
+              .toList(),
+      reminderSound: map['reminderSound'] as String?,
+      reminderType:
+          ReminderType.values[map['reminderType'] as int? ??
+              ReminderType.exactTime.index],
+      relativeReminder:
+          map['relativeReminder'] != null
+              ? RelativeReminder.fromMap(
+                Map<String, dynamic>.from(
+                  json.decode(map['relativeReminder'] as String),
+                ),
+              )
+              : null,
+      recurringReminder:
+          map['recurringReminder'] != null
+              ? RecurringReminder.fromMap(
+                Map<String, dynamic>.from(
+                  json.decode(map['recurringReminder'] as String),
+                ),
+              )
+              : null,
+      deadlineExtensions:
+          (map['deadlineExtensions'] as List<dynamic>?)
+              ?.map(
+                (e) => DeadlineExtension.fromMap(
+                  Map<String, dynamic>.from(json.decode(e as String)),
+                ),
+              )
+              .toList(),
+      voiceNotes: List<String>.from(
+        (map['voiceNotes'] as List<dynamic>? ?? []).cast<String>(),
+      ),
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'content': content,
       'themeIds': themeIds,
-      'createdAt': createdAt.millisecondsSinceEpoch,
-      'updatedAt': updatedAt.millisecondsSinceEpoch,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
       'hasDeadline': hasDeadline ? 1 : 0,
-      'deadlineDate': deadlineDate?.millisecondsSinceEpoch,
+      'deadlineDate': deadlineDate?.toIso8601String(),
       'hasDateLink': hasDateLink ? 1 : 0,
-      'linkedDate': linkedDate?.millisecondsSinceEpoch,
+      'linkedDate': linkedDate?.toIso8601String(),
       'isCompleted': isCompleted ? 1 : 0,
       'isFavorite': isFavorite ? 1 : 0,
-      'mediaUrls': json.encode(mediaUrls),
+      'mediaUrls': mediaUrls,
       'emoji': emoji,
-      'reminderDates':
-          reminderDates?.map((x) => x.millisecondsSinceEpoch).toList(),
+      'reminderDates': reminderDates?.map((e) => e.toIso8601String()).toList(),
       'reminderSound': reminderSound,
       'reminderType': reminderType.index,
-      'relativeReminder': relativeReminder?.toMap(),
-      'recurringReminder': recurringReminder?.toMap(),
-      'deadlineExtensions': deadlineExtensions?.map((x) => x.toMap()).toList(),
-      'voiceNotes': json.encode(voiceNotes),
+      'relativeReminder':
+          relativeReminder != null
+              ? json.encode(relativeReminder!.toMap())
+              : null,
+      'recurringReminder':
+          recurringReminder != null
+              ? json.encode(recurringReminder!.toMap())
+              : null,
+      'deadlineExtensions':
+          deadlineExtensions?.map((e) => json.encode(e.toMap())).toList(),
+      'voiceNotes': voiceNotes,
     };
-  }
-
-  factory Note.fromMap(Map<String, dynamic> map) {
-    // Обработка типа напоминания
-    ReminderType reminderType = ReminderType.exactTime; // По умолчанию
-    if (map['reminderType'] != null) {
-      final int typeIndex = map['reminderType'] as int;
-      if (typeIndex >= 0 && typeIndex < ReminderType.values.length) {
-        reminderType = ReminderType.values[typeIndex];
-      }
-    }
-
-    // Обработка относительного напоминания
-    RelativeReminder? relativeReminder;
-    if (map['relativeReminder'] != null) {
-      try {
-        final Map<String, dynamic> reminderMap =
-            map['relativeReminder'] is String
-                ? json.decode(map['relativeReminder'] as String)
-                : Map<String, dynamic>.from(map['relativeReminder'] as Map);
-        relativeReminder = RelativeReminder.fromMap(reminderMap);
-      } catch (e) {
-        print('Ошибка при десериализации relativeReminder: $e');
-      }
-    }
-
-    // Обработка повторяющегося напоминания
-    RecurringReminder? recurringReminder;
-    if (map['recurringReminder'] != null) {
-      try {
-        final Map<String, dynamic> reminderMap =
-            map['recurringReminder'] is String
-                ? json.decode(map['recurringReminder'] as String)
-                : Map<String, dynamic>.from(map['recurringReminder'] as Map);
-        recurringReminder = RecurringReminder.fromMap(reminderMap);
-      } catch (e) {
-        print('Ошибка при десериализации recurringReminder: $e');
-      }
-    }
-
-    return Note(
-      id: map['id'],
-      content: map['content'],
-      themeIds: List<String>.from(map['themeIds'] is List
-          ? map['themeIds']
-          : json.decode(map['themeIds'])),
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt']),
-      hasDeadline: map['hasDeadline'] == 1,
-      deadlineDate: map['deadlineDate'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['deadlineDate'])
-          : null,
-      hasDateLink: map['hasDateLink'] == 1,
-      linkedDate: map['linkedDate'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['linkedDate'])
-          : null,
-      isCompleted: map['isCompleted'] == 1,
-      isFavorite: map['isFavorite'] == 1,
-      mediaUrls: List<String>.from(json.decode(map['mediaUrls'])),
-      emoji: map['emoji'],
-      reminderDates: map['reminderDates'] != null
-          ? List<DateTime>.from((map['reminderDates'] is String
-                  ? json.decode(map['reminderDates'])
-                  : map['reminderDates'])
-              .map((x) => DateTime.fromMillisecondsSinceEpoch(x)))
-          : null,
-      reminderSound: map['reminderSound'],
-      reminderType: reminderType,
-      relativeReminder: relativeReminder,
-      recurringReminder: recurringReminder,
-      deadlineExtensions: map['deadlineExtensions'] != null
-          ? List<DeadlineExtension>.from((map['deadlineExtensions'] is String
-                  ? json.decode(map['deadlineExtensions'])
-                  : map['deadlineExtensions'])
-              .map((x) =>
-                  DeadlineExtension.fromMap(Map<String, dynamic>.from(x))))
-          : null,
-      voiceNotes: map['voiceNotes'] != null
-          ? List<String>.from(json.decode(map['voiceNotes']))
-          : [],
-    );
-  }
-
-  String toJson() => json.encode(toMap());
-
-  factory Note.fromJson(String source) => Note.fromMap(json.decode(source));
-
-  // Метод для получения актуального времени напоминания
-  // с учетом типа напоминания и дедлайна
-  DateTime? getActualReminderDateTime() {
-    if (!hasDeadline || deadlineDate == null) {
-      return null;
-    }
-
-    if (reminderType == ReminderType.exactTime) {
-      // Для точного времени возвращаем первую дату из списка
-      if (reminderDates == null || reminderDates!.isEmpty) {
-        return null;
-      }
-      return reminderDates!.first;
-    } else if (reminderType == ReminderType.relativeTime) {
-      // Для относительного времени рассчитываем от дедлайна
-      if (relativeReminder == null) {
-        return null;
-      }
-
-      return deadlineDate!
-          .subtract(Duration(minutes: relativeReminder!.minutes));
-    } else {
-      // Для повторяющегося возвращаем ближайшую дату (за пределами метода)
-      return null;
-    }
-  }
-
-  // Метод для определения, является ли напоминание повторяющимся
-  bool get isRecurring =>
-      reminderType == ReminderType.recurring && recurringReminder != null;
-
-  // Метод для получения списка дат следующих напоминаний для повторяющегося типа
-  List<DateTime> getNextRecurringDates(int maxCount) {
-    if (!isRecurring ||
-        recurringReminder == null ||
-        !hasDeadline ||
-        deadlineDate == null) {
-      return [];
-    }
-
-    List<DateTime> dates = [];
-    DateTime startDate = DateTime.now();
-
-    // Определяем дату окончания повторений
-    final DateTime endDate = recurringReminder!.endDate ?? deadlineDate!;
-
-    // Если дата окончания уже прошла, возвращаем пустой список
-    if (endDate.isBefore(startDate)) {
-      return [];
-    }
-
-    switch (recurringReminder!.repeatType) {
-      case RepeatType.daily:
-        // Ежедневные напоминания
-        DateTime current = startDate;
-        while (dates.length < maxCount && current.isBefore(endDate)) {
-          dates.add(current);
-          current = current.add(const Duration(days: 1));
-        }
-        break;
-
-      case RepeatType.weekdays:
-        // Напоминания по будням (Пн-Пт)
-        DateTime current = startDate;
-        while (dates.length < maxCount && current.isBefore(endDate)) {
-          // Если день недели 1-5 (Пн-Пт)
-          if (current.weekday >= 1 && current.weekday <= 5) {
-            dates.add(current);
-          }
-          current = current.add(const Duration(days: 1));
-        }
-        break;
-
-      case RepeatType.weekly:
-        // Еженедельные напоминания с выбранными днями недели
-        DateTime current = startDate;
-        while (dates.length < maxCount && current.isBefore(endDate)) {
-          // Проверяем день недели (0 - понедельник, 6 - воскресенье)
-          int dayOfWeek = current.weekday - 1; // Преобразуем к индексу 0-6
-          if (dayOfWeek >= 0 &&
-              dayOfWeek < recurringReminder!.weekdays.length &&
-              recurringReminder!.weekdays[dayOfWeek]) {
-            dates.add(current);
-          }
-          current = current.add(const Duration(days: 1));
-        }
-        break;
-
-      case RepeatType.monthly:
-        // Ежемесячные напоминания (в тот же день месяца)
-        DateTime current = startDate;
-        int dayOfMonth = startDate.day;
-
-        while (dates.length < maxCount && current.isBefore(endDate)) {
-          // Добавляем месяц и устанавливаем то же число
-          DateTime nextMonth = DateTime(current.year, current.month + 1, 1);
-          // Определяем последний день следующего месяца
-          int lastDayOfMonth =
-              DateTime(nextMonth.year, nextMonth.month + 1, 0).day;
-          // Выбираем день (с учетом, что в месяце может быть меньше дней)
-          int actualDay =
-              dayOfMonth <= lastDayOfMonth ? dayOfMonth : lastDayOfMonth;
-
-          current = DateTime(nextMonth.year, nextMonth.month, actualDay);
-
-          if (current.isAfter(startDate) && current.isBefore(endDate)) {
-            dates.add(current);
-          }
-        }
-        break;
-
-      case RepeatType.custom:
-        // Пользовательский интервал (каждые N дней)
-        DateTime current = startDate;
-        int interval = recurringReminder!.interval;
-
-        while (dates.length < maxCount && current.isBefore(endDate)) {
-          dates.add(current);
-          current = current.add(Duration(days: interval));
-        }
-        break;
-    }
-
-    return dates;
-  }
-}
-
-class DeadlineExtension {
-  final DateTime originalDate;
-  final DateTime newDate;
-  final DateTime extendedAt;
-
-  DeadlineExtension({
-    required this.originalDate,
-    required this.newDate,
-    required this.extendedAt,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'originalDate': originalDate.millisecondsSinceEpoch,
-      'newDate': newDate.millisecondsSinceEpoch,
-      'extendedAt': extendedAt.millisecondsSinceEpoch,
-    };
-  }
-
-  factory DeadlineExtension.fromMap(Map<String, dynamic> map) {
-    return DeadlineExtension(
-      originalDate: DateTime.fromMillisecondsSinceEpoch(map['originalDate']),
-      newDate: DateTime.fromMillisecondsSinceEpoch(map['newDate']),
-      extendedAt: DateTime.fromMillisecondsSinceEpoch(map['extendedAt']),
-    );
   }
 }

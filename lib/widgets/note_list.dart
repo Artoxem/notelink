@@ -10,7 +10,8 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import '../widgets/media_badge.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import '../utils/image_cache_helper.dart';
+import 'audio_wave_preview.dart';
 
 enum NoteListAction {
   edit,
@@ -18,7 +19,7 @@ enum NoteListAction {
   delete,
   complete,
   unlinkFromTheme,
-  custom
+  custom,
 }
 
 enum SwipeDirection { none, left, right, both }
@@ -27,7 +28,7 @@ enum SwipeDirection { none, left, right, both }
 enum UnlinkAction {
   unlink, // Отвязать от темы
   delete, // Удалить заметку полностью
-  cancel // Отмена
+  cancel, // Отмена
 }
 
 class NoteListWidget extends StatefulWidget {
@@ -64,7 +65,7 @@ class NoteListWidget extends StatefulWidget {
     this.availableActions = const [
       NoteListAction.edit,
       NoteListAction.favorite,
-      NoteListAction.delete
+      NoteListAction.delete,
     ],
   }) : super(key: key);
 
@@ -91,13 +92,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   // Локальная копия списка заметок для управления анимациями
   late List<Note> _localNotes;
-
-  // Статические регулярные выражения для обработки Markdown - создаются один раз
-  static final RegExp _headingsRegex = RegExp(r'#{1,6}\s+');
-  static final RegExp _boldRegex = RegExp(r'\*\*|__');
-  static final RegExp _italicRegex = RegExp(r'\*|_(?!\*)');
-  static final RegExp _linksRegex = RegExp(r'\[([^\]]+)\]\([^)]+\)');
-  static final RegExp _codeRegex = RegExp(r'`[^`]+`');
 
   // Обновленное регулярное выражение для полного удаления голосовых заметок
   static final RegExp _voiceRegex = RegExp(r'!\[voice\]\(voice:[^)]+\)');
@@ -180,7 +174,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
         // Обрабатываем существующие заметки (обновляем их содержимое)
         final Map<String, Note> newNotesMap = {
-          for (var note in widget.notes) note.id: note
+          for (var note in widget.notes) note.id: note,
         };
 
         for (int i = 0; i < updatedLocalNotes.length; i++) {
@@ -195,8 +189,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 updatedNote.isFavorite != updatedLocalNotes[i].isFavorite) {
               // Обновляем кэш только при изменении содержимого
               if (updatedNote.content != updatedLocalNotes[i].content) {
-                _contentPreviewCache[noteId] =
-                    _processContentPreview(updatedNote.content);
+                _contentPreviewCache[noteId] = _processContentPreview(
+                  updatedNote.content,
+                );
               }
 
               // Обновляем локальную заметку
@@ -318,9 +313,11 @@ class _NoteListWidgetState extends State<NoteListWidget>
         if (mounted && _scrollController.hasClients) {
           try {
             final maxScroll = _scrollController.position.maxScrollExtent;
-            _scrollController.jumpTo(currentScrollPosition > maxScroll
-                ? maxScroll
-                : currentScrollPosition);
+            _scrollController.jumpTo(
+              currentScrollPosition > maxScroll
+                  ? maxScroll
+                  : currentScrollPosition,
+            );
           } catch (e) {
             print('Ошибка при восстановлении позиции прокрутки: $e');
           }
@@ -404,14 +401,8 @@ class _NoteListWidgetState extends State<NoteListWidget>
       position: Tween<Offset>(
         begin: const Offset(1, 0),
         end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutQuint,
-      )),
-      child: FadeTransition(
-        opacity: animation,
-        child: _buildNoteItem(note),
-      ),
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuint)),
+      child: FadeTransition(opacity: animation, child: _buildNoteItem(note)),
     );
   }
 
@@ -438,13 +429,14 @@ class _NoteListWidgetState extends State<NoteListWidget>
             gradient: LinearGradient(
               colors: [
                 AppColors.accentSecondary.withOpacity(0.8),
-                AppColors.accentSecondary.withOpacity(0.6)
+                AppColors.accentSecondary.withOpacity(0.6),
               ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
-            borderRadius:
-                const BorderRadius.horizontal(left: Radius.circular(22)),
+            borderRadius: const BorderRadius.horizontal(
+              left: Radius.circular(22),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.max,
@@ -482,19 +474,16 @@ class _NoteListWidgetState extends State<NoteListWidget>
               begin: Alignment.centerRight,
               end: Alignment.centerLeft,
             ),
-            borderRadius:
-                const BorderRadius.horizontal(right: Radius.circular(22)),
+            borderRadius: const BorderRadius.horizontal(
+              right: Radius.circular(22),
+            ),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Spacer(),
-              Icon(
-                Icons.delete,
-                color: Colors.red,
-                size: 22,
-              ),
+              Icon(Icons.delete, color: Colors.red, size: 22),
             ],
           ),
         ),
@@ -521,8 +510,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
                 margin: EdgeInsets.zero,
                 elevation: 3,
                 shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.cardBorderRadius),
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.cardBorderRadius,
+                  ),
                 ),
                 child: InkWell(
                   onTap: () {
@@ -532,11 +522,13 @@ class _NoteListWidgetState extends State<NoteListWidget>
                       _openNoteDetail(note);
                     }
                   },
-                  onLongPress: widget.showOptionsOnLongPress
-                      ? () => _showNoteOptionsMenu(note)
-                      : null,
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.cardBorderRadius),
+                  onLongPress:
+                      widget.showOptionsOnLongPress
+                          ? () => _showNoteOptionsMenu(note)
+                          : null,
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.cardBorderRadius,
+                  ),
                   child: IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -547,10 +539,12 @@ class _NoteListWidgetState extends State<NoteListWidget>
                           decoration: BoxDecoration(
                             color: noteColor,
                             borderRadius: const BorderRadius.only(
-                              topLeft:
-                                  Radius.circular(AppDimens.cardBorderRadius),
-                              bottomLeft:
-                                  Radius.circular(AppDimens.cardBorderRadius),
+                              topLeft: Radius.circular(
+                                AppDimens.cardBorderRadius,
+                              ),
+                              bottomLeft: Radius.circular(
+                                AppDimens.cardBorderRadius,
+                              ),
                             ),
                           ),
                         ),
@@ -568,8 +562,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                   children: [
                                     // Дата создания
                                     Text(
-                                      DateFormat('d MMM yyyy')
-                                          .format(note.createdAt),
+                                      DateFormat(
+                                        'd MMM yyyy',
+                                      ).format(note.createdAt),
                                       style: TextStyle(
                                         fontSize: 13,
                                         color: AppColors.textOnLight
@@ -588,9 +583,14 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color.fromRGBO(
-                                              255, 255, 7, 0.35),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
+                                            255,
+                                            255,
+                                            7,
+                                            0.35,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -626,10 +626,11 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                         color: Colors.transparent,
                                         borderRadius: BorderRadius.circular(15),
                                         child: InkWell(
-                                          borderRadius:
-                                              BorderRadius.circular(15),
-                                          onTap: () =>
-                                              _showNoteOptionsMenu(note),
+                                          borderRadius: BorderRadius.circular(
+                                            15,
+                                          ),
+                                          onTap:
+                                              () => _showNoteOptionsMenu(note),
                                           child: Padding(
                                             padding: const EdgeInsets.all(2.0),
                                             child: Icon(
@@ -646,7 +647,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
                                 const SizedBox(height: 6),
 
-                                // Содержимое заметки с поддержкой форматирования Markdown
+                                // Содержимое заметки с поддержкой форматирования
                                 Expanded(
                                   child: ShaderMask(
                                     shaderCallback: (Rect bounds) {
@@ -655,7 +656,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                         end: Alignment.bottomCenter,
                                         colors: [
                                           Colors.black,
-                                          Colors.transparent
+                                          Colors.transparent,
                                         ],
                                         stops: const [0.8, 1.0],
                                       ).createShader(bounds);
@@ -669,80 +670,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                                           maxHeight:
                                               60, // Ограничение высоты до 60px
                                         ),
-                                        child: MarkdownBody(
-                                          data: _contentPreviewCache[note.id] ??
-                                              _processContentPreview(
-                                                  note.content),
-                                          selectable: false,
-                                          softLineBreak: true,
-                                          styleSheet: MarkdownStyleSheet(
-                                            p: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.normal,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            a: TextStyle(
-                                              color: AppColors.accentSecondary,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.normal,
-                                              height: 1.1,
-                                            ),
-                                            h1: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            h2: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            h3: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            em: TextStyle(
-                                              fontStyle: FontStyle.italic,
-                                              fontWeight: FontWeight.normal,
-                                              fontSize: 14,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            strong: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            blockquote: TextStyle(
-                                              fontStyle: FontStyle.italic,
-                                              fontWeight: FontWeight.normal,
-                                              color: Colors.black87,
-                                              fontSize: 14,
-                                              height: 1.1,
-                                            ),
-                                            code: TextStyle(
-                                              fontFamily: 'monospace',
-                                              fontWeight: FontWeight.normal,
-                                              fontSize: 14,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            listBullet: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.black87,
-                                              height: 1.1,
-                                            ),
-                                            listIndent: 8.0,
-                                            listBulletPadding:
-                                                const EdgeInsets.only(right: 4),
-                                          ),
-                                        ),
+                                        child: _buildNoteContent(context, note),
                                       ),
                                     ),
                                   ),
@@ -788,11 +716,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                     ),
                     child: const Padding(
                       padding: EdgeInsets.all(3.0),
-                      child: Icon(
-                        Icons.star,
-                        color: Colors.white,
-                        size: 16,
-                      ),
+                      child: Icon(Icons.star, color: Colors.white, size: 16),
                     ),
                   ),
                 ),
@@ -805,7 +729,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   // Новый метод обработки свайпа
   Future<bool> _handleSwipeConfirmation(
-      DismissDirection direction, Note note) async {
+    DismissDirection direction,
+    Note note,
+  ) async {
     if (!mounted) return false;
 
     try {
@@ -870,8 +796,10 @@ class _NoteListWidgetState extends State<NoteListWidget>
           final newStatus = !note.isCompleted;
 
           try {
-            final notesProvider =
-                Provider.of<NotesProvider>(context, listen: false);
+            final notesProvider = Provider.of<NotesProvider>(
+              context,
+              listen: false,
+            );
 
             // Вызываем соответствующий метод в зависимости от нового статуса
             if (newStatus) {
@@ -884,8 +812,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
             for (int i = 0; i < _localNotes.length; i++) {
               if (_localNotes[i].id == noteId) {
                 setState(() {
-                  _localNotes[i] =
-                      _localNotes[i].copyWith(isCompleted: newStatus);
+                  _localNotes[i] = _localNotes[i].copyWith(
+                    isCompleted: newStatus,
+                  );
                 });
                 break;
               }
@@ -900,18 +829,20 @@ class _NoteListWidgetState extends State<NoteListWidget>
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(newStatus
-                      ? 'Задача отмечена как выполненная'
-                      : 'Задача отмечена как невыполненная'),
+                  content: Text(
+                    newStatus
+                        ? 'Задача отмечена как выполненная'
+                        : 'Задача отмечена как невыполненная',
+                  ),
                   duration: const Duration(seconds: 2),
                 ),
               );
             }
           } catch (e) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Ошибка: $e')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
             }
           }
         } else if (widget.availableActions.contains(NoteListAction.favorite)) {
@@ -971,8 +902,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
     }
 
     // Проверяем на голосовые заметки в контенте
-    final voiceMatches =
-        RegExp(r'!\[voice\]\(voice:[^)]+\)').allMatches(note.content);
+    final voiceMatches = RegExp(
+      r'!\[voice\]\(voice:[^)]+\)',
+    ).allMatches(note.content);
     voiceCount = voiceMatches.length;
 
     // Используем MediaBadgeGroup - такой же компонент, как в режиме "плитка"
@@ -1016,10 +948,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
         }
 
         return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 4,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: themeColor,
             borderRadius: BorderRadius.circular(4),
@@ -1056,8 +985,10 @@ class _NoteListWidgetState extends State<NoteListWidget>
     if (widget.isInThemeView && widget.themeId != null) {
       // Проверяем, привязана ли заметка к теме
       if (note.themeIds.contains(widget.themeId)) {
-        final themesProvider =
-            Provider.of<ThemesProvider>(context, listen: false);
+        final themesProvider = Provider.of<ThemesProvider>(
+          context,
+          listen: false,
+        );
         final theme = themesProvider.getThemeById(widget.themeId!);
 
         if (theme != null) {
@@ -1074,8 +1005,10 @@ class _NoteListWidgetState extends State<NoteListWidget>
     }
     // В общем режиме используем цвет первой темы заметки, если есть
     else if (note.themeIds.isNotEmpty) {
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      final themesProvider = Provider.of<ThemesProvider>(
+        context,
+        listen: false,
+      );
       final themeId = note.themeIds.first;
       final theme = themesProvider.getThemeById(themeId);
 
@@ -1112,24 +1045,27 @@ class _NoteListWidgetState extends State<NoteListWidget>
   Future<bool> _showDeleteConfirmationDialog(Note note) async {
     return await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Удалить заметку'),
-            content: const Text(
-              'Вы уверены, что хотите удалить эту заметку? '
-              'Это действие нельзя будет отменить.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Отмена'),
+          builder:
+              (context) => AlertDialog(
+                title: const Text('Удалить заметку'),
+                content: const Text(
+                  'Вы уверены, что хотите удалить эту заметку? '
+                  'Это действие нельзя будет отменить.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Отмена'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text(
+                      'Удалить',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
               ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child:
-                    const Text('Удалить', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
         ) ??
         false;
   }
@@ -1138,52 +1074,53 @@ class _NoteListWidgetState extends State<NoteListWidget>
   Future<UnlinkAction> _showUnlinkConfirmationDialog(Note note) async {
     return await showDialog<UnlinkAction>(
           context: context,
-          builder: (context) => AlertDialog(
-            contentPadding: EdgeInsets.zero,
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () =>
-                        Navigator.pop(context, UnlinkAction.unlink),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12.0),
-                      child: Text('Отвязать от темы'),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () =>
-                        Navigator.pop(context, UnlinkAction.delete),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12.0),
-                      child: Text(
-                        'Удалить полностью',
-                        style: TextStyle(color: Colors.red),
+          builder:
+              (context) => AlertDialog(
+                contentPadding: EdgeInsets.zero,
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed:
+                            () => Navigator.pop(context, UnlinkAction.unlink),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12.0),
+                          child: Text('Отвязать от темы'),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const Divider(height: 1),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () =>
-                        Navigator.pop(context, UnlinkAction.cancel),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12.0),
-                      child: Text('Отмена'),
+                    const Divider(height: 1),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed:
+                            () => Navigator.pop(context, UnlinkAction.delete),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12.0),
+                          child: Text(
+                            'Удалить полностью',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    const Divider(height: 1),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed:
+                            () => Navigator.pop(context, UnlinkAction.cancel),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12.0),
+                          child: Text('Отмена'),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
         ) ??
         UnlinkAction.cancel;
   }
@@ -1192,212 +1129,236 @@ class _NoteListWidgetState extends State<NoteListWidget>
   void _showNoteOptionsMenu(Note note) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Опция редактирования
-            if (widget.availableActions.contains(NoteListAction.edit))
-              ListTile(
-                leading:
-                    const Icon(Icons.edit, color: AppColors.accentSecondary),
-                title: const Text('Редактировать заметку'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NoteDetailScreen(
-                        note: note,
-                        isEditMode: true,
-                      ),
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Опция редактирования
+                if (widget.availableActions.contains(NoteListAction.edit))
+                  ListTile(
+                    leading: const Icon(
+                      Icons.edit,
+                      color: AppColors.accentSecondary,
                     ),
-                  ).then((_) {
-                    if (widget.onActionSelected != null) {
-                      widget.onActionSelected!(note, NoteListAction.edit);
-                    }
-                  });
-                },
-              ),
+                    title: const Text('Редактировать заметку'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => NoteDetailScreen(
+                                note: note,
+                                isEditMode: true,
+                              ),
+                        ),
+                      ).then((_) {
+                        if (widget.onActionSelected != null) {
+                          widget.onActionSelected!(note, NoteListAction.edit);
+                        }
+                      });
+                    },
+                  ),
 
-            // Опция добавления/удаления из избранного
-            if (widget.availableActions.contains(NoteListAction.favorite))
-              ListTile(
-                leading: Icon(
-                  note.isFavorite ? Icons.star_border : Icons.star,
-                  color: Colors.amber,
-                ),
-                title: Text(note.isFavorite
-                    ? 'Удалить из избранного'
-                    : 'Добавить в избранное'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _toggleFavoriteLocally(note);
-                  if (widget.onActionSelected != null) {
-                    widget.onActionSelected!(note, NoteListAction.favorite);
-                  }
-                },
-              ),
+                // Опция добавления/удаления из избранного
+                if (widget.availableActions.contains(NoteListAction.favorite))
+                  ListTile(
+                    leading: Icon(
+                      note.isFavorite ? Icons.star_border : Icons.star,
+                      color: Colors.amber,
+                    ),
+                    title: Text(
+                      note.isFavorite
+                          ? 'Удалить из избранного'
+                          : 'Добавить в избранное',
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _toggleFavoriteLocally(note);
+                      if (widget.onActionSelected != null) {
+                        widget.onActionSelected!(note, NoteListAction.favorite);
+                      }
+                    },
+                  ),
 
-            // Опция отметки о выполнении
-            if (widget.availableActions.contains(NoteListAction.complete) &&
-                note.hasDeadline)
-              ListTile(
-                leading: Icon(
-                  note.isCompleted
-                      ? Icons.check_circle_outline
-                      : Icons.check_circle,
-                  color: AppColors.completed,
-                ),
-                title: Text(note.isCompleted
-                    ? 'Отметить как невыполненное'
-                    : 'Отметить как выполненное'),
-                onTap: () async {
-                  Navigator.pop(context);
+                // Опция отметки о выполнении
+                if (widget.availableActions.contains(NoteListAction.complete) &&
+                    note.hasDeadline)
+                  ListTile(
+                    leading: Icon(
+                      note.isCompleted
+                          ? Icons.check_circle_outline
+                          : Icons.check_circle,
+                      color: AppColors.completed,
+                    ),
+                    title: Text(
+                      note.isCompleted
+                          ? 'Отметить как невыполненное'
+                          : 'Отметить как выполненное',
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
 
-                  // Сохраняем текущую позицию прокрутки
-                  final currentScrollPosition = _scrollController.hasClients
-                      ? _scrollController.position.pixels
-                      : 0.0;
+                      // Сохраняем текущую позицию прокрутки
+                      final currentScrollPosition =
+                          _scrollController.hasClients
+                              ? _scrollController.position.pixels
+                              : 0.0;
 
-                  // Обновляем локальное состояние без обновления UI,
-                  // чтобы избежать ошибки при доступе к удаленным виджетам
-                  final bool newStatus = !note.isCompleted;
+                      // Обновляем локальное состояние без обновления UI,
+                      // чтобы избежать ошибки при доступе к удаленным виджетам
+                      final bool newStatus = !note.isCompleted;
 
-                  // Используем отдельную переменную для хранения ID
-                  // чтобы обезопасить доступ, даже если заметка будет удалена из списка
-                  final noteId = note.id;
+                      // Используем отдельную переменную для хранения ID
+                      // чтобы обезопасить доступ, даже если заметка будет удалена из списка
+                      final noteId = note.id;
 
-                  // Безопасно вызываем провайдер
-                  try {
-                    final notesProvider =
-                        Provider.of<NotesProvider>(context, listen: false);
+                      // Безопасно вызываем провайдер
+                      try {
+                        final notesProvider = Provider.of<NotesProvider>(
+                          context,
+                          listen: false,
+                        );
 
-                    if (newStatus) {
-                      // Отмечаем как выполненное
-                      await notesProvider.completeNote(noteId);
-                    } else {
-                      // Отмечаем как невыполненное
-                      await notesProvider.uncompleteNote(noteId);
-                    }
+                        if (newStatus) {
+                          // Отмечаем как выполненное
+                          await notesProvider.completeNote(noteId);
+                        } else {
+                          // Отмечаем как невыполненное
+                          await notesProvider.uncompleteNote(noteId);
+                        }
 
-                    // Локальное состояние обновляем, только если виджет все еще существует
-                    if (mounted) {
-                      // Находим индекс заметки в локальных данных
-                      int noteIndex = -1;
-                      for (int i = 0; i < _localNotes.length; i++) {
-                        if (_localNotes[i].id == noteId) {
-                          noteIndex = i;
-                          break;
+                        // Локальное состояние обновляем, только если виджет все еще существует
+                        if (mounted) {
+                          // Находим индекс заметки в локальных данных
+                          int noteIndex = -1;
+                          for (int i = 0; i < _localNotes.length; i++) {
+                            if (_localNotes[i].id == noteId) {
+                              noteIndex = i;
+                              break;
+                            }
+                          }
+
+                          // Обновляем только если заметка все еще в списке
+                          if (noteIndex >= 0) {
+                            setState(() {
+                              _localNotes[noteIndex] = _localNotes[noteIndex]
+                                  .copyWith(isCompleted: newStatus);
+                            });
+                          }
+
+                          // Восстанавливаем позицию прокрутки после обновления
+                          if (_scrollController.hasClients) {
+                            _scrollController.jumpTo(currentScrollPosition);
+                          }
+                        }
+
+                        // Вызываем колбэк для обновления родительского экрана
+                        if (widget.onActionSelected != null) {
+                          widget.onActionSelected!(
+                            note,
+                            NoteListAction.complete,
+                          );
+                        }
+                      } catch (e) {
+                        // Показываем сообщение об ошибке, только если виджет все еще существует
+                        if (mounted) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
                         }
                       }
+                    },
+                  ),
 
-                      // Обновляем только если заметка все еще в списке
-                      if (noteIndex >= 0) {
-                        setState(() {
-                          _localNotes[noteIndex] =
-                              _localNotes[noteIndex].copyWith(
-                            isCompleted: newStatus,
+                // Опция отвязки от темы
+                if (widget.availableActions.contains(
+                      NoteListAction.unlinkFromTheme,
+                    ) &&
+                    widget.themeId != null)
+                  ListTile(
+                    leading: const Icon(Icons.link_off, color: Colors.blue),
+                    title: const Text('Отвязать от темы'),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final action = await _showUnlinkConfirmationDialog(note);
+                      if (action == UnlinkAction.unlink) {
+                        // Находим индекс заметки в локальном списке
+                        final index = _localNotes.indexWhere(
+                          (n) => n.id == note.id,
+                        );
+                        if (index != -1) {
+                          // Локально удаляем заметку с анимацией
+                          _removeNoteLocally(index);
+                        }
+
+                        if (widget.onNoteUnlinked != null) {
+                          widget.onNoteUnlinked!(note);
+                        }
+                        if (widget.onActionSelected != null) {
+                          widget.onActionSelected!(
+                            note,
+                            NoteListAction.unlinkFromTheme,
                           );
-                        });
+                        }
+                      } else if (action == UnlinkAction.delete) {
+                        // Удаляем заметку полностью
+                        final index = _localNotes.indexWhere(
+                          (n) => n.id == note.id,
+                        );
+                        if (index != -1) {
+                          // Локально удаляем заметку с анимацией
+                          _removeNoteLocally(index);
+                        }
+                        if (widget.onNoteDeleted != null) {
+                          widget.onNoteDeleted!(note);
+                        }
+                        if (widget.onActionSelected != null) {
+                          widget.onActionSelected!(note, NoteListAction.delete);
+                        }
                       }
+                    },
+                  ),
 
-                      // Восстанавливаем позицию прокрутки после обновления
-                      if (_scrollController.hasClients) {
-                        _scrollController.jumpTo(currentScrollPosition);
-                      }
-                    }
-
-                    // Вызываем колбэк для обновления родительского экрана
-                    if (widget.onActionSelected != null) {
-                      widget.onActionSelected!(note, NoteListAction.complete);
-                    }
-                  } catch (e) {
-                    // Показываем сообщение об ошибке, только если виджет все еще существует
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Ошибка: $e')),
+                // Опция удаления заметки
+                if (widget.availableActions.contains(NoteListAction.delete))
+                  ListTile(
+                    leading: const Icon(Icons.delete, color: Colors.red),
+                    title: const Text(
+                      'Удалить заметку',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final shouldDelete = await _showDeleteConfirmationDialog(
+                        note,
                       );
-                    }
-                  }
-                },
-              ),
+                      if (shouldDelete) {
+                        // Находим индекс заметки в локальном списке
+                        final index = _localNotes.indexWhere(
+                          (n) => n.id == note.id,
+                        );
+                        if (index != -1) {
+                          // Локально удаляем заметку с анимацией
+                          _removeNoteLocally(index);
 
-            // Опция отвязки от темы
-            if (widget.availableActions
-                    .contains(NoteListAction.unlinkFromTheme) &&
-                widget.themeId != null)
-              ListTile(
-                leading: const Icon(Icons.link_off, color: Colors.blue),
-                title: const Text('Отвязать от темы'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final action = await _showUnlinkConfirmationDialog(note);
-                  if (action == UnlinkAction.unlink) {
-                    // Находим индекс заметки в локальном списке
-                    final index =
-                        _localNotes.indexWhere((n) => n.id == note.id);
-                    if (index != -1) {
-                      // Локально удаляем заметку с анимацией
-                      _removeNoteLocally(index);
-                    }
-
-                    if (widget.onNoteUnlinked != null) {
-                      widget.onNoteUnlinked!(note);
-                    }
-                    if (widget.onActionSelected != null) {
-                      widget.onActionSelected!(
-                          note, NoteListAction.unlinkFromTheme);
-                    }
-                  } else if (action == UnlinkAction.delete) {
-                    // Удаляем заметку полностью
-                    final index =
-                        _localNotes.indexWhere((n) => n.id == note.id);
-                    if (index != -1) {
-                      // Локально удаляем заметку с анимацией
-                      _removeNoteLocally(index);
-                    }
-                    if (widget.onNoteDeleted != null) {
-                      widget.onNoteDeleted!(note);
-                    }
-                    if (widget.onActionSelected != null) {
-                      widget.onActionSelected!(note, NoteListAction.delete);
-                    }
-                  }
-                },
-              ),
-
-            // Опция удаления заметки
-            if (widget.availableActions.contains(NoteListAction.delete))
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Удалить заметку',
-                    style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final shouldDelete =
-                      await _showDeleteConfirmationDialog(note);
-                  if (shouldDelete) {
-                    // Находим индекс заметки в локальном списке
-                    final index =
-                        _localNotes.indexWhere((n) => n.id == note.id);
-                    if (index != -1) {
-                      // Локально удаляем заметку с анимацией
-                      _removeNoteLocally(index);
-
-                      if (widget.onNoteDeleted != null) {
-                        widget.onNoteDeleted!(note);
+                          if (widget.onNoteDeleted != null) {
+                            widget.onNoteDeleted!(note);
+                          }
+                          if (widget.onActionSelected != null) {
+                            widget.onActionSelected!(
+                              note,
+                              NoteListAction.delete,
+                            );
+                          }
+                        }
                       }
-                      if (widget.onActionSelected != null) {
-                        widget.onActionSelected!(note, NoteListAction.delete);
-                      }
-                    }
-                  }
-                },
-              ),
-          ],
-        ),
-      ),
+                    },
+                  ),
+              ],
+            ),
+          ),
     );
   }
 
@@ -1405,14 +1366,27 @@ class _NoteListWidgetState extends State<NoteListWidget>
   void _openNoteDetail(Note note) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(note: note),
-      ),
+      MaterialPageRoute(builder: (context) => NoteDetailScreen(note: note)),
     ).then((_) {
       // Уведомляем о действии, если есть колбэк
       if (widget.onActionSelected != null) {
         widget.onActionSelected!(note, NoteListAction.custom);
       }
     });
+  }
+
+  // Содержимое заметки с поддержкой форматирования - убираем Markdown
+  Widget _buildNoteContent(BuildContext context, Note note) {
+    return Text(
+      note.previewText,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        color: Colors.black87,
+        height: 1.1,
+      ),
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 }

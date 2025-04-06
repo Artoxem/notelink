@@ -19,12 +19,16 @@ class ThemeNotesScreen extends StatefulWidget {
   State<ThemeNotesScreen> createState() => _ThemeNotesScreenState();
 }
 
-class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
+class _ThemeNotesScreenState extends State<ThemeNotesScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = false;
   bool _hasError = false;
   String _errorMessage = '';
   List<Note> _themeNotes = [];
-  Color _themeColor = Colors.blue;
+  late Color _themeColor;
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+
   bool _isColorDark(Color color) {
     // Формула для вычисления яркости (0-1)
     double brightness =
@@ -36,13 +40,32 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
   void initState() {
     super.initState();
     _initThemeColor();
+
+    // Настройка анимации
+    _animationController = AnimationController(
+      vsync: this,
+      duration: AppAnimations.mediumDuration,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
     _loadNotes();
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   void _initThemeColor() {
     try {
       _themeColor = Color(int.parse(widget.theme.color));
     } catch (e) {
+      debugPrint('Ошибка при парсинге цвета темы: $e');
       _themeColor = AppColors.themeColors[0];
     }
   }
@@ -55,19 +78,23 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
     });
 
     try {
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      final themesProvider = Provider.of<ThemesProvider>(
+        context,
+        listen: false,
+      );
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
 
-      // Сначала обновляем все заметки
-      await notesProvider.loadNotes(force: true);
+      // Обновляем данные заметок и тем
+      await Future.wait([
+        notesProvider.loadNotes(force: true),
+        themesProvider.loadThemes(force: true),
+      ]);
 
-      // Затем обновляем все темы, чтобы обновились связи
-      await themesProvider.loadThemes(force: true);
-
-      // После обновления данных, запрашиваем заметки для конкретной темы с принудительным обновлением
-      final notesList = await themesProvider.getNotesForTheme(widget.theme.id,
-          forceRefresh: true);
+      // Запрашиваем заметки для конкретной темы
+      final notesList = await themesProvider.getNotesForTheme(
+        widget.theme.id,
+        forceRefresh: true,
+      );
 
       // Сортировка и установка заметок
       notesList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -78,12 +105,12 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
           _isLoading = false;
         });
 
-        // Уведомляем об успешном обновлении
-        print(
-            'Загружено ${notesList.length} заметок для темы: ${widget.theme.name}');
+        debugPrint(
+          'Загружено ${notesList.length} заметок для темы: ${widget.theme.name}',
+        );
       }
     } catch (e) {
-      print('Критическая ошибка при загрузке заметок темы: $e');
+      debugPrint('Ошибка при загрузке заметок темы: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -94,11 +121,8 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
         // Показываем сообщение об ошибке пользователю
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка загрузки заметок'),
-            action: SnackBarAction(
-              label: 'Повторить',
-              onPressed: _loadNotes,
-            ),
+            content: const Text('Ошибка загрузки заметок'),
+            action: SnackBarAction(label: 'Повторить', onPressed: _loadNotes),
           ),
         );
       }
@@ -109,9 +133,8 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(
-          initialThemeIds: [widget.theme.id],
-        ),
+        builder:
+            (context) => NoteDetailScreen(initialThemeIds: [widget.theme.id]),
       ),
     ).then((_) {
       _loadNotes();
@@ -122,12 +145,11 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ThemeDetailScreen(
-          theme: widget.theme,
-          // Удаляем параметр isEditMode: true
-        ),
+        builder: (context) => ThemeDetailScreen(theme: widget.theme),
       ),
     ).then((_) {
+      // Обновляем цвет темы и список заметок
+      _initThemeColor();
       _loadNotes();
     });
   }
@@ -152,33 +174,36 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
         child: Padding(
           padding: const EdgeInsets.all(6.0), // Отступ для иконки
           child: ClipOval(
-            child: isDark
-                ? ColorFiltered(
-                    colorFilter:
-                        const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                    child: Image.asset(
+            child:
+                isDark
+                    ? ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                      child: Image.asset(
+                        assetName,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.image_not_supported,
+                            color: Colors.white,
+                            size: 24,
+                          );
+                        },
+                      ),
+                    )
+                    : Image.asset(
                       assetName,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return const Icon(
                           Icons.image_not_supported,
-                          color: Colors.white,
+                          color: Colors.black,
                           size: 24,
                         );
                       },
                     ),
-                  )
-                : Image.asset(
-                    assetName,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.image_not_supported,
-                        color: Colors.white,
-                        size: 24,
-                      );
-                    },
-                  ),
           ),
         ),
       ),
@@ -196,22 +221,8 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
 
     return isDark
         ? ColorFiltered(
-            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-            child: Image.asset(
-              assetName,
-              width: 18,
-              height: 18,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(
-                  Icons.image_not_supported,
-                  color: Colors.white,
-                  size: 18,
-                );
-              },
-            ),
-          )
-        : Image.asset(
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          child: Image.asset(
             assetName,
             width: 18,
             height: 18,
@@ -223,7 +234,21 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                 size: 18,
               );
             },
-          );
+          ),
+        )
+        : Image.asset(
+          assetName,
+          width: 18,
+          height: 18,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(
+              Icons.image_not_supported,
+              color: Colors.white,
+              size: 18,
+            );
+          },
+        );
   }
 
   @override
@@ -238,14 +263,28 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
               margin: const EdgeInsets.only(right: 12),
               child: _buildThemeLogo(widget.theme, _themeColor),
             ),
-            Expanded(
-              child: Text('Тема: ${widget.theme.name}'),
-            ),
+            Expanded(child: Text(widget.theme.name)),
           ],
         ),
-        // Удалили покраску AppBar в цвет темы
-        // Теперь используется стандартный цвет приложения
         actions: [
+          // Счетчик заметок в теме
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: _themeColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                _themeNotes.length.toString(),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: _themeColor,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: _editTheme,
@@ -258,28 +297,33 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _hasError
-              ? Center(
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child:
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _hasError
+                ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error_outline,
-                          size: 48, color: Colors.red),
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
                       const SizedBox(height: 16),
                       const Text(
                         'Произошла ошибка',
                         style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Text(
-                          _errorMessage,
-                          textAlign: TextAlign.center,
-                        ),
+                        child: Text(_errorMessage, textAlign: TextAlign.center),
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton(
@@ -289,19 +333,55 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
                     ],
                   ),
                 )
-              : _themeNotes.isEmpty
-                  ? _buildEmptyState()
-                  : _buildNotesInTheme(),
+                : Column(
+                  children: [
+                    // Информация о теме
+                    if (widget.theme.description != null &&
+                        widget.theme.description!.isNotEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        margin: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _themeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _themeColor.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          widget.theme.description!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _themeColor.withOpacity(0.8),
+                          ),
+                        ),
+                      ),
+
+                    // Список заметок
+                    Expanded(
+                      child:
+                          _themeNotes.isEmpty
+                              ? _buildEmptyState()
+                              : _buildNotesInTheme(),
+                    ),
+                  ],
+                ),
+      ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _themeColor,
+        foregroundColor:
+            _isColorDark(_themeColor) ? Colors.white : Colors.black87,
         onPressed: _createNoteInTheme,
         tooltip: 'Создать заметку',
-        child: const Icon(Icons.add, color: Colors.white),
+        child: const Icon(Icons.add),
+        heroTag: 'themeNotesScreenFAB',
       ),
     );
   }
 
-  // Новый метод для построения списка заметок в теме с использованием NoteListWidget
+  // Метод для построения списка заметок в теме с использованием NoteListWidget
   Widget _buildNotesInTheme() {
     return NoteListWidget(
       notes: _themeNotes,
@@ -316,7 +396,7 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
         NoteListAction.edit,
         NoteListAction.favorite,
         NoteListAction.unlinkFromTheme,
-        NoteListAction.delete
+        NoteListAction.delete,
       ],
       onNoteUnlinked: (note) {
         _removeNoteFromTheme(note.id);
@@ -330,9 +410,7 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
       onNoteTap: (note) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => NoteDetailScreen(note: note),
-          ),
+          MaterialPageRoute(builder: (context) => NoteDetailScreen(note: note)),
         ).then((_) {
           _loadNotes();
         });
@@ -348,12 +426,12 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
           Icon(
             Icons.note_alt_outlined,
             size: 80,
-            color: AppColors.secondary.withOpacity(0.5),
+            color: _themeColor.withOpacity(0.5),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'В этой теме пока нет заметок',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            'В теме "${widget.theme.name}" пока нет заметок',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -367,6 +445,11 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
             onPressed: _createNoteInTheme,
             icon: const Icon(Icons.add),
             label: const Text('Создать заметку'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _themeColor,
+              foregroundColor:
+                  _isColorDark(_themeColor) ? Colors.white : Colors.black87,
+            ),
           ),
         ],
       ),
@@ -374,13 +457,45 @@ class _ThemeNotesScreenState extends State<ThemeNotesScreen> {
   }
 
   Future<void> _removeNoteFromTheme(String noteId) async {
-    if (widget.theme != null) {
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
-      await themesProvider.unlinkNoteFromTheme(widget.theme.id, noteId);
+    final themesProvider = Provider.of<ThemesProvider>(context, listen: false);
 
-      // Перезагружаем заметки темы
-      _loadNotes();
+    try {
+      // Используем правильный метод из провайдера тем
+      final success = await themesProvider.removeNoteFromTheme(
+        noteId,
+        widget.theme.id,
+      );
+
+      if (success) {
+        // Перезагружаем заметки темы
+        _loadNotes();
+
+        // Сообщаем пользователю об успешном удалении
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Заметка отвязана от темы'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Не удалось отвязать заметку от темы'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Ошибка при отвязке заметки от темы: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+      }
     }
   }
 }

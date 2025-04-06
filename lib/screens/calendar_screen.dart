@@ -61,16 +61,18 @@ class CalendarScreen extends StatefulWidget {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            NoteDetailScreen(initialDate: date),
+        pageBuilder:
+            (context, animation, secondaryAnimation) =>
+                NoteDetailScreen(initialDate: date),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           var begin = const Offset(0.0, 1.0);
           var end = Offset.zero;
           var curve = Curves.easeOutQuint;
 
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
 
           return SlideTransition(
             position: animation.drive(tween),
@@ -172,8 +174,10 @@ class _CalendarScreenState extends State<CalendarScreen>
     try {
       // Загружаем заметки и темы
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-      final themesProvider =
-          Provider.of<ThemesProvider>(context, listen: false);
+      final themesProvider = Provider.of<ThemesProvider>(
+        context,
+        listen: false,
+      );
 
       // Принудительно загружаем данные из базы данных
       await notesProvider.loadNotes(force: true);
@@ -197,10 +201,7 @@ class _CalendarScreenState extends State<CalendarScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка при загрузке данных: $e'),
-            action: SnackBarAction(
-              label: 'Повторить',
-              onPressed: _loadData,
-            ),
+            action: SnackBarAction(label: 'Повторить', onPressed: _loadData),
           ),
         );
       }
@@ -313,7 +314,9 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   // Группировка заметок по темам для отображения индикаторов
   Map<String, List<Note>> _groupNotesByTheme(
-      BuildContext context, List<Note> dayNotes) {
+    BuildContext context,
+    List<Note> dayNotes,
+  ) {
     Map<String, List<Note>> themeGroups = {};
 
     // Сначала обрабатываем заметки с темами
@@ -338,7 +341,9 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   // Отображение индикаторов по темам
   Widget _buildDayIndicatorsGroupedByThemes(
-      BuildContext context, List<Note> dayNotes) {
+    BuildContext context,
+    List<Note> dayNotes,
+  ) {
     // Группируем заметки по темам
     final themeGroups = _groupNotesByTheme(context, dayNotes);
 
@@ -356,18 +361,21 @@ class _CalendarScreenState extends State<CalendarScreen>
         indicatorColor = Colors.black;
       } else {
         // Получаем цвет из темы
-        final themesProvider =
-            Provider.of<ThemesProvider>(context, listen: false);
+        final themesProvider = Provider.of<ThemesProvider>(
+          context,
+          listen: false,
+        );
         final theme = themesProvider.themes.firstWhere(
           (t) => t.id == themeId,
-          orElse: () => NoteTheme(
-            id: '',
-            name: '',
-            color: AppColors.themeColors[0].value.toString(),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-            noteIds: [],
-          ),
+          orElse:
+              () => NoteTheme(
+                id: '',
+                name: '',
+                color: AppColors.themeColors[0].value.toString(),
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                noteIds: [],
+              ),
         );
 
         try {
@@ -392,12 +400,13 @@ class _CalendarScreenState extends State<CalendarScreen>
               decoration: BoxDecoration(
                 color: indicatorColor,
                 shape: BoxShape.circle,
-                border: indicatorColor == Colors.black
-                    ? Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 0.5,
-                      )
-                    : null,
+                border:
+                    indicatorColor == Colors.black
+                        ? Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 0.5,
+                        )
+                        : null,
               ),
             ),
           );
@@ -409,9 +418,7 @@ class _CalendarScreenState extends State<CalendarScreen>
             width: 6,
             height: 6,
             margin: const EdgeInsets.only(right: 2),
-            child: CustomPaint(
-              painter: TrianglePainter(color: indicatorColor),
-            ),
+            child: CustomPaint(painter: TrianglePainter(color: indicatorColor)),
           ),
         );
       } else {
@@ -425,12 +432,13 @@ class _CalendarScreenState extends State<CalendarScreen>
               decoration: BoxDecoration(
                 color: indicatorColor,
                 shape: BoxShape.circle,
-                border: indicatorColor == Colors.black
-                    ? Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 0.5,
-                      )
-                    : null,
+                border:
+                    indicatorColor == Colors.black
+                        ? Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 0.5,
+                        )
+                        : null,
               ),
             ),
           );
@@ -438,12 +446,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       }
 
       // Добавляем строку индикаторов для этой темы
-      themeRows.add(
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: indicators,
-        ),
-      );
+      themeRows.add(Row(mainAxisSize: MainAxisSize.min, children: indicators));
     });
 
     // Компактно размещаем строки индикаторов
@@ -470,9 +473,10 @@ class _CalendarScreenState extends State<CalendarScreen>
                 AnimatedContainer(
                   duration: AppAnimations.mediumDuration,
                   curve: Curves.easeInOut,
-                  height: _isCalendarExpanded
-                      ? responsive.calendarHeight + responsive.statsHeight
-                      : 0,
+                  height:
+                      _isCalendarExpanded
+                          ? responsive.calendarHeight + responsive.statsHeight
+                          : 0,
                   child: SingleChildScrollView(
                     physics: const NeverScrollableScrollPhysics(),
                     child: Column(
@@ -492,8 +496,9 @@ class _CalendarScreenState extends State<CalendarScreen>
                                   builder: (context, notesProvider, _) {
                                     // Обновляем события при изменении данных в провайдере
                                     _processEvents(notesProvider.notes);
-                                    _selectedEvents =
-                                        _getEventsForDay(_selectedDay);
+                                    _selectedEvents = _getEventsForDay(
+                                      _selectedDay,
+                                    );
                                     return _buildGridCalendar(notesProvider);
                                   },
                                 ),
@@ -546,13 +551,15 @@ class _CalendarScreenState extends State<CalendarScreen>
                       Text(
                         'Заметки на ${DateFormat('d MMMM').format(_selectedDay)}',
                         style: TextStyle(
-                            fontSize: responsive.isSmallScreen ? 14 : 16,
-                            fontWeight: FontWeight.w500),
+                          fontSize: responsive.isSmallScreen ? 14 : 16,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       Container(
                         padding: EdgeInsets.symmetric(
-                            horizontal: responsive.isSmallScreen ? 6 : 8,
-                            vertical: responsive.isSmallScreen ? 1 : 2),
+                          horizontal: responsive.isSmallScreen ? 6 : 8,
+                          vertical: responsive.isSmallScreen ? 1 : 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.accentSecondary.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
@@ -572,18 +579,20 @@ class _CalendarScreenState extends State<CalendarScreen>
 
                 // Список заметок для выбранного дня
                 Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : Consumer<NotesProvider>(
-                          builder: (context, notesProvider, _) {
-                            // Обновляем выбранные события при изменении данных
-                            _selectedEvents = _getEventsForDay(_selectedDay);
-                            final noteListKey = ValueKey<String>(
-                                'notes_for_${_selectedDay.toString()}_${notesProvider.notes.length}');
+                  child:
+                      _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : Consumer<NotesProvider>(
+                            builder: (context, notesProvider, _) {
+                              // Обновляем выбранные события при изменении данных
+                              _selectedEvents = _getEventsForDay(_selectedDay);
+                              final noteListKey = ValueKey<String>(
+                                'notes_for_${_selectedDay.toString()}_${notesProvider.notes.length}',
+                              );
 
-                            return _selectedEvents.isEmpty
-                                ? _buildEmptyDateView()
-                                : NoteListWidget(
+                              return _selectedEvents.isEmpty
+                                  ? _buildEmptyDateView()
+                                  : NoteListWidget(
                                     key: noteListKey,
                                     notes: _selectedEvents,
                                     emptyMessage:
@@ -598,14 +607,15 @@ class _CalendarScreenState extends State<CalendarScreen>
                                       if (mounted) {
                                         setState(() {
                                           _processEvents(notesProvider.notes);
-                                          _selectedEvents =
-                                              _getEventsForDay(_selectedDay);
+                                          _selectedEvents = _getEventsForDay(
+                                            _selectedDay,
+                                          );
                                         });
                                       }
                                     },
                                   );
-                          },
-                        ),
+                            },
+                          ),
                 ),
               ],
             );
@@ -653,7 +663,8 @@ class _CalendarScreenState extends State<CalendarScreen>
                 scale: 1.0 - (_pageChangeAnimation.value * 0.1),
                 child: AnimatedOpacity(
                   // Используем AnimatedOpacity вместо Opacity
-                  opacity: 1.0 -
+                  opacity:
+                      1.0 -
                       (_pageChangeAnimation.value *
                           0.5), // Ограничиваем минимальную прозрачность до 0.5
                   duration: const Duration(milliseconds: 100),
@@ -704,9 +715,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       // Устанавливаем понедельник первым днем недели
       startingDayOfWeek: StartingDayOfWeek.monday,
 
-      availableCalendarFormats: const {
-        CalendarFormat.month: 'Месяц',
-      },
+      availableCalendarFormats: const {CalendarFormat.month: 'Месяц'},
       selectedDayPredicate: (day) {
         return isSameDay(_selectedDay, day);
       },
@@ -817,17 +826,19 @@ class _CalendarScreenState extends State<CalendarScreen>
     final isWeekend = day.weekday == 6 || day.weekday == 7 || day.weekday == 0;
 
     // Определяем цвет текста для дня
-    final dayTextColor = isOutside
-        ? Colors.grey.withOpacity(0.5)
-        : isSelected
+    final dayTextColor =
+        isOutside
+            ? Colors.grey.withOpacity(0.5)
+            : isSelected
             ? Colors.white
             : isToday
-                ? Colors.white
-                : isWeekend
-                    ? Colors.white
-                    : isWeekend
-                        ? AppColors.accentPrimary // Рыжий цвет для выходных
-                        : AppColors.textOnDark;
+            ? Colors.white
+            : isWeekend
+            ? Colors.white
+            : isWeekend
+            ? AppColors
+                .accentPrimary // Рыжий цвет для выходных
+            : AppColors.textOnDark;
 
     return Stack(
       children: [
@@ -852,17 +863,19 @@ class _CalendarScreenState extends State<CalendarScreen>
             decoration: BoxDecoration(
               border: Border(
                 left: BorderSide(
-                  color: isOutside
-                      ? Colors.grey.withOpacity(0.4)
-                      : isSelected || isToday
+                  color:
+                      isOutside
+                          ? Colors.grey.withOpacity(0.4)
+                          : isSelected || isToday
                           ? Colors.white.withOpacity(0.8)
                           : Colors.white.withOpacity(0.5),
                   width: isSelected || isToday ? 1.0 : 0.5,
                 ),
                 bottom: BorderSide(
-                  color: isOutside
-                      ? Colors.grey.withOpacity(0.4)
-                      : isSelected || isToday
+                  color:
+                      isOutside
+                          ? Colors.grey.withOpacity(0.4)
+                          : isSelected || isToday
                           ? Colors.white.withOpacity(0.8)
                           : Colors.white.withOpacity(0.5),
                   width: isSelected || isToday ? 1.0 : 0.5,
@@ -900,10 +913,11 @@ class _CalendarScreenState extends State<CalendarScreen>
     final notes = notesProvider.notes;
 
     // Фильтруем заметки по текущему месяцу
-    final currentMonthNotes = notes.where((note) {
-      return note.createdAt.year == _focusedDay.year &&
-          note.createdAt.month == _focusedDay.month;
-    }).toList();
+    final currentMonthNotes =
+        notes.where((note) {
+          return note.createdAt.year == _focusedDay.year &&
+              note.createdAt.month == _focusedDay.month;
+        }).toList();
 
     // Считаем количество задач с дедлайнами
     final tasksNotes =
@@ -915,8 +929,9 @@ class _CalendarScreenState extends State<CalendarScreen>
 
     return Container(
       margin: EdgeInsets.symmetric(
-          horizontal: responsive.horizontalPadding,
-          vertical: responsive.isSmallScreen ? 1.0 : 2.0),
+        horizontal: responsive.horizontalPadding,
+        vertical: responsive.isSmallScreen ? 1.0 : 2.0,
+      ),
       height: responsive.isSmallScreen ? 35.0 : 40.0, // Фиксированная высота
       child: Row(
         children: [
@@ -930,8 +945,9 @@ class _CalendarScreenState extends State<CalendarScreen>
               ),
               child: Container(
                 padding: EdgeInsets.symmetric(
-                    vertical: responsive.verticalPadding,
-                    horizontal: responsive.horizontalPadding2),
+                  vertical: responsive.verticalPadding,
+                  horizontal: responsive.horizontalPadding2,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -1015,8 +1031,9 @@ class _CalendarScreenState extends State<CalendarScreen>
                 ),
                 child: Container(
                   padding: EdgeInsets.symmetric(
-                      vertical: responsive.verticalPadding,
-                      horizontal: responsive.horizontalPadding2),
+                    vertical: responsive.verticalPadding,
+                    horizontal: responsive.horizontalPadding2,
+                  ),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1101,8 +1118,9 @@ class _CalendarScreenState extends State<CalendarScreen>
                 ),
                 child: Container(
                   padding: EdgeInsets.symmetric(
-                      vertical: responsive.verticalPadding,
-                      horizontal: responsive.horizontalPadding2),
+                    vertical: responsive.verticalPadding,
+                    horizontal: responsive.horizontalPadding2,
+                  ),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1168,27 +1186,17 @@ class _CalendarScreenState extends State<CalendarScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.event_note,
-            size: 80,
-            color: Colors.grey,
-          ),
+          const Icon(Icons.event_note, size: 80, color: Colors.grey),
           const SizedBox(height: 16),
           Text(
             'Нет заметок на ${DateFormat('d MMMM yyyy').format(_selectedDay)}',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           const Text(
             'Создайте заметку, чтобы она появилась здесь',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF213E60),
-            ),
+            style: TextStyle(fontSize: 14, color: Color(0xFF213E60)),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1200,9 +1208,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   void _viewNoteDetails(Note note) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(note: note),
-      ),
+      MaterialPageRoute(builder: (context) => NoteDetailScreen(note: note)),
     ).then((_) {
       // После возврата принудительно обновляем данные
       _loadData();
@@ -1217,10 +1223,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       onPressed: () {
         _showAddNoteWithDate(_selectedDay);
       },
-      child: const Icon(
-        Icons.add,
-        color: Colors.white,
-      ),
+      child: const Icon(Icons.add, color: Colors.white),
     );
   }
 
@@ -1229,16 +1232,18 @@ class _CalendarScreenState extends State<CalendarScreen>
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            NoteDetailScreen(initialDate: date),
+        pageBuilder:
+            (context, animation, secondaryAnimation) =>
+                NoteDetailScreen(initialDate: date),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           var begin = const Offset(0.0, 1.0);
           var end = Offset.zero;
           var curve = Curves.easeOutQuint;
 
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
 
           return SlideTransition(
             position: animation.drive(tween),
@@ -1259,8 +1264,10 @@ class _CalendarScreenState extends State<CalendarScreen>
         // Затем обновляем UI и список выбранных заметок
         setState(() {
           // Обновляем список выбранных заметок для текущей даты
-          final notesProvider =
-              Provider.of<NotesProvider>(context, listen: false);
+          final notesProvider = Provider.of<NotesProvider>(
+            context,
+            listen: false,
+          );
           _processEvents(notesProvider.notes);
           _selectedEvents = _getEventsForDay(_selectedDay);
         });
@@ -1277,9 +1284,10 @@ class TrianglePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
+    final Paint paint =
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill;
 
     final Path path = Path();
     // Рисуем треугольник, повернутый вершиной влево
@@ -1329,23 +1337,26 @@ class GridCellPainter extends CustomPainter {
     }
 
     // Рисуем основной фон ячейки
-    final Paint backgroundPaint = Paint()
-      ..color = backgroundColor
-      ..style = PaintingStyle.fill;
+    final Paint backgroundPaint =
+        Paint()
+          ..color = backgroundColor
+          ..style = PaintingStyle.fill;
     canvas.drawRect(Rect.fromLTWH(0, 0, width, height), backgroundPaint);
 
     // Рисуем тепловую карту поверх основного фона
     if (heatmapColor != Colors.transparent) {
-      final Paint heatmapPaint = Paint()
-        ..color = heatmapColor
-        ..style = PaintingStyle.fill;
+      final Paint heatmapPaint =
+          Paint()
+            ..color = heatmapColor
+            ..style = PaintingStyle.fill;
       canvas.drawRect(Rect.fromLTWH(0, 0, width, height), heatmapPaint);
     }
 
     // Рисуем границы ячейки
-    final Paint borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.4)
-      ..strokeWidth = 1.0;
+    final Paint borderPaint =
+        Paint()
+          ..color = Colors.white.withOpacity(0.4)
+          ..strokeWidth = 1.0;
 
     // Если это выбранная ячейка или сегодняшний день, делаем границы более яркими
     if (isSelected || isToday) {
@@ -1356,10 +1367,16 @@ class GridCellPainter extends CustomPainter {
     // Внешние границы ячейки
     canvas.drawLine(Offset(0, 0), Offset(width, 0), borderPaint); // Верхняя
     canvas.drawLine(
-        Offset(0, height), Offset(width, height), borderPaint); // Нижняя
+      Offset(0, height),
+      Offset(width, height),
+      borderPaint,
+    ); // Нижняя
     canvas.drawLine(Offset(0, 0), Offset(0, height), borderPaint); // Левая
     canvas.drawLine(
-        Offset(width, 0), Offset(width, height), borderPaint); // Правая
+      Offset(width, 0),
+      Offset(width, height),
+      borderPaint,
+    ); // Правая
   }
 
   @override
