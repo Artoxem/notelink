@@ -5,8 +5,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
-import 'package:flutter_quill/quill_delta.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_quill/quill_delta.dart' as quill_delta;
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import 'package:path/path.dart' as path;
 import 'package:image_picker/image_picker.dart';
@@ -14,19 +13,32 @@ import '../services/media_service.dart';
 import '../providers/app_provider.dart';
 import '../utils/constants.dart';
 import 'voice_record_button.dart';
-import '../utils/delta_utils.dart';
-import 'package:flutter_quill/flutter_quill.dart' hide Text;
-import 'package:flutter_quill/flutter_quill.dart';
+import 'package:provider/provider.dart';
 
-// Виджет-обёртка для Flutter Quill
+/// Виджет-обёртка для Flutter Quill с расширенным функционалом
 class QuillEditorWrapper extends StatefulWidget {
+  /// Контроллер текста для синхронизации с внешним состоянием
   final TextEditingController controller;
+
+  /// Узел фокуса для редактора
   final FocusNode? focusNode;
+
+  /// Текст-заполнитель при пустом редакторе
   final String? placeholder;
+
+  /// Автоматическая фокусировка при создании
   final bool autofocus;
+
+  /// Обратный вызов при изменении содержимого
   final ValueChanged<String>? onChanged;
+
+  /// Режим только для чтения
   final bool readOnly;
+
+  /// Высота редактора
   final double? height;
+
+  /// Обратный вызов при добавлении медиафайла
   final Function(String mediaPath)? onMediaAdded;
 
   const QuillEditorWrapper({
@@ -41,35 +53,34 @@ class QuillEditorWrapper extends StatefulWidget {
     this.onMediaAdded,
   }) : super(key: key);
 
-  // Возвращает QuillController для внешнего доступа
-  QuillController? getQuillController() {
-    return _quillController;
-  }
-
-  // Получаем текущее состояние виджета
-  QuillEditorWrapperState? get currentState {
-    return GlobalObjectKey(this).currentState as QuillEditorWrapperState?;
-  }
-
   @override
   State<QuillEditorWrapper> createState() => QuillEditorWrapperState();
 }
 
 class QuillEditorWrapperState extends State<QuillEditorWrapper>
     with TickerProviderStateMixin {
-  // Объявляем _quillController как переменную экземпляра класса
+  /// Контроллер Quill для управления редактором
   late QuillController _quillController;
 
+  /// Узел фокуса
   late FocusNode _focusNode;
+
+  /// Флаг режима фокусировки
   bool _isFocusMode = false;
+
+  /// Флаг загрузки
   bool _isLoading = false;
+
+  /// Флаг инициализации
   bool _isInitialized = false;
 
-  // Подписка на изменения документа
+  /// Подписка на изменения документа
   StreamSubscription? _documentChangesSubscription;
 
-  // Контроллер анимации для режима фокусировки
+  /// Контроллер анимации для режима фокусировки
   late AnimationController _focusModeController;
+
+  /// Анимация режима фокусировки
   late Animation<double> _focusModeAnimation;
 
   @override
@@ -77,12 +88,13 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     super.initState();
     _focusNode = widget.focusNode ?? FocusNode();
 
-    // Инициализируем контроллер
+    // Инициализируем контроллер Quill с базовым документом
     _quillController = QuillController.basic();
 
     // Добавляем слушатель фокуса для эффектов UI
     _focusNode.addListener(_handleFocusChange);
 
+    // Инициализируем редактор с данными из контроллера
     _initQuillEditor();
 
     // Инициализация контроллера анимации
@@ -97,43 +109,44 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     );
   }
 
-  // Метод для доступа к контроллеру извне
-  QuillController? getQuillController() {
+  /// Метод для доступа к контроллеру извне
+  QuillController getQuillController() {
     return _quillController;
   }
 
+  /// Инициализация редактора с данными из TextEditingController
   Future<void> _initQuillEditor() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Получаем текст из контроллера
       final jsonText = widget.controller.text;
 
       if (jsonText.isNotEmpty) {
         try {
-          // Декодируем JSON
+          // Попытка декодировать JSON
           final dynamic decodedJson = json.decode(jsonText);
 
-          // Обрабатываем разные форматы Delta JSON
+          // Обработка разных форматов Delta JSON
           if (decodedJson is Map<String, dynamic> &&
               decodedJson.containsKey('ops')) {
             // Стандартный формат с 'ops'
+            final deltaJson = decodedJson['ops'] as List;
+            final delta = Delta.fromJson(deltaJson);
             _quillController = QuillController(
-              document: Document.fromJson(decodedJson),
+              document: Document.fromDelta(delta),
               selection: const TextSelection.collapsed(offset: 0),
             );
           } else if (decodedJson is List) {
-            // Список операций без 'ops'
+            // Список операций без обертки 'ops'
+            final delta = Delta.fromJson(decodedJson as List);
             _quillController = QuillController(
-              document: Document.fromJson({'ops': decodedJson}),
+              document: Document.fromDelta(delta),
               selection: const TextSelection.collapsed(offset: 0),
             );
           } else {
             // Неизвестный формат - оставляем пустой контроллер
-
-            // Если это текст, добавляем его в документ
             if (decodedJson is String) {
               _quillController.document.insert(0, decodedJson);
             }
@@ -170,6 +183,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
+  /// Настройка слушателя изменений документа
   void _setupDocumentListener() {
     // Отменяем предыдущую подписку, если она была
     _documentChangesSubscription?.cancel();
@@ -181,6 +195,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
       try {
         // Получаем Delta в формате JSON
         final delta = _quillController.document.toDelta();
+
         // Преобразуем в JSON строку
         final deltaJson = jsonEncode({'ops': delta.toJson()});
 
@@ -232,7 +247,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     super.dispose();
   }
 
-  // Исправленный метод для выбора изображения
+  /// Выбор изображения из галереи
   Future<void> _onImageButtonPressed() async {
     final ImagePicker picker = ImagePicker();
 
@@ -257,141 +272,26 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Вспомогательный метод для создания QuillController из JSON
-  Future<QuillController?> _createQuillControllerFromJson(
-    String jsonText,
-  ) async {
-    try {
-      // Декодируем JSON
-      final decodedJson = json.decode(jsonText);
-
-      // Обрабатываем разные форматы Delta JSON
-      if (decodedJson is Map<String, dynamic>) {
-        // Формат с ключом 'ops'
-        if (decodedJson.containsKey('ops')) {
-          return QuillController(
-            document: Document.fromJson(decodedJson),
-            selection: const TextSelection.collapsed(offset: 0),
-          );
-        }
-        // Другие форматы Map, которые не содержат 'ops'
-        else {
-          debugPrint('JSON в неизвестном формате Map без ключа ops');
-          return null;
-        }
-      }
-      // Если это список операций без обертки 'ops'
-      else if (decodedJson is List) {
-        // Создаем правильный формат с ключом 'ops'
-        final correctJson = {'ops': decodedJson};
-        return QuillController(
-          document: Document.fromJson(correctJson),
-          selection: const TextSelection.collapsed(offset: 0),
-        );
-      }
-      // Если это строка или другой формат
-      else if (decodedJson is String) {
-        final controller = QuillController.basic();
-        controller.document.insert(0, decodedJson);
-        return controller;
-      }
-      // Неизвестный формат
-      else {
-        debugPrint('Неизвестный формат JSON: ${decodedJson.runtimeType}');
-        return null;
-      }
-    } catch (e) {
-      debugPrint('Ошибка при создании QuillController из JSON: $e');
-      return null;
-    }
-  }
-
+  /// Обновление редактора при изменении внешнего контроллера
   @override
   void didUpdateWidget(QuillEditorWrapper oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    print('didUpdateWidget вызван в QuillEditorWrapper');
-    print('Содержимое виджета: ${widget.controller.text.length} символов');
-    print('Содержимое редактора: ${_quillController.document.length} операций');
-
     // Обновляем фокус при изменении виджета
     if (widget.focusNode != oldWidget.focusNode) {
-      print('Фокус узел изменился, обновляем...');
       _focusNode.removeListener(_handleFocusChange);
       _focusNode = widget.focusNode ?? FocusNode();
       _focusNode.addListener(_handleFocusChange);
     }
 
     // Проверяем, изменился ли контент в TextEditingController
-    if (_quillController != null && widget.controller.text.isNotEmpty) {
-      try {
-        // Пытаемся получить текущую дельту документа и сравнить с контроллером
-        final delta = _quillController.document.toDelta();
-        final currentJson = jsonEncode(delta.toJson());
-
-        // Если JSON отличается, обновляем документ
-        if (widget.controller.text != currentJson) {
-          print('Контент изменился, обновляем редактор из контроллера');
-          print(
-            'Контроллер: ${widget.controller.text.substring(0, min(50, widget.controller.text.length))}...',
-          );
-          print(
-            'Редактор: ${currentJson.substring(0, min(50, currentJson.length))}...',
-          );
-          _updateQuillFromController();
-        } else {
-          print('Контент не изменился, пропускаем обновление');
-        }
-      } catch (e) {
-        print('Ошибка сравнения содержимого Quill: $e');
-        // В случае ошибки обновляем содержимое
-        _updateQuillFromController();
-      }
-    } else if (widget.controller.text.isEmpty &&
-        _quillController.document.length > 0) {
-      print(
-        'ВНИМАНИЕ: Контроллер пуст, но документ не пуст - проверяем состояние',
-      );
-      // Проверить, был ли контроллер изначально пуст или его содержимое было стерто
-      final isPreviousEmpty = oldWidget.controller.text.isEmpty;
-      print('Предыдущее содержимое контроллера пусто: $isPreviousEmpty');
-
-      if (isPreviousEmpty) {
-        // Если контроллер был пуст изначально, то это нормальная ситуация - документ еще не синхронизирован
-        print('Контроллер был пуст изначально, пропускаем очистку документа');
-
-        // Вместо этого, сохраняем содержимое документа в контроллер
-        try {
-          final delta = _quillController.document.toDelta();
-          final deltaJson = jsonEncode(delta.toJson());
-          print(
-            'Синхронизируем контроллер с документом: ${deltaJson.length} символов',
-          );
-          widget.controller.text = deltaJson;
-        } catch (e) {
-          print('Ошибка при сохранении документа в контроллер: $e');
-        }
-      } else {
-        // Если контроллер не был пуст раньше, но стал пустым - что-то пошло не так
-        // Например, могла произойти ошибка обновления контроллера или стирание текста при потере фокуса
-        print('Контроллер внезапно стал пустым! Предотвращаем потерю данных.');
-
-        // Сохраняем содержимое документа в контроллер вместо очистки документа
-        try {
-          final delta = _quillController.document.toDelta();
-          final deltaJson = jsonEncode(delta.toJson());
-          print(
-            'Восстанавливаем контроллер из документа: ${deltaJson.length} символов',
-          );
-          widget.controller.text = deltaJson;
-        } catch (e) {
-          print('Ошибка при сохранении документа в контроллер: $e');
-        }
-      }
+    if (widget.controller.text.isNotEmpty &&
+        widget.controller.text != oldWidget.controller.text) {
+      _updateQuillFromController();
     }
   }
 
-  // Обработчик выбора и вставки файла
+  /// Выбор и вставка файла
   Future<void> _onFileButtonPressed() async {
     final MediaService mediaService = MediaService();
 
@@ -426,21 +326,19 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Метод для вставки изображения
+  /// Вставка изображения в редактор
   void _insertImage(String imagePath) {
-    if (_quillController == null) return;
-
-    final index = _quillController!.selection.baseOffset;
+    final index = _quillController.selection.baseOffset;
     final correctedIndex = index < 0 ? 0 : index;
 
     // Вставляем изображение как embedded объект
-    _quillController!.document.insert(
+    _quillController.document.insert(
       correctedIndex,
       BlockEmbed.image(imagePath),
     );
 
-    // Добавляем перевод строки после изображения для удобства редактирования
-    _quillController!.document.insert(correctedIndex + 1, '\n');
+    // Добавляем перевод строки после изображения
+    _quillController.document.insert(correctedIndex + 1, '\n');
 
     // Уведомляем родительский виджет
     if (widget.onMediaAdded != null) {
@@ -448,35 +346,32 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Метод для вставки файла (не изображения)
+  /// Вставка файла (не изображения) в редактор
   void _insertCustomFile(String filePath) {
-    if (_quillController == null) return;
-
-    final index = _quillController!.selection.baseOffset;
+    final index = _quillController.selection.baseOffset;
     final correctedIndex = index < 0 ? 0 : index;
 
     // Вставляем описание файла с ссылкой
     final fileName = path.basename(filePath);
-    final fileExtension = path.extension(filePath).toLowerCase();
 
     // Создаем форматированный текст для ссылки на файл
-    _quillController!.document.insert(correctedIndex, '[Файл: $fileName]');
+    _quillController.document.insert(correctedIndex, '[Файл: $fileName]');
 
     // Форматируем как ссылку
-    _quillController!.formatText(
+    _quillController.formatText(
       correctedIndex,
       fileName.length + 8, // длина текста [Файл: $fileName]
       LinkAttribute(filePath),
     );
 
     // Добавляем перевод строки
-    _quillController!.document.insert(
+    _quillController.document.insert(
       correctedIndex + fileName.length + 8,
       '\n',
     );
   }
 
-  // Метод для открытия файла
+  /// Открытие файла во внешнем приложении
   Future<void> _openFile(String filePath) async {
     try {
       final file = File(filePath);
@@ -496,7 +391,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Отображение сообщения об ошибке
+  /// Отображение сообщения об ошибке
   void _showErrorMessage(String message) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -505,7 +400,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Метод для обновления содержимого Quill из TextEditingController
+  /// Обновление содержимого Quill из TextEditingController
   Future<void> _updateQuillFromController() async {
     try {
       final content = widget.controller.text;
@@ -529,21 +424,19 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
       // Проверяем, правильный ли это формат Delta JSON
       if (jsonData is Map<String, dynamic> && jsonData.containsKey('ops')) {
         // Если это корректный формат с ключом 'ops'
-        final delta = Delta.fromJson(jsonData['ops'] as List);
+        final delta = quill_delta.Delta.fromJson(jsonData['ops'] as List);
         _quillController.document = Document.fromDelta(delta);
         debugPrint('Документ успешно обновлен из Delta (с ключом ops)');
       } else if (jsonData is List) {
-        // Если это просто массив операций, обернем его в правильный формат с ключом 'ops'
-        final delta = Delta.fromJson(jsonData);
+        // Если это просто массив операций
+        final delta = quill_delta.Delta.fromJson(jsonData);
         _quillController.document = Document.fromDelta(delta);
 
         // Преобразуем в правильный формат для следующего использования
         final correctedJson = {'ops': jsonData};
         widget.controller.text = jsonEncode(correctedJson);
 
-        debugPrint(
-          'Документ успешно обновлен из Delta (из списка операций) и формат исправлен',
-        );
+        debugPrint('Документ успешно обновлен из Delta (из списка операций)');
       } else {
         // Если это неизвестный формат, создаем документ с текстом
         debugPrint('Неподдерживаемый формат JSON, вставляем как текст');
@@ -564,14 +457,13 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
       );
     } catch (e) {
       debugPrint('Ошибка при обновлении Quill из контроллера: $e');
-      debugPrint('Пытаемся вставить текст напрямую без разбора JSON');
 
       try {
         // В случае ошибки просто вставляем текст
         _quillController.document =
             Document()..insert(0, widget.controller.text);
 
-        // Обновляем контроллер
+        // Обновляем контроллер с правильным форматом
         final plainText = _quillController.document.toPlainText();
         final ops = [
           {'insert': plainText},
@@ -584,98 +476,42 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Обновление при изменении документа
-  void _updateControllerFromQuill() {
-    try {
-      final delta = _quillController.document.toDelta();
-      final deltaJson = jsonEncode({'ops': delta.toJson()});
-
-      debugPrint('Изменение в документе: ${delta.length} операций');
-      final plainText = _quillController.document.toPlainText().trim();
-      debugPrint(
-        'Текущий текст: ${plainText.substring(0, min(50, plainText.length))}',
-      );
-
-      // Проверяем отличается ли текущий контент от сохраненного
-      if (widget.controller.text != deltaJson) {
-        debugPrint('Обновление контроллера текста с JSON Delta');
-
-        // Обновляем контроллер с правильным форматом Delta JSON
-        widget.controller.text = deltaJson;
-
-        // Вызываем колбэк, если он предоставлен
-        if (widget.onChanged != null) {
-          widget.onChanged!(deltaJson);
-        }
-      }
-    } catch (e) {
-      debugPrint('Ошибка при обновлении контроллера: $e');
-
-      try {
-        // В случае ошибки создаем базовую Delta с текстом
-        final plainText = _quillController.document.toPlainText();
-        final ops = [
-          {'insert': plainText},
-        ];
-        final basicDeltaJson = jsonEncode({'ops': ops});
-
-        if (widget.controller.text != basicDeltaJson) {
-          widget.controller.text = basicDeltaJson;
-
-          if (widget.onChanged != null) {
-            widget.onChanged!(basicDeltaJson);
-          }
-        }
-      } catch (backupError) {
-        debugPrint('Не удалось создать резервную копию Delta: $backupError');
-      }
-    }
-  }
-
-  // Обработчик изменения фокуса
+  /// Обработчик изменения фокуса
   void _handleFocusChange() {
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     final hasFocus = _focusNode.hasFocus;
 
-    // Когда редактор теряет фокус, принудительно синхронизируем состояние с контроллером
+    // Когда редактор теряет фокус, принудительно синхронизируем состояние
     if (!hasFocus && _quillController.document.length > 0) {
       try {
         final delta = _quillController.document.toDelta();
-        final deltaJson = jsonEncode(delta.toJson());
-        final plainText = _quillController.document.toPlainText();
-
-        print('Потеря фокуса: документ длиной ${plainText.length} символов');
+        final deltaJson = jsonEncode({'ops': delta.toJson()});
 
         // Обновляем контроллер только если он отличается от текущего содержимого
         if (widget.controller.text != deltaJson) {
-          print('Синхронизация при потере фокуса: обновляем контроллер');
           widget.controller.text = deltaJson;
 
           if (widget.onChanged != null) {
             widget.onChanged!(deltaJson);
-            print('Вызвано событие onChanged после синхронизации');
           }
-        } else {
-          print('Текст контроллера не изменился при потере фокуса');
         }
       } catch (e) {
-        print('Ошибка синхронизации при потере фокуса: $e');
-        // При ошибке декодирования JSON пытаемся сохранить хотя бы простой текст
+        debugPrint('Ошибка синхронизации при потере фокуса: $e');
+
+        // При ошибке пытаемся сохранить хотя бы простой текст
         try {
           final plainText = _quillController.document.toPlainText();
-          print(
-            'Сохранение простого текста после ошибки: ${plainText.length} символов',
-          );
           if (plainText.isNotEmpty && widget.controller.text != plainText) {
             widget.controller.text = plainText;
 
             if (widget.onChanged != null) {
               widget.onChanged!(plainText);
-              print('Вызвано событие onChanged с обычным текстом');
             }
           }
         } catch (secondaryError) {
-          print('Не удалось сохранить даже простой текст: $secondaryError');
+          debugPrint(
+            'Не удалось сохранить даже простой текст: $secondaryError',
+          );
         }
       }
     }
@@ -684,7 +520,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
       _isFocusMode = hasFocus;
     });
 
-    // Активируем режим фокусировки только если фокус на редакторе и включена опция в настройках
+    // Активируем режим фокусировки только если фокус на редакторе
     if (hasFocus && appProvider.enableFocusMode) {
       _focusModeController.forward();
     } else {
@@ -744,87 +580,104 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Панель для кнопок прикрепления файлов
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.cardBackground,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(
-                              AppDimens.buttonBorderRadius,
+                      if (!widget.readOnly)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBackground,
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(
+                                AppDimens.buttonBorderRadius,
+                              ),
+                              topRight: Radius.circular(
+                                AppDimens.buttonBorderRadius,
+                              ),
                             ),
-                            topRight: Radius.circular(
-                              AppDimens.buttonBorderRadius,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12.0,
+                              vertical: 8.0,
+                            ),
+                            child: Row(
+                              children: [
+                                // Кнопка прикрепления фото
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: _onImageButtonPressed,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Icon(
+                                      Icons.add_photo_alternate_outlined,
+                                      color: AppColors.textOnDark,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(width: 12),
+
+                                // Кнопка прикрепления файла
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: _onFileButtonPressed,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Icon(
+                                      Icons.attachment_outlined,
+                                      color: AppColors.textOnDark,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+
+                                const Spacer(),
+
+                                // Кнопка голосовой записи
+                                VoiceRecordButton(
+                                  size: 36,
+                                  onRecordComplete: (audioPath) {
+                                    if (audioPath.isNotEmpty &&
+                                        widget.onMediaAdded != null) {
+                                      widget.onMediaAdded!(audioPath);
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12.0,
-                            vertical: 8.0,
-                          ),
-                          child: Row(
-                            children: [
-                              // Иконка для прикрепления фото (без стиля кнопки)
-                              InkWell(
-                                borderRadius: BorderRadius.circular(18),
-                                onTap: () => _onImageButtonPressed(),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Icon(
-                                    Icons.add_photo_alternate_outlined,
-                                    color: AppColors.textOnDark,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(width: 12),
-
-                              // Иконка для прикрепления файла (без стиля кнопки)
-                              InkWell(
-                                borderRadius: BorderRadius.circular(18),
-                                onTap: () => _onImageButtonPressed(),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Icon(
-                                    Icons.attachment_outlined,
-                                    color: AppColors.textOnDark,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-
-                              const Spacer(),
-
-                              // Кнопка голосовой записи
-                              VoiceRecordButton(
-                                size: 36, // Уменьшен размер с 44
-                                onRecordComplete: (audioPath) {
-                                  // ... существующий код
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
 
                       // Редактор Quill
                       Container(
-                        height: widget.height ?? 250, // Настраиваемая высота
+                        height: widget.height ?? 250,
                         constraints: BoxConstraints(
                           minHeight: 150,
                           maxHeight: widget.height ?? 400,
                         ),
                         padding: const EdgeInsets.all(16.0),
-                        // Используем минимальный набор параметров
-                        child: QuillEditor.basic(
-                          controller: _quillController,
-                          focusNode:
-                              widget.readOnly
-                                  ? FocusNode(
-                                    canRequestFocus: false,
-                                  ) // Для только чтения используем фокус, который не может быть запрошен
-                                  : _focusNode,
-                        ),
+                        child:
+                            _isLoading
+                                ? const Center(
+                                  child: CircularProgressIndicator(),
+                                )
+                                : QuillEditor(
+                                  controller: _quillController,
+                                  focusNode:
+                                      widget.readOnly
+                                          ? FocusNode(canRequestFocus: false)
+                                          : _focusNode,
+                                  scrollController: ScrollController(),
+                                  configurations: QuillEditorConfigurations(
+                                    readOnly: widget.readOnly,
+                                    placeholder: widget.placeholder ?? '',
+                                    autoFocus: widget.autofocus,
+                                    expands: false,
+                                    padding: EdgeInsets.zero,
+                                    scrollable: true,
+                                    enableSelectionToolbar: true,
+                                    showCursor: !widget.readOnly,
+                                  ),
+                                ),
                       ),
                     ],
                   ),
@@ -832,26 +685,28 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
               ),
             ),
 
-            // Панель форматирования
-            const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(
-                  AppDimens.buttonBorderRadius,
+            // Панель форматирования (только в режиме редактирования)
+            if (!widget.readOnly) ...[
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(
+                    AppDimens.buttonBorderRadius,
+                  ),
+                  boxShadow: [AppShadows.small],
                 ),
-                boxShadow: [AppShadows.small],
+                child: _buildFormattingToolbar(),
               ),
-              child: _buildFormattingToolbarAsBlock(),
-            ),
+            ],
           ],
         );
       },
     );
   }
 
-  // Форматирование как отдельный блок
-  Widget _buildFormattingToolbarAsBlock() {
+  /// Построение панели инструментов форматирования
+  Widget _buildFormattingToolbar() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 12.0),
       child: SingleChildScrollView(
@@ -886,7 +741,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
             ),
             _buildDivider(),
 
-            // Кнопки для форматирования списков
+            // Кнопки для списков
             _buildToolbarButton(
               icon: Icons.format_list_bulleted,
               tooltip: 'Маркированный список',
@@ -905,7 +760,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
             ),
             _buildDivider(),
 
-            // Кнопки для заголовков и цитат
+            // Заголовки и цитаты
             _buildToolbarButton(
               icon: Icons.title,
               tooltip: 'Заголовок',
@@ -921,7 +776,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
               ),
             ),
 
-            // Кнопки для выравнивания
+            // Выравнивание текста
             _buildDivider(),
             _buildToolbarButton(
               icon: Icons.format_align_left,
@@ -942,7 +797,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
               isActive: _isTextAlignmentActive(TextAlign.right),
             ),
 
-            // Меню дополнительных опций
+            // Дополнительные опции
             _buildDivider(),
             _buildOverflowMenu(),
           ],
@@ -951,7 +806,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     );
   }
 
-  // Проверка активен ли какой-либо заголовок
+  /// Проверка активности заголовка
   bool _isHeadingActive() {
     final style = _quillController.getSelectionStyle();
     return style.containsKey(Attribute.h1.key) ||
@@ -959,12 +814,11 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
         style.containsKey(Attribute.h3.key);
   }
 
-  // Проверка активного выравнивания текста
+  /// Проверка активного выравнивания текста
   bool _isTextAlignmentActive(TextAlign align) {
     final attributes = _quillController.getSelectionStyle();
     if (!attributes.containsKey(Attribute.align.key)) {
-      return align ==
-          TextAlign.left; // По умолчанию текст выравнивается по левому краю
+      return align == TextAlign.left; // По умолчанию
     }
 
     String? currentAlign;
@@ -989,15 +843,12 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     }
   }
 
-  // Установка выравнивания текста
+  /// Установка выравнивания текста
   void _setTextAlignment(TextAlign align) {
     Attribute attribute;
     switch (align) {
       case TextAlign.left:
-        attribute = Attribute.clone(
-          Attribute.align,
-          null,
-        ); // Сброс на значение по умолчанию
+        attribute = Attribute.clone(Attribute.align, null);
         break;
       case TextAlign.center:
         attribute = Attribute.clone(Attribute.align, 'center');
@@ -1016,7 +867,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     _quillController.formatSelection(attribute);
   }
 
-  // Кнопка "Еще" с выпадающим меню дополнительных опций
+  /// Меню дополнительных опций форматирования
   Widget _buildOverflowMenu() {
     return PopupMenuButton<Function>(
       icon: Icon(Icons.more_vert, size: 20, color: AppColors.textOnDark),
@@ -1026,7 +877,6 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
       ),
       itemBuilder:
           (BuildContext context) => [
-            // Кнопка для вставки ссылки
             PopupMenuItem<Function>(
               value: _insertLink,
               child: Row(
@@ -1040,7 +890,6 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
                 ],
               ),
             ),
-            // Кнопка для кода
             PopupMenuItem<Function>(
               value: () => _toggleFormat(Attribute.inlineCode),
               child: Row(
@@ -1051,43 +900,6 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
                 ],
               ),
             ),
-            // Кнопка для цвета текста
-            PopupMenuItem<Function>(
-              value: _showColorPicker,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.format_color_text,
-                    size: 18,
-                    color: AppColors.textOnLight,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Цвет текста',
-                    style: TextStyle(color: AppColors.textOnLight),
-                  ),
-                ],
-              ),
-            ),
-            // Кнопка для фона текста
-            PopupMenuItem<Function>(
-              value: _showBackgroundColorPicker,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.format_color_fill,
-                    size: 18,
-                    color: AppColors.textOnLight,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Цвет фона',
-                    style: TextStyle(color: AppColors.textOnLight),
-                  ),
-                ],
-              ),
-            ),
-            // Кнопка для очистки форматирования
             PopupMenuItem<Function>(
               value: _clearFormatting,
               child: Row(
@@ -1112,7 +924,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     );
   }
 
-  // Метод для вставки ссылки
+  /// Метод для вставки ссылки
   void _insertLink() {
     final selection = _quillController.selection;
     String selectedText = '';
@@ -1197,123 +1009,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     );
   }
 
-  // Метод для выбора цвета текста
-  void _showColorPicker() {
-    final List<Color> colors = [
-      Colors.black,
-      Colors.red,
-      Colors.orange,
-      Colors.yellow,
-      Colors.green,
-      Colors.blue,
-      Colors.indigo,
-      Colors.purple,
-      Colors.pink,
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Выберите цвет текста'),
-          content: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children:
-                colors.map((color) {
-                  return InkWell(
-                    onTap: () {
-                      // Применяем выбранный цвет к тексту
-                      _quillController.formatSelection(
-                        ColorAttribute(color.value.toString()),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: color,
-                        border: Border.all(
-                          color: Colors.grey.shade300,
-                          width: 1,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  );
-                }).toList(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Метод для выбора цвета фона текста
-  void _showBackgroundColorPicker() {
-    final List<Color> colors = [
-      Colors.white,
-      Colors.red.shade100,
-      Colors.orange.shade100,
-      Colors.yellow.shade100,
-      Colors.green.shade100,
-      Colors.blue.shade100,
-      Colors.indigo.shade100,
-      Colors.purple.shade100,
-      Colors.pink.shade100,
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Выберите цвет фона'),
-          content: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children:
-                colors.map((color) {
-                  return InkWell(
-                    onTap: () {
-                      // Применяем выбранный цвет к фону текста
-                      _quillController.formatSelection(
-                        BackgroundAttribute(color.value.toString()),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: color,
-                        border: Border.all(
-                          color: Colors.grey.shade300,
-                          width: 1,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  );
-                }).toList(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Метод для очистки форматирования
+  /// Метод для очистки форматирования
   void _clearFormatting() {
     if (_quillController.selection.isCollapsed) return;
 
@@ -1328,30 +1024,12 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     _quillController.replaceText(offset, length, text, null);
   }
 
-  // Метод для переключения форматирования текста - упрощенная версия
+  /// Метод для переключения форматирования текста
   void _toggleFormat(Attribute attribute) {
-    if (_quillController.selection.isCollapsed) {
-      // Если нет выделения, просто изменяем атрибут текущей позиции
-      _quillController.formatSelection(attribute);
-    } else {
-      // Если есть выделение, применяем форматирование
-      final isSelected = _quillController.getSelectionStyle().containsKey(
-        attribute.key,
-      );
-
-      if (isSelected) {
-        // Если атрибут уже применен, удаляем его
-        // Сначала создаем "стирающий" атрибут того же типа
-        final clearAttribute = Attribute.clone(attribute, null);
-        _quillController.formatSelection(clearAttribute);
-      } else {
-        // Иначе применяем его
-        _quillController.formatSelection(attribute);
-      }
-    }
+    _quillController.formatSelection(attribute);
   }
 
-  // Метод для циклического изменения заголовка
+  /// Метод для циклического изменения заголовка
   void _cycleHeaderFormat() {
     final attributes = _quillController.getSelectionStyle();
 
@@ -1376,11 +1054,11 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
       _quillController.formatSelection(Attribute.h3); // Затем ставим h3
     } else {
       // Если h3, то удаляем все заголовки
-      _quillController.formatSelection(currentHeader);
+      _quillController.formatSelection(Attribute.h3);
     }
   }
 
-  // Разделитель для панели инструментов
+  /// Разделитель для панели инструментов
   Widget _buildDivider() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 6),
@@ -1390,7 +1068,7 @@ class QuillEditorWrapperState extends State<QuillEditorWrapper>
     );
   }
 
-  // Кнопка для панели инструментов форматирования
+  /// Кнопка для панели инструментов форматирования
   Widget _buildToolbarButton({
     required IconData icon,
     required String tooltip,

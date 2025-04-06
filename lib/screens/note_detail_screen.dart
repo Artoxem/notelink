@@ -849,8 +849,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
                   });
                 }
               },
+              height:
+                  300, // Вы можете изменить это значение по вашему усмотрению
             ),
-
             // Отображение медиафайлов
             if (_mediaFiles.isNotEmpty)
               Padding(
