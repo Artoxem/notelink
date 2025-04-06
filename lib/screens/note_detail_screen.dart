@@ -15,17 +15,18 @@ import '../providers/themes_provider.dart';
 import '../services/media_service.dart';
 import '../utils/constants.dart';
 import '../utils/delta_utils.dart';
-import '../widgets/custom_date_picker.dart';
-import '../widgets/custom_time_picker.dart';
 import '../widgets/quill_editor_wrapper.dart';
 import '../widgets/theme_chip.dart';
+
+// Импортируем наши кастомные диалоги с префиксом для разрешения конфликта имен
+import '../widgets/custom_date_picker.dart' as app_date_picker;
+import '../widgets/custom_time_picker.dart' as app_time_picker;
 
 class NoteDetailScreen extends StatefulWidget {
   final Note? note; // Null если создаем новую заметку
   final DateTime? initialDate; // Начальная дата, если пришли из календаря
   final bool isEditMode; // Параметр для начального режима редактирования
-  final List<String>?
-  initialThemeIds; // Добавлен новый параметр для автоматической привязки к теме
+  final List<String>? initialThemeIds; // Для автоматической привязки к теме
 
   const NoteDetailScreen({
     Key? key,
@@ -253,14 +254,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
       final quillController =
           _quillEditorKey.currentState?.getQuillController();
 
+      // Получаем Delta JSON
       String deltaJson;
       if (quillController != null) {
         // Получаем Delta JSON в стандартном формате
-        deltaJson = jsonEncode({
-          'ops': quillController.document.toDelta().toJson(),
-        });
+        final delta = quillController.document.toDelta();
+        deltaJson = jsonEncode({'ops': delta.toJson()});
       } else {
-        // Используем существующий текст, но стандартизируем его
+        // Используем существующий текст или создаем пустой документ
         deltaJson =
             _contentController.text.isNotEmpty
                 ? _contentController.text
@@ -269,7 +270,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
       // Проверяем наличие текста
       final plainText = quillController?.document.toPlainText().trim() ?? '';
-      final isEmptyNote =
+      final bool isEmptyNote =
           plainText.isEmpty &&
           _themeIds.isEmpty &&
           !_hasDeadline &&
@@ -286,6 +287,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
 
       // Получаем провайдер заметок
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+      bool success = false;
 
       if (widget.note == null) {
         // Создаем новую заметку
@@ -308,7 +311,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           relativeReminder: _relativeReminder,
         );
 
-        final success = await notesProvider.createNote(newNote);
+        // Метод createNote возвращает Note?, а не bool
+        final createdNote = await notesProvider.createNote(newNote);
+        success = createdNote != null; // Преобразуем результат в boolean
+
         if (!success) {
           throw Exception('Не удалось создать заметку');
         }
@@ -331,7 +337,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
           relativeReminder: _relativeReminder,
         );
 
-        final success = await notesProvider.updateNote(updatedNote);
+        // Метод updateNote возвращает bool
+        success = await notesProvider.updateNote(updatedNote);
+
         if (!success) {
           throw Exception('Не удалось обновить заметку');
         }
@@ -663,8 +671,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             // Основное содержимое
             AnimatedSwitcher(
               duration: AppAnimations.mediumDuration,
-              child:
-                  _isEditMode ? _buildEditModeContent() : _buildViewContent(),
+              child: _isEditing ? _buildEditModeContent() : _buildViewContent(),
               transitionBuilder: (Widget child, Animation<double> animation) {
                 return FadeTransition(opacity: animation, child: child);
               },
@@ -1026,7 +1033,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
               color: Colors.orange,
             ),
             onTap: () async {
-              final selectedDate = await DatePickerDialog.show(
+              final selectedDate = await app_date_picker.DatePickerDialog.show(
                 context: context,
                 initialDate:
                     _deadlineDate ??
@@ -1057,7 +1064,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             ),
             leading: const Icon(Icons.access_time, size: 20),
             onTap: () async {
-              final selectedTime = await TimePickerDialog.show(
+              final selectedTime = await app_time_picker.TimePickerDialog.show(
                 context: context,
                 initialTime:
                     _deadlineTime ?? const TimeOfDay(hour: 12, minute: 0),
@@ -1102,7 +1109,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen>
             ),
             leading: const Icon(Icons.link, size: 20),
             onTap: () async {
-              final selectedDate = await DatePickerDialog.show(
+              final selectedDate = await app_date_picker.DatePickerDialog.show(
                 context: context,
                 initialDate: _linkedDate ?? DateTime.now(),
                 firstDate: DateTime(2020),
